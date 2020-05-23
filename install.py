@@ -30,9 +30,10 @@ class NWSInstaller(ExtensionInstaller):
             data_services='user.nws.NWS',
             config={
                 'NWS': {
-                    'data_binding' : 'nws_binding',
-                    'timeout_secs' : 5,
-                    'User-Agent'   : '(my-weather-site.com, me@my-weather-site.com)',
+                    'data_binding'   : 'nws_binding',
+                    'timeout_secs'   : 5,
+                    'retry_wait_secs': 5,
+                    'User-Agent'     : '(my-weather-site.com, me@my-weather-site.com)',
                 },
                 'DataBindings': {
                     'nws_binding': {

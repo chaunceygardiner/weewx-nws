@@ -130,6 +130,7 @@ class Configuration:
     timeout_secs    : int   # Immutable
     archive_interval: int   # Immutable
     user_agent      : str
+    retry_wait_secs : int
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -174,9 +175,11 @@ class NWS(StdService):
             timeout_secs     = to_int(self.nws_config_dict.get('timeout_secs', 5)),
             archive_interval = int(config_dict['StdArchive']['archive_interval']),
             user_agent       = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
+            retry_wait_secs  = int(self.nws_config_dict.get('retry_wait_secs', 5)),
             )
 
-        # At startup, get the latest forecast.
+        # At startup, attempt to get the latest forecast.
+        # TODO: First check the archive.  If already have forecast since top of the hour, skip it.
         if (NWSPoller.populate_forecast(self.cfg)):
             self.saveForecastsToDB()
 
@@ -215,7 +218,7 @@ class NWS(StdService):
             dbmanager = self.engine.db_binder.get_manager(self.data_binding)
             delete = "DELETE FROM ARCHIVE where dateTime < (SELECT MAX(dateTime) from archive)"
             dbmanager.getSql(delete)
-        except weedb.DatabaseError as e:
+        except Exception as e:
             log.info('%s failed with %s.' % (delete, e))
 
     @staticmethod
@@ -260,7 +263,7 @@ class NWSPoller:
                 log.debug('NWSPoller: poll_nws: Sleeping for %f seconds.' % sleep_time) 
                 time.sleep(sleep_time)
             else:
-                time.sleep(10)
+                time.sleep(cfg.retry_wait_secs)
 
     @staticmethod
     def populate_forecast(cfg) -> bool:
@@ -438,7 +441,7 @@ class NWSForecastVariables(SearchList):
                         record[f] = row[i]
                     records.append(record)
                 return records
-            except weedb.DatabaseError as e:
+            except Exception as e:
                 log.info('%s failed with %s.' % (select, e))
         return []
 
@@ -460,13 +463,14 @@ def pretty_print(record):
 
 if __name__ == '__main__':
     cfg = Configuration(
-        lock          = threading.Lock(),
-        forecasts    = [],
-        latitude     = 37.431495,
-        longitude    = -122.110937,
-        timeout_secs = 5,
+        lock             = threading.Lock(),
+        forecasts        = [],
+        latitude         = 37.431495,
+        longitude        = -122.110937,
+        timeout_secs     = 5,
         archive_interval = 300,
-        user_agent = '(weewx-nws test run, weewx-nws-developer)',
+        user_agent       = '(weewx-nws test run, weewx-nws-developer)',
+        retry_wait_secs  = 5,
         )
     j = NWSPoller.request_forecast(cfg)
     for record in NWSPoller.compose_records(j):
