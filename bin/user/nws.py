@@ -123,14 +123,16 @@ class Forecast:
 
 @dataclass
 class Configuration:
-    lock            : threading.Lock
-    forecasts       : List[Forecast] # Controlled by lock
-    latitude        : float # Immutable
-    longitude       : float # Immutable
-    timeout_secs    : int   # Immutable
-    archive_interval: int   # Immutable
-    user_agent      : str
-    retry_wait_secs : int
+    lock             : threading.Lock
+    forecasts        : List[Forecast] # Controlled by lock
+    forecastUrl      : Optional[str] # controlled by lock
+    forecastHourlyUrl: Optional[str] # controlled by lock
+    latitude         : float          # Immutable
+    longitude        : float          # Immutable
+    timeout_secs     : int            # Immutable
+    archive_interval : int            # Immutable
+    user_agent       : str            # Immutable
+    retry_wait_secs  : int            # Immutable
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -168,20 +170,22 @@ class NWS(StdService):
             raise Exception('nws schema mismatch: %s != %s' % (dbcol, memcol))
 
         self.cfg = Configuration(
-            lock             = threading.Lock(),
-            forecasts        = [],
-            latitude         = latitude,
-            longitude        = longitude,
-            timeout_secs     = to_int(self.nws_config_dict.get('timeout_secs', 5)),
-            archive_interval = int(config_dict['StdArchive']['archive_interval']),
-            user_agent       = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
-            retry_wait_secs  = int(self.nws_config_dict.get('retry_wait_secs', 5)),
+            lock              = threading.Lock(),
+            forecasts         = [],
+            forecastUrl       = None,
+            forecastHourlyUrl = None,
+            latitude          = latitude,
+            longitude         = longitude,
+            timeout_secs      = to_int(self.nws_config_dict.get('timeout_secs', 5)),
+            archive_interval  = int(config_dict['StdArchive']['archive_interval']),
+            user_agent        = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
+            retry_wait_secs   = int(self.nws_config_dict.get('retry_wait_secs', 5)),
             )
 
         # At startup, attempt to get the latest forecast.
         ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
         # Never write the same archvie interval twice.
-        if self.get_latest_ts() < NWS.get_archive_interval_timestamp(self.cfg.archive_interval) and NWSPoller.populate_forecast(self.cfg):
+        if self.get_latest_ts() < NWS.get_archive_interval_timestamp(self.cfg.archive_interval) and NWSPoller.populate_hourly_forecast(self.cfg):
             self.saveForecastsToDB()
 
         # Start a thread to query NWS for forecasts
@@ -279,7 +283,7 @@ class NWSPoller:
 
     def poll_nws(self) -> None:
         while True:
-            success = NWSPoller.populate_forecast(self.cfg)
+            success = NWSPoller.populate_hourly_forecast(self.cfg)
             if success:
                 sleep_time = NWSPoller.time_to_next_poll()
                 log.debug('NWSPoller: poll_nws: Sleeping for %f seconds.' % sleep_time) 
@@ -288,9 +292,9 @@ class NWSPoller:
                 time.sleep(cfg.retry_wait_secs)
 
     @staticmethod
-    def populate_forecast(cfg) -> bool:
+    def populate_hourly_forecast(cfg) -> bool:
         start_time = time.time()
-        j = NWSPoller.request_forecast(cfg)
+        j = NWSPoller.request_hourly_forecast(cfg)
         if j == None:
             return False
         else:
@@ -298,7 +302,7 @@ class NWSPoller:
             log.debug('Queries to NWS took %f seconds' % elapsed_time)
             with cfg.lock:
                 cfg.forecasts.clear()
-                for record in NWSPoller.compose_records(j):
+                for record in NWSPoller.compose_hourly_records(j):
                     log.debug('NWSPoller: poll_nws: adding forecast(%s)' % record)
                     cfg.forecasts.append(record)
             return True
@@ -310,15 +314,16 @@ class NWSPoller:
         return time_of_next_poll - time.time()
 
     @staticmethod
-    def request_forecast(cfg):
+    def request_urls(cfg):
         try:
+            # Need to fetch (and cache) the forecast URLs
             url = 'https://api.weather.gov/points/%s,%s' % (cfg.latitude, cfg.longitude)
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
-            log.debug('request_forecast: headers: %s' % headers)
+            log.debug('request_hourly_forecast: headers: %s' % headers)
             response: requests.Response = session.get(url=url, headers=headers, timeout=cfg.timeout_secs)
             response.raise_for_status()
-            log.debug('request_forecast: %s returned %r' % (url, response))
+            log.debug('request_hourly_forecast: %s returned %r' % (url, response))
             if response:
                 j: Dict[str, Any] = response.json()
                 log.debug('id: %s' % j['id'])
@@ -326,19 +331,42 @@ class NWSPoller:
                 log.debug('geometry: %s' % j['geometry'])
                 for k in j['properties']:
                     log.debug('properties key:  %s, value: %s' % (k, j['properties'][k]))
-                hourlyForecastUrl = j['properties']['forecastHourly']
-                log.debug('hourlyForecastUrl: %s' % hourlyForecastUrl)
-                response2: requests.Response = session.get(url=hourlyForecastUrl, timeout=cfg.timeout_secs)
-                return response2.json()
-            else:
-                log.info('request_forecast: Fetch from: %s did not succeeed: %r.' % (url, response))
-                return None
+                with cfg.lock:
+                    cfg.forecastUrl       = j['properties']['forecast']
+                    cfg.forecastHourlyUrl = j['properties']['forecastHourly']
+                    log.info('request_urls: Cached forecastUrl: %s' % cfg.forecastUrl)
+                    log.info('request_urls: Cached forecastHourlyUrl: %s' % cfg.forecastHourlyUrl)
         except Exception as e:
-            log.info('request_forecast: Attempt to fetch from: %s failed: %s.' % (url, e))
+            log.info('request_urls: Attempt to fetch from: %s failed: %s.' % (url, e))
+            weeutil.logger.log_traceback(log.critical, "    ****  ")
+
+    @staticmethod
+    def request_hourly_forecast(cfg):
+        with cfg.lock:
+            forecastHourlyUrl = cfg.forecastHourlyUrl
+        if forecastHourlyUrl == None:
+            NWSPoller.request_urls(cfg)
+        else:
+            log.info('request_hourly_forecast: Using cached forecastHourlyUrl: %s' % forecastHourlyUrl)
+        with cfg.lock:
+            forecastHourlyUrl = cfg.forecastHourlyUrl
+        if forecastHourlyUrl != None:
+            try:
+                log.debug('forecastHourlyUrl: %s' % forecastHourlyUrl)
+                session= requests.Session()
+                headers = {'User-Agent': cfg.user_agent}
+                response2: requests.Response = session.get(url=forecastHourlyUrl, headers=headers, timeout=cfg.timeout_secs)
+                return response2.json()
+            except Exception as e:
+                log.info('request_hourly_forecast: Attempt to fetch from: %s failed: %s.' % (forecastHourlyUrl, e))
+                weeutil.logger.log_traceback(log.critical, "    ****  ")
+                return None
+        else:
+            log.info("request_hourly_forecast: Couldn't get the hourly forecast URL.")
             return None
 
     @staticmethod
-    def compose_records(j):
+    def compose_hourly_records(j):
         # 2020-05-18T22:02:26+00:00
         tzinfos = {'UTC': tz.gettz("UTC")}
         updateTime = parse(j['properties']['updateTime'], tzinfos=tzinfos).timestamp()
@@ -493,22 +521,21 @@ def pretty_print(record):
 
 if __name__ == '__main__':
     cfg = Configuration(
-        lock             = threading.Lock(),
-        forecasts        = [],
-        latitude         = 37.431495,
-        longitude        = -122.110937,
-        timeout_secs     = 5,
-        archive_interval = 300,
-        user_agent       = '(weewx-nws test run, weewx-nws-developer)',
-        retry_wait_secs  = 5,
+        lock              = threading.Lock(),
+        forecasts         = [],
+        forecastUrl       = None,
+        forecastHourlyUrl = None,
+        latitude          = 37.431495,
+        longitude         = -122.110937,
+        timeout_secs      = 5,
+        archive_interval  = 300,
+        user_agent        = '(weewx-nws test run, weewx-nws-developer)',
+        retry_wait_secs   = 5,
         )
-    j = NWSPoller.request_forecast(cfg)
-    for record in NWSPoller.compose_records(j):
-        print('NWSPoller: poll_nws: adding forecast(%s)' % record)
+    j = NWSPoller.request_hourly_forecast(cfg)
+    #for record in NWSPoller.compose_hourly_records(j):
+    #    print('NWSPoller: poll_nws: adding forecast(%s)' % record)
 
-    for record in NWSPoller.compose_records(j):
+    for record in NWSPoller.compose_hourly_records(j):
         pretty_print(record)
         print('------------------------')
-
-    for record in NWSPoller.compose_records(j):
-        print(NWS.convert_to_json(record, 0))
