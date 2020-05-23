@@ -179,9 +179,8 @@ class NWS(StdService):
             )
 
         # At startup, attempt to get the latest forecast.
-        # First check the archive.  If already have forecast since top of the hour, skip it.
         ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
-        # If we already have already pulled forecasts this hour, skip it.
+        # Never write the same archvie interval twice.
         if self.get_latest_ts() < NWS.get_archive_interval_timestamp(self.cfg.archive_interval) and NWSPoller.populate_forecast(self.cfg):
             self.saveForecastsToDB()
 
@@ -204,7 +203,7 @@ class NWS(StdService):
             with self.cfg.lock:
                 if len(self.cfg.forecasts) != 0:
                     ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
-                    # Don't save if we already have saved the forecast for this hour.
+                    # Never write the same archvie interval twice.
                     if self.get_latest_ts() < ts:
                         for record in self.cfg.forecasts:
                             self.save_forecast(NWS.convert_to_json(record, ts))
@@ -454,19 +453,27 @@ class NWSForecastVariables(SearchList):
                                                   self.generator.config_dict['Databases'],self.binding)
         with weewx.manager.open_manager(dict) as dbm:
             # Latest insert date
-            select = "SELECT dateTime, interval, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive where dateTime = (SELECT MAX(dateTime) from archive) ORDER BY startTime LIMIT %d" % max_forecasts
+            select = "SELECT dateTime, interval, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive where dateTime = (SELECT MAX(dateTime) from archive) ORDER BY startTime"
             try:
                 records = []
                 columns = dbm.connection.columnsOf(dbm.table_name)
+                not_before = NWSForecastVariables.top_of_current_hour()
+                forecast_count = 0
                 for row in dbm.genSql(select):
-                    record = {}
-                    for i, f in enumerate(columns):
-                        record[f] = row[i]
-                    records.append(record)
+                    if row[6] >= not_before and forecast_count < max_forecasts:
+                        forecast_count += 1
+                        record = {}
+                        for i, f in enumerate(columns):
+                            record[f] = row[i]
+                        records.append(record)
                 return records
             except Exception as e:
                 log.info('%s failed with %s.' % (select, e))
         return []
+
+    @staticmethod
+    def top_of_current_hour():
+        return int(time.time() / 3600) * 3600
 
 def pretty_print(record):
     print('interval        : %d' % record.interval)
