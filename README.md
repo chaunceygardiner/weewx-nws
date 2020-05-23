@@ -27,13 +27,24 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
             [[[CheetahGenerator]]]
                 search_list_extensions = user.nws.NWSForecastVariables
    ```
-# How to access weewx-purple fields in reports.
+# How to access NWS Forecasts in reports.
 
 1.  To get at most 12 hourly forecasts (as an example).
    ```
     #for $hour in $nwsforecast.hourly_forecasts(12)
+        $hour.generatedTime
+        $hour.number
+        $hour.name
         $hour.startTime
+        $hour.endTime
+        $hour.isDaytime
+        $hour.outTemp
+        $hour.outTempTrend
+        $hour.windSpeed
+        $hour.windDir
+        $hour.iconUrl
         $hour.shortForecast
+        $hour.detailedForecast
    ```
 
 ## Licensing
