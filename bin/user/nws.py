@@ -179,8 +179,10 @@ class NWS(StdService):
             )
 
         # At startup, attempt to get the latest forecast.
-        # TODO: First check the archive.  If already have forecast since top of the hour, skip it.
-        if (NWSPoller.populate_forecast(self.cfg)):
+        # First check the archive.  If already have forecast since top of the hour, skip it.
+        ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
+        # If we already have already pulled forecasts this hour, skip it.
+        if self.get_latest_ts() < NWS.get_archive_interval_timestamp(self.cfg.archive_interval) and NWSPoller.populate_forecast(self.cfg):
             self.saveForecastsToDB()
 
         # Start a thread to query NWS for forecasts
@@ -201,10 +203,11 @@ class NWS(StdService):
             now = int(time.time() + 0.5)
             with self.cfg.lock:
                 if len(self.cfg.forecasts) != 0:
-                    now_ts = int(time.time() + 0.5)
-                    ts = int(now_ts / self.cfg.archive_interval) * self.cfg.archive_interval
-                    for record in self.cfg.forecasts:
-                        self.save_forecast(NWS.convert_to_json(record, ts))
+                    ts = get_archive_interval_timestamp(self.cfg.archive_interval)
+                    # Don't save if we already have saved the forecast for this hour.
+                    if self.get_latest_ts() < ts:
+                        for record in self.cfg.forecasts:
+                            self.save_forecast(NWS.convert_to_json(record, ts))
                     self.cfg.forecasts.clear()
                     self.deleteOldRows();
         except Exception as e:
@@ -220,6 +223,11 @@ class NWS(StdService):
             dbmanager.getSql(delete)
         except Exception as e:
             log.info('%s failed with %s.' % (delete, e))
+
+    @staticmethod
+    def get_archive_interval_timestamp(archive_interval: int) -> int:
+        now_ts = int(time.time() + 0.5)
+        return int(now_ts / archive_interval) * archive_interval
 
     @staticmethod
     def convert_to_json(record, ts):
@@ -245,6 +253,17 @@ class NWS(StdService):
         if record.detailedForecast:
             j['detailedForecast'] = record.detailedForecast
         return j
+
+    def get_latest_ts(self):
+        dbmanager = self.engine.db_binder.get_manager(self.data_binding)
+        select = 'SELECT MAX(dateTime) from archive'
+        try:
+            for row in dbm.genSql(select):
+                return row[0]
+            return 0
+        except Exception as e:
+            log.info('%s failed with %s.' % (select, e))
+            return 0
 
     def save_forecast(self, record):
         """save data to database"""
