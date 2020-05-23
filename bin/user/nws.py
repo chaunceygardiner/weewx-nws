@@ -358,7 +358,7 @@ class NWSPoller:
             return 22.5 
         elif wdir_str == 'NE':
             return 45.0
-        elif wdir_str == 'NE':
+        elif wdir_str == 'ENE':
             return 77.5
         elif wdir_str == 'E':
             return 90.0
