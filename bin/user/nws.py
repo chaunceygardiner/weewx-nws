@@ -203,7 +203,7 @@ class NWS(StdService):
             now = int(time.time() + 0.5)
             with self.cfg.lock:
                 if len(self.cfg.forecasts) != 0:
-                    ts = get_archive_interval_timestamp(self.cfg.archive_interval)
+                    ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
                     # Don't save if we already have saved the forecast for this hour.
                     if self.get_latest_ts() < ts:
                         for record in self.cfg.forecasts:
@@ -258,9 +258,13 @@ class NWS(StdService):
         dbmanager = self.engine.db_binder.get_manager(self.data_binding)
         select = 'SELECT MAX(dateTime) from archive'
         try:
-            for row in dbm.genSql(select):
-                return row[0]
-            return 0
+            for row in dbmanager.genSql(select):
+                if row[0] != None:
+                    log.debug('get_latest_ts: returning %d' % row[0])
+                    return row[0]
+                else:
+                    log.debug('get_latest_ts: no rows in database, returning 0.')
+                    return 0
         except Exception as e:
             log.info('%s failed with %s.' % (select, e))
             return 0
