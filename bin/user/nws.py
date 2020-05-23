@@ -129,6 +129,7 @@ class Configuration:
     longitude       : float # Immutable
     timeout_secs    : int   # Immutable
     archive_interval: int   # Immutable
+    user_agent      : str
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -166,12 +167,13 @@ class NWS(StdService):
             raise Exception('nws schema mismatch: %s != %s' % (dbcol, memcol))
 
         self.cfg = Configuration(
-            lock         = threading.Lock(),
-            forecasts    = [],
-            latitude     = latitude,
-            longitude    = longitude,
-            timeout_secs = to_int(self.nws_config_dict.get('timeout_secs', 5)),
+            lock             = threading.Lock(),
+            forecasts        = [],
+            latitude         = latitude,
+            longitude        = longitude,
+            timeout_secs     = to_int(self.nws_config_dict.get('timeout_secs', 5)),
             archive_interval = int(config_dict['StdArchive']['archive_interval']),
+            user_agent       = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
             )
 
         # At startup, get the latest forecast.
@@ -287,7 +289,9 @@ class NWSPoller:
         try:
             url = 'https://api.weather.gov/points/%s,%s' % (cfg.latitude, cfg.longitude)
             session= requests.Session()
-            response: requests.Response = session.get(url=url, timeout=cfg.timeout_secs)
+            headers = {'User-Agent': cfg.user_agent}
+            log.debug('request_forecast: headers: %s' % headers)
+            response: requests.Response = session.get(url=url, headers=headers, timeout=cfg.timeout_secs)
             response.raise_for_status()
             log.debug('request_forecast: %s returned %r' % (url, response))
             if response:
@@ -462,6 +466,7 @@ if __name__ == '__main__':
         longitude    = -122.110937,
         timeout_secs = 5,
         archive_interval = 300,
+        user_agent = '(weewx-nws test run, weewx-nws-developer)',
         )
     j = NWSPoller.request_forecast(cfg)
     for record in NWSPoller.compose_records(j):

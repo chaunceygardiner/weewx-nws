@@ -20,16 +20,23 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
 
-1. Add NWSForecastVariables to one or more skins.  For example, to add to the Seasons skin, add:
+1. Edit weewx.conf to fill in User-Agent with your weather site and contact information.
+   [NWS]
+       User-Agent: '(my-weather-site.com, me@my-weather-site.com)'
+
+1. Restart WeeWX.
+
+# How to access NWS Forecasts in reports.
+
+1. Add NWSForecastVariables to a  skin.  For example, to add to the Seasons skin, add:
    ```
     [StdReport]
         [[SeasonsReport]]
             [[[CheetahGenerator]]]
                 search_list_extensions = user.nws.NWSForecastVariables
    ```
-# How to access NWS Forecasts in reports.
 
-1.  To get at most 12 hourly forecasts (as an example).
+1.  To get hourly forecasts (in this example, the next 12 forecasts will be returned).
    ```
     #for $hour in $nwsforecast.hourly_forecasts(12)
         $hour.generatedTime
