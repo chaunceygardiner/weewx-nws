@@ -234,7 +234,7 @@ class NWS(StdService):
                     if self.get_latest_ts(ForecastType.HOURLY) < ts:
                         for record in self.cfg.hourlyForecasts:
                             self.save_forecast(NWS.convert_to_json(record, ts))
-                        log.info('Saved %d hourly forecast records.' % len(self.cfg.hourlyForecasts))
+                        log.info('Saved %d ForecastType.HOURLY records.' % len(self.cfg.hourlyForecasts))
                     self.cfg.hourlyForecasts.clear()
                     self.delete_old_rows(ForecastType.HOURLY);
         except Exception as e:
@@ -254,7 +254,7 @@ class NWS(StdService):
                     if self.get_latest_ts(ForecastType.DAILY) < ts:
                         for record in self.cfg.dailyForecasts:
                             self.save_forecast(NWS.convert_to_json(record, ts))
-                        log.info('Saved %d daily forecast records.' % len(self.cfg.dailyForecasts))
+                        log.info('Saved %d ForecastType.DAILY records.' % len(self.cfg.dailyForecasts))
                     self.cfg.dailyForecasts.clear()
                     self.delete_old_rows(ForecastType.DAILY);
         except Exception as e:
@@ -267,9 +267,9 @@ class NWS(StdService):
     def delete_old_rows(self, forecast_type: ForecastType):
         try:
             dbmanager = self.engine.db_binder.get_manager(self.data_binding)
-            delete = "DELETE FROM ARCHIVE where dateTime < (SELECT MAX(dateTime) from archive WHERE interval = %d) and interval = %d" % (
+            delete = "DELETE FROM archive WHERE dateTime < (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d" % (
                 NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
-            log.debug('delete_old_rows(%s): executing %s' % (forecast_type, delete))
+            log.info('Pruning %s rows with %s.' % (forecast_type, delete))
             dbmanager.getSql(delete)
         except Exception as e:
             log.info('delete_old_rows(%s): %s failed with %s.' % (forecast_type, delete, e))
@@ -308,7 +308,7 @@ class NWS(StdService):
 
     def get_latest_ts(self, forecast_type: ForecastType):
         dbmanager = self.engine.db_binder.get_manager(self.data_binding)
-        select = 'SELECT MAX(dateTime) from archive WHERE interval = %d' % NWS.get_interval(forecast_type)
+        select = 'SELECT MAX(dateTime) FROM archive WHERE interval = %d' % NWS.get_interval(forecast_type)
         try:
             for row in dbmanager.genSql(select):
                 if row[0] != None:
@@ -384,7 +384,8 @@ class NWSPoller:
             url = 'https://api.weather.gov/points/%s,%s' % (cfg.latitude, cfg.longitude)
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
-            log.debug('request_hourly_forecast: headers: %s' % headers)
+            log.debug('request_urls: headers: %s' % headers)
+            log.info('Downloading URLs from %s' % url)
             response: requests.Response = session.get(url=url, headers=headers, timeout=cfg.timeout_secs)
             response.raise_for_status()
             log.debug('request_hourly_forecast: %s returned %r' % (url, response))
@@ -423,7 +424,7 @@ class NWSPoller:
                 forecastUrl = cfg.dailyForecastUrl
         if forecastUrl != None:
             try:
-                log.debug('request_forecast(%s): %s' % (forecast_type, forecastUrl))
+                log.info('Downloading %s forecasts from %s.' % (forecast_type, forecastUrl))
                 session= requests.Session()
                 headers = {'User-Agent': cfg.user_agent}
                 response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
@@ -558,7 +559,7 @@ class NWSForecastVariables(SearchList):
                                                   self.generator.config_dict['Databases'],self.binding)
         with weewx.manager.open_manager(dict) as dbm:
             # Latest insert date
-            select = "SELECT dateTime, interval, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive where dateTime = (SELECT MAX(dateTime) from archive WHERE interval = %d) and interval = %d ORDER BY startTime" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d ORDER BY startTime" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
             try:
                 records = []
                 columns = dbm.connection.columnsOf(dbm.table_name)
