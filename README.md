@@ -36,6 +36,24 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
                 search_list_extensions = user.nws.NWSForecastVariables
    ```
 
+1.  To get daily forecasts (in this example, all 7 days (2 per day) forecasts will be returned.
+   ```
+    #for $day in $nwsforecast.daily_forecasts(14)
+        $day.generatedTime
+        $day.number
+        $day.name
+        $day.startTime
+        $day.endTime
+        $day.isDaytime
+        $day.outTemp
+        $day.outTempTrend
+        $day.windSpeed
+        $day.windDir
+        $day.iconUrl
+        $day.shortForecast
+        $day.detailedForecast
+   ```
+
 1.  To get hourly forecasts (in this example, the next 12 forecasts will be returned).
    ```
     #for $hour in $nwsforecast.hourly_forecasts(12)
