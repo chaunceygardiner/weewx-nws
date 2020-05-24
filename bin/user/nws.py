@@ -234,6 +234,7 @@ class NWS(StdService):
                     if self.get_latest_ts(ForecastType.HOURLY) < ts:
                         for record in self.cfg.hourlyForecasts:
                             self.save_forecast(NWS.convert_to_json(record, ts))
+                        log.info('Saved %d hourly forecast records.' % len(self.cfg.hourlyForecasts))
                     self.cfg.hourlyForecasts.clear()
                     self.delete_old_rows(ForecastType.HOURLY);
         except Exception as e:
@@ -253,6 +254,7 @@ class NWS(StdService):
                     if self.get_latest_ts(ForecastType.DAILY) < ts:
                         for record in self.cfg.dailyForecasts:
                             self.save_forecast(NWS.convert_to_json(record, ts))
+                        log.info('Saved %d daily forecast records.' % len(self.cfg.dailyForecasts))
                     self.cfg.dailyForecasts.clear()
                     self.delete_old_rows(ForecastType.DAILY);
         except Exception as e:
@@ -454,7 +456,7 @@ class NWSPoller:
             record = Forecast(
                 interval         = NWS.get_interval(forecast_type),
                 usUnits          = units,
-                generatedTime    = updateTime,
+                generatedTime    = int(updateTime),
                 number           = period['number'],
                 name             = period['name'],
                 startTime        = datetime.datetime.fromisoformat(period['startTime']).timestamp(),
