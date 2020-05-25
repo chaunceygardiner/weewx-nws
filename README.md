@@ -52,6 +52,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
         $day.iconUrl
         $day.shortForecast
         $day.detailedForecast
+    #end for
    ```
 
 1.  To get hourly forecasts (in this example, the next 12 forecasts will be returned).
@@ -70,6 +71,19 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
         $hour.iconUrl
         $hour.shortForecast
         $hour.detailedForecast
+    #end for
+    ```
+
+1.  To get alerts:
+    ```
+    #for $alert in $nwsforecast.alerts()
+        $alert.effective   # Time issued
+        $alert.onset       # Time it will begin
+        $alert.ends        # Time it will end
+        $alert.event       # Name of event (e.g., Heat Advisory)
+        $alert.headline    # Headline
+        $alert.description # Long description
+    #end for
    ```
 
 ## Licensing
