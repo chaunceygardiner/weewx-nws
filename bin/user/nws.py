@@ -285,6 +285,7 @@ class NWS(StdService):
             weeutil.logger.log_traceback(log.critical, "    ****  ")
 
     def saveAlertsToDB(self):
+        log.debug('saveAlertsToDB: start')
         try:
             now = int(time.time() + 0.5)
             with self.cfg.lock:
@@ -412,7 +413,8 @@ class NWSPoller:
                     cfg.alerts.clear()
                 if forecast_type == ForecastType.ALERTS:
                     for record in NWSPoller.compose_alert_records(j):
-                        cfg.dailyForecasts.append(record)
+                        log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
+                        cfg.alerts.append(record)
                 else:
                     for record in NWSPoller.compose_records(j, forecast_type):
                         log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
@@ -498,6 +500,7 @@ class NWSPoller:
 
     @staticmethod
     def compose_alert_records(j):
+        log.debug('compose_alert_records: len(j[features]): %d' % len(j['features']))
         alertCount = 0
         for feature in j['features']:
             alert = feature['properties']
@@ -523,6 +526,7 @@ class NWSPoller:
                 detailedForecast = alert['description'],
                 )
             alertCount += 1
+            log.debug('compose_alert_records: yielding record %s' % record)
             yield record
 
     @staticmethod
