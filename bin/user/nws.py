@@ -288,7 +288,7 @@ class NWS(StdService):
         try:
             now = int(time.time() + 0.5)
             with self.cfg.lock:
-                if len(self.cfg.dailyForecasts) != 0:
+                if len(self.cfg.alerts) != 0:
                     ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
                     # Never write the same archvie interval twice.
                     if self.get_latest_ts(ForecastType.ALERTS) < ts:
