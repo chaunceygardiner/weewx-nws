@@ -411,17 +411,14 @@ class NWSPoller:
                     cfg.dailyForecasts.clear()
                 else:
                     cfg.alerts.clear()
-                if forecast_type == ForecastType.ALERTS:
-                    for record in NWSPoller.compose_alert_records(j):
-                        log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
+                for record in NWSPoller.compose_records(j, forecast_type):
+                    log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
+                    if forecast_type == ForecastType.HOURLY:
+                        cfg.hourlyForecasts.append(record)
+                    elif forecast_type == ForecastType.DAILY:
+                        cfg.dailyForecasts.append(record)
+                    else: # Alerts
                         cfg.alerts.append(record)
-                else:
-                    for record in NWSPoller.compose_records(j, forecast_type):
-                        log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
-                        if forecast_type == ForecastType.HOURLY:
-                            cfg.hourlyForecasts.append(record)
-                        elif forecast_type == ForecastType.DAILY:
-                            cfg.dailyForecasts.append(record)
             return True
 
     @staticmethod
@@ -532,7 +529,7 @@ class NWSPoller:
     @staticmethod
     def compose_records(j, forecast_type: ForecastType):
         if forecast_type == ForecastType.ALERTS:
-            log.error('compose_records: for alerts, compose_alert_records must be used.')
+            yield from NWSPoller.compose_alert_records(j)
             return
 
         # 2020-05-18T22:02:26+00:00
@@ -740,6 +737,6 @@ if __name__ == '__main__':
         print('------------------------')
 
     j = NWSPoller.request_forecast(cfg, ForecastType.ALERTS)
-    for record in NWSPoller.compose_alert_records(j):
+    for record in NWSPoller.compose_records(j, ForecastType.ALERTS):
         pretty_print(record)
         print('------------------------')
