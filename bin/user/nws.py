@@ -17,38 +17,7 @@
 
 """The nws extension fetches nws hourly forecasts for a station's location (as identified by lat/long].
 
-Installation instructions.
-
-1. Download weewx-nws-master.zip from the https://github.com/chaunceygardiner/weewx-nws page.
-
-2. Run the following command.
-
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-master.zip
-
-    Note: The above command assumes a WeeWX installation of `/home/weewx`.
-          Adjust the command as necessary.
-
-3. Add NWSForecastVariables to one or more skins.  For example, to add to the Seasons skin, add:
-    [StdReport]
-        [[SeasonsReport]]
-            [[[CheetahGenerator]]]
-                search_list_extensions = user.nws.NWSForecastVariables
-4.  To get at most 12 hourly forecasts (as an example).
-    #for $hour in $nwsforecast.hourly_forecasts(12)
-        $hour.startTime
-        $hour.shortForecast
-5.  To get all 14 daily forecasts (as an example) -- there are two forecasts per day.
-    #for $day in $nwsforecast.daily_forecasts(14)
-        $day.startTime
-        $day.detailedForecast
-6.  To get alerts:
-    #for $alert in $nwsforecast.alerts()
-        $alert.effective   # Time issued
-        $alert.onset       # Time it will begin
-        $alert.ends        # Time it will end
-        $alert.event       # Name of event (e.g., Heat Advisory)
-        $alert.headline    # Headline
-        $alert.description # Long description
+See the README for installation and usage.
 """
 import calendar
 import configobj
@@ -615,15 +584,15 @@ class NWSForecastVariables(SearchList):
     def get_extension_list(self, timespan, db_lookup):
         return [{'nwsforecast': self}]
 
-    def hourly_forecasts(self, max_forecasts:int=100):
+    def hourly_forecasts(self, max_forecasts:Optional[int]=None):
         return self.forecasts(ForecastType.HOURLY, max_forecasts)
 
-    def daily_forecasts(self, max_forecasts:int=100):
+    def daily_forecasts(self, max_forecasts:Optional[int]=None):
         return self.forecasts(ForecastType.DAILY, max_forecasts)
 
     def alerts(self):
         """Returns the latest alert records."""
-        raw_rows = self.getLatestForecastRows(ForecastType.ALERTS, 9999)
+        raw_rows = self.getLatestForecastRows(ForecastType.ALERTS)
 
         rows = []
         for raw_row in raw_rows:
@@ -639,7 +608,7 @@ class NWSForecastVariables(SearchList):
             rows.append(row)
         return rows
 
-    def forecasts(self, forecast_type: ForecastType, max_forecasts:int=100):
+    def forecasts(self, forecast_type: ForecastType, max_forecasts:Optional[int]=None):
         """Returns the latest hourly forecast records."""
         rows = self.getLatestForecastRows(forecast_type, max_forecasts)
         for row in rows:
@@ -664,7 +633,7 @@ class NWSForecastVariables(SearchList):
             row['windDir'] = weewx.units.ValueHelper((row['windDir'], wind_dir_units, wind_dir_group))
         return rows
 
-    def getLatestForecastRows(self, forecast_type: ForecastType, max_forecasts: int):
+    def getLatestForecastRows(self, forecast_type: ForecastType, max_forecasts: Optional[int]=None):
         """get the latest hourly forecast"""
         dict = weewx.manager.get_manager_dict(self.generator.config_dict['DataBindings'],
                                                   self.generator.config_dict['Databases'],self.binding)
@@ -677,7 +646,7 @@ class NWSForecastVariables(SearchList):
                 forecast_count = 0
                 for row in dbm.genSql(select):
                     # Only include if record hasn't expired (row[7] is endTime) and max_forecasts hasn't been exceeded.
-                    if time.time() < row[7] and forecast_count < max_forecasts:
+                    if time.time() < row[7] and (max_forecasts is None or forecast_count < max_forecasts):
                         forecast_count += 1
                         record = {}
                         for i, f in enumerate(columns):
