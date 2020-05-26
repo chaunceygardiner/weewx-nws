@@ -130,16 +130,21 @@ class NWS(StdService):
         super(NWS, self).__init__(engine, config_dict)
         log.info("Service version is %s." % WEEWX_NWS_VERSION)
 
-        # Get latlong of station
-        latitude = config_dict['Station'].get('latitude', None)
-        longitude = config_dict['Station'].get('longitude', None)
-        if latitude is None or longitude is None:
-            log.error("Could not determine station's latitude and longitude.  Please set it under [Station] in weewx.conf.")
-            return
-
         self.config_dict = config_dict
         self.nws_config_dict = config_dict.get('NWS', {})
         self.engine = engine
+
+        # If specified, get lat/long, else get it from station.
+        latitude: str = self.nws_config_dict.get('latitude')
+        if latitude is None:
+            latitude = config_dict['Station'].get('latitude', None)
+        longitude: str = self.nws_config_dict.get('longitude')
+        if longitude is None:
+            longitude = config_dict['Station'].get('longitude', None)
+        if latitude is None or longitude is None:
+            log.error("Could not determine station's latitude and longitude.")
+            return
+        log.info("Using latitude '%s', longitude '%s'." % (latitude, longitude))
 
         # get the database parameters we need to function
         self.data_binding = self.nws_config_dict.get('data_binding', 'nws_binding')
@@ -266,6 +271,11 @@ class NWS(StdService):
                             self.save_forecast(NWS.convert_to_json(record, ts))
                         log.info('Saved %d ForecastType.ALERTS records.' % len(self.cfg.alerts))
                     self.cfg.alerts.clear()
+                    # TODO: The last alert will ever be deleted until a new alert comes along.
+                    #       This is mostly OK since the alert will not be served if it has expired.
+                    #       The one problematic case is where the lat/long has changed.  In this
+                    #       case, the user would have to delete the alert in the db (else, it will
+                    #       be served until is expires (or an alert in the new location comes along.
                     self.delete_old_rows(ForecastType.ALERTS);
         except Exception as e:
             # Include a stack traceback in the log:

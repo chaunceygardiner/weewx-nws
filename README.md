@@ -31,8 +31,14 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        User-Agent: '(my-weather-site.com, me@my-weather-site.com)'
    ```
 
-1. Presently, nws uses your stations latitude an longtitude to get weather forecasts and alerts.
-   It is likely that a future update will allow the lat/long to be overriden.
+1. Best pratice is to let weewx-nws pick up your station's latitude an longtitude from
+   the Station section in weewx.conf.  If one has a need to override the lat/long, it
+   can be set in the NWS section as follows:
+   ```
+   [NWS]
+       latitude = 37.431995  # Best practice is not to set latitude here.
+       longitude = -122.333  # Best practice is not to set longitude here.
+   ```
 
 1. Add NWSForecastVariables to each report that you want to have access to forecasts and alerts.
 
