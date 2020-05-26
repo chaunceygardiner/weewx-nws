@@ -54,7 +54,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
          $day.detailedForecast
      #end for
     ```
-    Daily forecasts can be seen in action on the '7 Day' tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
+    Daily forecasts can be seen in action on the **7 Day** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
        #for $day in $nwsforecast.daily_forecasts()
@@ -117,7 +117,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
         $hour.detailedForecast
     #end for
     ```
-    Hourly forecasts can be seen in action on the '24 Hour' tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
+    Hourly forecasts can be seen in action on the **24 Hour** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
        #for $hour in $nwsforecast.hourly_forecasts(24)
@@ -150,7 +150,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
         $alert.description # Long description
     #end for
     ```
-    Alerts can be seen in action on the 'Alerts' tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
+    Alerts can be seen in action on the **Alerts** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
        #set alert_count = 0
