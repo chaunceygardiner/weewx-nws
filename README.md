@@ -20,16 +20,25 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
 
-1. Edit weewx.conf to fill in User-Agent with your weather site and contact information.
+# Configuring weewx-nws
+
+1. weewx-nws is designed to work with no configuration, but it is best to update the
+   user agent being used to contact NWS.  This is per NWS rules about using the API.
+   To do that, edit weewx.conf and fill in User-Agent with your weather site and contact
+   information.
+   ```
    [NWS]
        User-Agent: '(my-weather-site.com, me@my-weather-site.com)'
+   ```
 
-1. Restart WeeWX (but you might want to delay it until you've added NWSForecastVariables in weewx.conf
-   (see the next step).
+1. Presently, nws uses your stations latitude an longtitude to get weather forecasts and alerts.
+   It is likely that a future update will allow the lat/long to be overriden.
 
-# How to access NWS Forecasts in reports.
+1. Add NWSForecastVariables to each report that you want to have access to forecasts and alerts.
 
-1. Add NWSForecastVariables to a  report in weewx.conf.  For example, to add to the SeasonsReport, add:
+   For example, to enable in the SeasonsReport, edit weewx.conf to add user.nws.NWSForecastVariables
+   in search_list_extensions.  Note: you might need to add both the CheetahGenerator line and the
+   search_list_extensions line (if they do no already exist).
    ```
     [StdReport]
         [[SeasonsReport]]
@@ -37,11 +46,12 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
                 search_list_extensions = user.nws.NWSForecastVariables
    ```
 
-1. Restart WeeWX (requried because of the change to weewx.conf in the previous step).
+1. Restart WeeWX.
 
 1.  To get daily forecasts (in this example, all 14 (7 days * 2 per day) forecasts are returned.
+    Note: Although called daily forecasts, these are 12 hour forecasts.
     ```
-     #for $day in $nwsforecast.daily_forecasts()  # daily_forecasts(6) will return 6 forecasts (3 days).
+     #for $day in $nwsforecast.daily_forecasts()  # daily_forecasts(4) will return 4 forecasts (2 days).
          $day.generatedTime
          $day.number
          $day.name
@@ -63,15 +73,6 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        #for $day in $nwsforecast.daily_forecasts()
        <tr>
          <td>
-           ## ------------------------------------------------
-           ## |       |               |                       |
-           ## |       |     Temp      |     Memorial Day      |
-           ## |       |     78 F      |-----------------------|
-           ## | ICON  | rising slowly |  Partly cloudy with   |
-           ## |       |      Wind     |  high of 84.  Winds   |
-           ## |       |   1 mph NNW   |  between 1 and 9 mph  |
-           ## |       |               |                       |
-           ## -------------------------------------------------
            <table style='width:100%;border-bottom:1pt solid LightGray;padding:15px;'>
              #set icon = $day.iconUrl
              #if $target_display == 'smartphone':
@@ -104,7 +105,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
 1.  To get hourly forecasts (in this example, 168 (7 * 24) foreecasts are returned.
     ```
-    #for $hour in $nwsforecast.hourly_forecasts() # hourly_forecasts(24) will return 24 forecassts (1 day).
+    #for $hour in $nwsforecast.hourly_forecasts() # Note: hourly_forecasts(24) will return 24 forecassts (1 day).
         $hour.generatedTime
         $hour.number
         $hour.name
