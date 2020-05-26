@@ -37,7 +37,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
                 search_list_extensions = user.nws.NWSForecastVariables
    ```
 
-1. Restart WeeWX (requried because of the change to weewx.conf in the previous step.
+1. Restart WeeWX (requried because of the change to weewx.conf in the previous step).
 
 1.  To get daily forecasts (in this example, all 14 (7 days * 2 per day) forecasts are returned.
     ```
