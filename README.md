@@ -24,17 +24,20 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    [NWS]
        User-Agent: '(my-weather-site.com, me@my-weather-site.com)'
 
-1. Restart WeeWX.
+1. Restart WeeWX (but you might want to delay it until you've added NWSForecastVariables in weewx.conf
+   (see the next step).
 
 # How to access NWS Forecasts in reports.
 
-1. Add NWSForecastVariables to a  skin.  For example, to add to the Seasons skin, add:
+1. Add NWSForecastVariables to a  report in weewx.conf.  For example, to add to the SeasonsReport, add:
    ```
     [StdReport]
         [[SeasonsReport]]
             [[[CheetahGenerator]]]
                 search_list_extensions = user.nws.NWSForecastVariables
    ```
+
+1. Restart WeeWX (requried because of the change to weewx.conf in the previous step.
 
 1.  To get daily forecasts (in this example, all 14 (7 days * 2 per day) forecasts are returned.
     ```
@@ -190,6 +193,10 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
     A screenshot follows:
  
     ![NWS Alerts screenshot](alerts.jpg)
+
+## Troubleshooting
+
+Did you forget to add NWSForecastVariables to your report in weewx.conf?  See step 1 in the **How to access NWS Forecasts in reports.** section.
 
 ## Licensing
 
