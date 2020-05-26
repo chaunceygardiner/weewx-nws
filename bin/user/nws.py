@@ -608,6 +608,9 @@ class NWSForecastVariables(SearchList):
             rows.append(row)
         return rows
 
+    def alert_count(self) -> int:
+        return len(self.getLatestForecastRows(ForecastType.ALERTS))
+
     def forecasts(self, forecast_type: ForecastType, max_forecasts:Optional[int]=None):
         """Returns the latest hourly forecast records."""
         rows = self.getLatestForecastRows(forecast_type, max_forecasts)
