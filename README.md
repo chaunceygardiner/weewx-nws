@@ -97,7 +97,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
     ```
     A screenshot follows:
 
-    ![NWS Daily Forecasts screenshot](daily_forecasts.png)
+    ![NWS Daily Forecasts screenshot](daily_forecasts.jpg)
 
 1.  To get hourly forecasts (in this example, 168 (7 * 24) foreecasts are returned.
     ```
@@ -137,7 +137,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
     ```
     A screenshot follows:
  
-    ![NWS Hourly Forecasts screenshot](hourly_forecasts.png)
+    ![NWS Hourly Forecasts screenshot](hourly_forecasts.jpg)
 
 1.  To get all alerts for the station's location:
     ```
@@ -170,9 +170,26 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        </tr>
        #end for
     ```
+    The code to show there is an outstanding alert in the titlebar follows:
+    ```
+       #set alert_count = 0
+       #for alert in $nwsforecast.alerts()
+         #set alert_count += 1
+       #end for
+       #if $alert_count > 0
+         #if $alert_count == 1
+           #set alert_word = 'Alert'
+         #else
+           #set alert_word = 'Alerts'
+         #end if
+                 <table class="lastupdate" style="padding:10px;font-size:19px;color:red;background-color:black;">
+                   <tr><td>$alert_count Outstanding $alert_word in Forecast>Alerts</td></tr>
+                 </table>
+       #end if
+    ```
     A screenshot follows:
  
-    ![NWS Alerts screenshot](alerts.png)
+    ![NWS Alerts screenshot](alerts.jpg)
 
 ## Licensing
 
