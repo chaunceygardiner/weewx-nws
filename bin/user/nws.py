@@ -211,77 +211,28 @@ class NWS(StdService):
         self.saveForecastsToDB(ForecastType.ALERTS)
 
     def saveForecastsToDB(self, forecast_type: ForecastType):
-        if forecast_type == ForecastType.HOURLY:
-            self.saveHourlyForecastsToDB()
-        elif forecast_type == ForecastType.DAILY:
-            self.saveDailyForecastsToDB()
-        else:
-            self.saveAlertsToDB()
-
-    def saveHourlyForecastsToDB(self):
         try:
             now = int(time.time() + 0.5)
             with self.cfg.lock:
-                if len(self.cfg.hourlyForecasts) != 0:
+                if forecast_type == ForecastType.DAILY:
+                    bucket = self.cfg.dailyForecasts
+                elif forecast_type == ForecastType.HOURLY:
+                    bucket = self.cfg.hourlyForecasts
+                else:       # ForecastType.ALERTS
+                    bucket = self.cfg.alerts
+                if len(bucket) != 0:
                     ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
                     # Never write the same archvie interval twice.
-                    if self.get_latest_ts(ForecastType.HOURLY) < ts:
-                        for record in self.cfg.hourlyForecasts:
+                    if self.get_latest_ts(forecast_type) < ts:
+                        for record in bucket:
                             self.save_forecast(NWS.convert_to_json(record, ts))
-                        log.info('Saved %d ForecastType.HOURLY records.' % len(self.cfg.hourlyForecasts))
-                    self.cfg.hourlyForecasts.clear()
-                    self.delete_old_rows(ForecastType.HOURLY);
+                        log.info('Saved %d %s records.' % (len(self.cfg.hourlyForecasts), forecast_type))
+                    bucket.clear()
+                    self.delete_old_rows(forecast_type);
         except Exception as e:
             # Include a stack traceback in the log:
             # but eat this exception as we don't want to bring down weewx
-            # because ot this extension.
-            log.info('saveHourlyForedcastsToDB: %s' % e)
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
-
-    def saveDailyForecastsToDB(self):
-        try:
-            now = int(time.time() + 0.5)
-            with self.cfg.lock:
-                if len(self.cfg.dailyForecasts) != 0:
-                    ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
-                    # Never write the same archvie interval twice.
-                    if self.get_latest_ts(ForecastType.DAILY) < ts:
-                        for record in self.cfg.dailyForecasts:
-                            self.save_forecast(NWS.convert_to_json(record, ts))
-                        log.info('Saved %d ForecastType.DAILY records.' % len(self.cfg.dailyForecasts))
-                    self.cfg.dailyForecasts.clear()
-                    self.delete_old_rows(ForecastType.DAILY);
-        except Exception as e:
-            # Include a stack traceback in the log:
-            # but eat this exception as we don't want to bring down weewx
-            # because ot this extension.
-            log.info('saveDailyForedcastsToDB: %s' % e)
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
-
-    def saveAlertsToDB(self):
-        log.debug('saveAlertsToDB: start')
-        try:
-            now = int(time.time() + 0.5)
-            with self.cfg.lock:
-                if len(self.cfg.alerts) != 0:
-                    ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
-                    # Never write the same archvie interval twice.
-                    if self.get_latest_ts(ForecastType.ALERTS) < ts:
-                        for record in self.cfg.alerts:
-                            self.save_forecast(NWS.convert_to_json(record, ts))
-                        log.info('Saved %d ForecastType.ALERTS records.' % len(self.cfg.alerts))
-                    self.cfg.alerts.clear()
-                    # TODO: The last alert will ever be deleted until a new alert comes along.
-                    #       This is mostly OK since the alert will not be served if it has expired.
-                    #       The one problematic case is where the lat/long has changed.  In this
-                    #       case, the user would have to delete the alert in the db (else, it will
-                    #       be served until is expires (or an alert in the new location comes along.
-                    self.delete_old_rows(ForecastType.ALERTS);
-        except Exception as e:
-            # Include a stack traceback in the log:
-            # but eat this exception as we don't want to bring down weewx
-            # because ot this extension.
-            log.info('saveAlertsToDB: %s' % e)
+            log.info('saveForedcastsToDB(%s): %s' % (forecast_type, e))
             weeutil.logger.log_traceback(log.critical, "    ****  ")
 
     def delete_old_rows(self, forecast_type: ForecastType):
