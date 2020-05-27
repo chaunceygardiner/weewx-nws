@@ -194,9 +194,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
          #else
            #set alert_word = 'Alerts'
          #end if
-                 <table class="lastupdate" style="padding:10px;font-size:19px;color:red;background-color:black;">
-                   <tr><td>$alert_count Active $alert_word in Forecast>Alerts</td></tr>
-                 </table>
+         <p><a href='forecast.html?tab=alerts' style='font-size:19px;color:black;text-decoration:underline;'>$alert_count Active $alert_word</a></p>
        #end if
     ```
 
