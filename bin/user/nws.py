@@ -127,6 +127,7 @@ class Configuration:
     archive_interval : int            # Immutable
     user_agent       : str            # Immutable
     retry_wait_secs  : int            # Immutable
+    days_to_keep     : int            # Immutable
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -173,9 +174,10 @@ class NWS(StdService):
             latitude          = latitude,
             longitude         = longitude,
             timeout_secs      = to_int(self.nws_config_dict.get('timeout_secs', 5)),
-            archive_interval  = int(config_dict['StdArchive']['archive_interval']),
+            archive_interval  = to_int(config_dict['StdArchive']['archive_interval']),
             user_agent        = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
-            retry_wait_secs   = int(self.nws_config_dict.get('retry_wait_secs', 5)),
+            retry_wait_secs   = to_int(self.nws_config_dict.get('retry_wait_secs', 5)),
+            days_to_keep      = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             )
 
         # At startup, attempt to get the latest forecasts.
@@ -213,16 +215,11 @@ class NWS(StdService):
                     bucket = self.cfg.alerts
                 if len(bucket) != 0:
                     ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
-                    ## Never write the same archive interval twice.
-                    #if self.get_latest_ts(forecast_type) < ts:
-                    #    for record in bucket:
-                    #        self.save_forecast(NWS.convert_to_json(record, ts))
-                    #    log.info('Saved %d %s records.' % (len(self.cfg.hourlyForecasts), forecast_type))
                     # Never write the same forecast twice.  This is determined by generatedTime
                     if not self.forecast_in_db(forecast_type, bucket[0].generatedTime):
                         for record in bucket:
                             self.save_forecast(NWS.convert_to_json(record, ts))
-                        log.info('Saved %d %s records.' % (len(self.cfg.hourlyForecasts), forecast_type))
+                        log.info('Saved %d %s records.' % (len(bucket), forecast_type))
                         self.delete_old_rows(forecast_type);
                     else:
                         log.info('Forecast %s, generated %s, already exists in the database.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
@@ -242,16 +239,22 @@ class NWS(StdService):
             return dbmanager.getSql(select) is not None
         except Exception as e:
             log.error('forecast_in_db(%s, %d) failed with %s.' % (forecast_type, generatedTime, e))
+            weeutil.logger.log_traceback(log.critical, "    ****  ")
 
     def delete_old_rows(self, forecast_type: ForecastType):
-        try:
-            dbmanager = self.engine.db_binder.get_manager(self.data_binding)
-            delete = "DELETE FROM archive WHERE (dateTime < (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d) OR latitude != %s OR longitude != %s" % (
-                NWS.get_interval(forecast_type), NWS.get_interval(forecast_type), self.cfg.latitude, self.cfg.longitude)
-            log.info('Pruning %s rows with %s.' % (forecast_type, delete))
-            dbmanager.getSql(delete)
-        except Exception as e:
-            log.error('delete_old_rows(%s): %s failed with %s.' % (forecast_type, delete, e))
+        if self.cfg.days_to_keep == 0:
+            log.info('days_to_keep set to zero, the database will not be pruned.')
+        else:
+            try:
+               n_days_ago: int = int(time.time() - self.cfg.days_to_keep * 24 * 3600)
+               dbmanager = self.engine.db_binder.get_manager(self.data_binding)
+               delete = "DELETE FROM archive WHERE (interval = %d AND dateTime < %d) OR latitude != %s OR longitude != %s" % (
+                   NWS.get_interval(forecast_type), n_days_ago, self.cfg.latitude, self.cfg.longitude)
+               log.info('Pruning %s items rows older than %s.' % (forecast_type, timestamp_to_string(n_days_ago)))
+               dbmanager.getSql(delete)
+            except Exception as e:
+               log.error('delete_old_rows(%s): %s failed with %s.' % (forecast_type, delete, e))
+               weeutil.logger.log_traceback(log.critical, "    ****  ")
 
     @staticmethod
     def get_lat_long(config_dict) -> Tuple[str, str]:
@@ -315,6 +318,7 @@ class NWS(StdService):
                     return 0
         except Exception as e:
             log.error('get_latest_type(%s): %s failed with %s.' % (forecast_type, select, e))
+            weeutil.logger.log_traceback(log.critical, "    ****  ")
             return 0
 
     def save_forecast(self, record):
@@ -734,6 +738,7 @@ if __name__ == '__main__':
         archive_interval  = 300,
         user_agent        = '(weewx-nws test run, weewx-nws-developer)',
         retry_wait_secs   = 5,
+        days_to_keep      = 90,
         )
 
     j = NWSPoller.request_forecast(cfg, ForecastType.HOURLY)

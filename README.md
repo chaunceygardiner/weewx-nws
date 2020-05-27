@@ -40,6 +40,13 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        longitude = -122.333  # Best practice is not to set longitude here.
    ```
 
+1. By default, nws will keep 90 days of forecasts and alerts.  One can change this
+   in weewx.conf.  Set days_to_keep to zero to keep all records.
+   ```
+   [NWS]
+    days_to_keep = 90  # Set to zero to never delete any forecasts and alerts.
+   ```
+
 1. Add NWSForecastVariables to each report that you want to have access to forecasts and alerts.
 
    For example, to enable in the SeasonsReport, edit weewx.conf to add user.nws.NWSForecastVariables
