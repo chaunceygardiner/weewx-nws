@@ -250,7 +250,7 @@ class NWS(StdService):
                dbmanager = self.engine.db_binder.get_manager(self.data_binding)
                delete = "DELETE FROM archive WHERE (interval = %d AND dateTime < %d) OR latitude != %s OR longitude != %s" % (
                    NWS.get_interval(forecast_type), n_days_ago, self.cfg.latitude, self.cfg.longitude)
-               log.info('Pruning %s items rows older than %s.' % (forecast_type, timestamp_to_string(n_days_ago)))
+               log.info('Pruning %s rows older than %s.' % (forecast_type, timestamp_to_string(n_days_ago)))
                dbmanager.getSql(delete)
             except Exception as e:
                log.error('delete_old_rows(%s): %s failed with %s.' % (forecast_type, delete, e))
