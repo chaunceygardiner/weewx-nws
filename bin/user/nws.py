@@ -51,7 +51,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "0.1"
+WEEWX_NWS_VERSION = "0.5"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -65,6 +65,8 @@ if weewx.__version__ < "4":
 table = [
     ('dateTime',         'INTEGER NOT NULL'), # When forecast/alert was inserted.
     ('interval',         'INTEGER NOT NULL'), # Always 60 for hourly,  720 for daily, 0 for alerts
+    ('latitude',         'FLOAT NOT NULL'),   # The latitude used to request the forecast
+    ('longitude',        'FLOAT NOT NULL'),   # The longitude used to request the forecast
     ('usUnits',          'INTEGER NOT NULL'),
     ('generatedTime',    'INTEGER NOT NULL'), # When forecast was generated., For alerts, holds effective
     ('number',           'INTEGER NOT NULL'),
@@ -93,6 +95,8 @@ class ForecastType(Enum):
 @dataclass
 class Forecast:
     interval        : int # 0 for ALERTS, 60 for HOURLY, 720 for DAILY
+    latitude        : float
+    longitude       : float
     usUnits         : int
     generatedTime   : int # When forecast was generated.  For alerts hold effective.
     number          : int # For alerts, numbered from 0 as parsed from the XML
@@ -172,8 +176,8 @@ class NWS(StdService):
             dailyForecastUrl  = None,
             hourlyForecastUrl = None,
             alertsUrl         = None,
-            latitude          = latitude,
-            longitude         = longitude,
+            latitude          = to_float(latitude),
+            longitude         = to_float(longitude),
             timeout_secs      = to_int(self.nws_config_dict.get('timeout_secs', 5)),
             archive_interval  = int(config_dict['StdArchive']['archive_interval']),
             user_agent        = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
@@ -181,18 +185,11 @@ class NWS(StdService):
             )
 
         # At startup, attempt to get the latest forecasts.
-        ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
-
-        # Hourly (Never write the same archive interval twice.)
-        if self.get_latest_ts(ForecastType.HOURLY) < NWS.get_archive_interval_timestamp(self.cfg.archive_interval) and NWSPoller.populate_forecast(self.cfg, ForecastType.HOURLY):
-            self.saveForecastsToDB(ForecastType.HOURLY)
-
-        # Daily (Never write the same archive interval twice.)
-        if self.get_latest_ts(ForecastType.DAILY) < NWS.get_archive_interval_timestamp(self.cfg.archive_interval) and NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY):
+        if NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY):
             self.saveForecastsToDB(ForecastType.DAILY)
-
-        # Alerts (Never write the same archive interval twice.)
-        if self.get_latest_ts(ForecastType.ALERTS) < NWS.get_archive_interval_timestamp(self.cfg.archive_interval) and NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS):
+        if NWSPoller.populate_forecast(self.cfg, ForecastType.HOURLY):
+            self.saveForecastsToDB(ForecastType.HOURLY)
+        if NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS):
             self.saveForecastsToDB(ForecastType.ALERTS)
 
         # Start a thread to query NWS for forecasts
@@ -206,8 +203,8 @@ class NWS(StdService):
 
     def end_archive_period(self, _event):
         """create new archive record and save them to the database"""
-        self.saveForecastsToDB(ForecastType.HOURLY)
         self.saveForecastsToDB(ForecastType.DAILY)
+        self.saveForecastsToDB(ForecastType.HOURLY)
         self.saveForecastsToDB(ForecastType.ALERTS)
 
     def saveForecastsToDB(self, forecast_type: ForecastType):
@@ -222,18 +219,35 @@ class NWS(StdService):
                     bucket = self.cfg.alerts
                 if len(bucket) != 0:
                     ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
-                    # Never write the same archvie interval twice.
-                    if self.get_latest_ts(forecast_type) < ts:
+                    ## Never write the same archive interval twice.
+                    #if self.get_latest_ts(forecast_type) < ts:
+                    #    for record in bucket:
+                    #        self.save_forecast(NWS.convert_to_json(record, ts))
+                    #    log.info('Saved %d %s records.' % (len(self.cfg.hourlyForecasts), forecast_type))
+                    # Never write the same forecast twice.  This is determined by generatedTime
+                    if not self.forecast_in_db(forecast_type, bucket[0].generatedTime):
                         for record in bucket:
                             self.save_forecast(NWS.convert_to_json(record, ts))
                         log.info('Saved %d %s records.' % (len(self.cfg.hourlyForecasts), forecast_type))
+                        self.delete_old_rows(forecast_type);
+                    else:
+                        log.info('Forecast %s, generated %s, already exists in the database.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
                     bucket.clear()
-                    self.delete_old_rows(forecast_type);
         except Exception as e:
             # Include a stack traceback in the log:
             # but eat this exception as we don't want to bring down weewx
-            log.info('saveForedcastsToDB(%s): %s' % (forecast_type, e))
+            log.error('saveForedcastsToDB(%s): %s' % (forecast_type, e))
             weeutil.logger.log_traceback(log.critical, "    ****  ")
+
+    def forecast_in_db(self, forecast_type: ForecastType, generatedTime: int):
+        try:
+            dbmanager = self.engine.db_binder.get_manager(self.data_binding)
+            select = "SELECT generatedTime FROM archive WHERE interval = %d AND generatedTime = %d LIMIT 1" % (
+                NWS.get_interval(forecast_type), generatedTime)
+            log.info('Checking if forecast already in db: select: %s.' % select)
+            return dbmanager.getSql(select) is not None
+        except Exception as e:
+            log.error('forecast_in_db(%s, %d) failed with %s.' % (forecast_type, generatedTime, e))
 
     def delete_old_rows(self, forecast_type: ForecastType):
         try:
@@ -243,7 +257,7 @@ class NWS(StdService):
             log.info('Pruning %s rows with %s.' % (forecast_type, delete))
             dbmanager.getSql(delete)
         except Exception as e:
-            log.info('delete_old_rows(%s): %s failed with %s.' % (forecast_type, delete, e))
+            log.error('delete_old_rows(%s): %s failed with %s.' % (forecast_type, delete, e))
 
     @staticmethod
     def get_archive_interval_timestamp(archive_interval: int) -> int:
@@ -255,6 +269,8 @@ class NWS(StdService):
         j = {}
         j['dateTime']         = ts
         j['interval']         = record.interval
+        j['latitude']         = record.latitude
+        j['longitude']        = record.longitude
         j['usUnits']          = record.usUnits
         j['generatedTime']    = record.generatedTime
         j['number']           = record.number
@@ -292,7 +308,7 @@ class NWS(StdService):
                     log.debug('get_latest_ts(%s): no rows in database, returning 0.' % forecast_type)
                     return 0
         except Exception as e:
-            log.info('get_latest_type(%s): %s failed with %s.' % (forecast_type, select, e))
+            log.error('get_latest_type(%s): %s failed with %s.' % (forecast_type, select, e))
             return 0
 
     def save_forecast(self, record):
@@ -341,7 +357,7 @@ class NWSPoller:
                     cfg.dailyForecasts.clear()
                 else:
                     cfg.alerts.clear()
-                for record in NWSPoller.compose_records(j, forecast_type):
+                for record in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
                     log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
                     if forecast_type == ForecastType.HOURLY:
                         cfg.hourlyForecasts.append(record)
@@ -361,7 +377,7 @@ class NWSPoller:
     def request_urls(cfg):
         try:
             # Need to fetch (and cache) the forecast URLs
-            url = 'https://api.weather.gov/points/%s,%s' % (cfg.latitude, cfg.longitude)
+            url = 'https://api.weather.gov/points/%f,%f' % (cfg.latitude, cfg.longitude)
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
             log.debug('request_urls: headers: %s' % headers)
@@ -405,12 +421,12 @@ class NWSPoller:
                 with cfg.lock:
                     cfg.dailyForecastUrl  = j['properties']['forecast']
                     cfg.hourlyForecastUrl = j['properties']['forecastHourly']
-                    cfg.alertsUrl         = 'https://api.weather.gov/alerts/active?point=%s,%s' % (cfg.latitude, cfg.longitude)
+                    cfg.alertsUrl         = 'https://api.weather.gov/alerts/active?point=%f,%f' % (cfg.latitude, cfg.longitude)
                     log.info('request_urls: Cached dailyForecastUrl: %s' % cfg.dailyForecastUrl)
                     log.info('request_urls: Cached hourlyForecastUrl: %s' % cfg.hourlyForecastUrl)
                     log.info('request_urls: Cached alertsUrl: %s' % cfg.alertsUrl)
         except Exception as e:
-            log.info('request_urls: Attempt to fetch from: %s failed: %s.' % (url, e))
+            log.error('request_urls: Attempt to fetch from: %s failed: %s.' % (url, e))
             weeutil.logger.log_traceback(log.critical, "    ****  ")
 
     @staticmethod
@@ -444,7 +460,7 @@ class NWSPoller:
                 response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
                 return response.json()
             except Exception as e:
-                log.info('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
+                log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
                 weeutil.logger.log_traceback(log.critical, "    ****  ")
                 return None
         else:
@@ -452,7 +468,7 @@ class NWSPoller:
             return None
 
     @staticmethod
-    def compose_alert_records(j):
+    def compose_alert_records(j, latitude: float, longitude: float):
         log.debug('compose_alert_records: len(j[features]): %d' % len(j['features']))
         alertCount = 0
         for feature in j['features']:
@@ -463,7 +479,9 @@ class NWSPoller:
             ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
             record = Forecast(
                 interval         = NWS.get_interval(ForecastType.ALERTS),
-                usUnits          = 'US',                   # Dummy
+                latitude         = latitude,
+                longitude        = longitude,
+                usUnits          = weewx.US,                # Dummy
                 generatedTime    = int(effective),
                 number           = alertCount,
                 name             = alert['event'],
@@ -483,9 +501,9 @@ class NWSPoller:
             yield record
 
     @staticmethod
-    def compose_records(j, forecast_type: ForecastType):
+    def compose_records(j, forecast_type: ForecastType, latitude: float, longitude: float):
         if forecast_type == ForecastType.ALERTS:
-            yield from NWSPoller.compose_alert_records(j)
+            yield from NWSPoller.compose_alert_records(j, latitude, longitude)
             return
 
         # 2020-05-18T22:02:26+00:00
@@ -494,9 +512,9 @@ class NWSPoller:
 
         units = j['properties']['units']
         if units == 'us':
-            units = 'US'
+            units = weewx.US
         else:
-            units = 'METRIC'
+            units = weewx.METRIC
 
         for period in j['properties']['periods']:
             windSpeedStr = period['windSpeed']
@@ -505,6 +523,8 @@ class NWSPoller:
             windSpeedUnit = windSpeedArray[1]
             record = Forecast(
                 interval         = NWS.get_interval(forecast_type),
+                latitude         = latitude,
+                longitude        = longitude,
                 usUnits          = units,
                 generatedTime    = int(updateTime),
                 number           = period['number'],
@@ -586,6 +606,8 @@ class NWSForecastVariables(SearchList):
             row = {}
             time_group = weewx.units.obs_group_dict['dateTime']
             time_units = weewx.units.USUnits[time_group]
+            row['latitude']    = raw_row['latitude']
+            row['longitude']   = raw_row['longitude']
             row['effective']   = weewx.units.ValueHelper((raw_row['generatedTime'], time_units, time_group))
             row['onset']       = weewx.units.ValueHelper((raw_row['startTime'], time_units, time_group))
             row['ends']        = weewx.units.ValueHelper((raw_row['endTime'], time_units, time_group))
@@ -629,22 +651,41 @@ class NWSForecastVariables(SearchList):
                                                   self.generator.config_dict['Databases'],self.binding)
         with weewx.manager.open_manager(dict) as dbm:
             # Latest insert date
-            select = "SELECT dateTime, interval, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d ORDER BY startTime" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d ORDER BY startTime" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
             try:
                 records = []
-                columns = dbm.connection.columnsOf(dbm.table_name)
                 forecast_count = 0
                 for row in dbm.genSql(select):
-                    # Only include if record hasn't expired (row[7] is endTime) and max_forecasts hasn't been exceeded.
-                    if time.time() < row[7] and (max_forecasts is None or forecast_count < max_forecasts):
+                    END_TIME = 9
+                    # Only include if record hasn't expired (row[END_TIME] is endTime) and max_forecasts hasn't been exceeded.
+                    if time.time() < row[END_TIME] and (max_forecasts is None or forecast_count < max_forecasts):
                         forecast_count += 1
                         record = {}
-                        for i, f in enumerate(columns):
-                            record[f] = row[i]
+
+                        record['dateTime'] = row[0]
+                        record['interval'] = row[1]
+                        record['latitude'] = row[2]
+                        record['longitude'] = row[3]
+                        record['usUnits'] = row[4]
+                        record['generatedTime'] = row[5]
+                        record['number'] = row[6]
+                        record['name'] = row[7]
+                        record['startTime'] = row[8]
+                        record['endTime'] = row[9]
+                        record['isDaytime'] = row[10]
+                        record['outTemp'] = row[11]
+                        record['outTempTrend'] = row[12]
+                        record['windSpeed'] = row[13]
+                        record['windDir'] = row[14]
+                        record['iconUrl'] = row[15]
+                        record['shortForecast'] = row[16]
+                        record['detailedForecast'] = row[17]
+
                         records.append(record)
                 return records
             except Exception as e:
-                log.info('%s failed with %s.' % (select, e))
+                log.error('%s failed with %s.' % (select, e))
+                weeutil.logger.log_traceback(log.critical, "    ****  ")
         return []
 
     @staticmethod
@@ -653,7 +694,9 @@ class NWSForecastVariables(SearchList):
 
 def pretty_print(record):
     print('interval        : %d' % record.interval)
-    print('usUnits         : %s' % record.usUnits)
+    print('latitude        : %f' % record.latitude)
+    print('longitude       : %f' % record.longitude)
+    print('usUnits         : %d' % record.usUnits)
     print('generatedTime   : %s' % timestamp_to_string(record.generatedTime))
     print('number          : %d' % record.number)
     print('name            : %s' % record.name)
@@ -686,16 +729,16 @@ if __name__ == '__main__':
         )
 
     j = NWSPoller.request_forecast(cfg, ForecastType.HOURLY)
-    for record in NWSPoller.compose_records(j, ForecastType.HOURLY):
+    for record in NWSPoller.compose_records(j, ForecastType.HOURLY, cfg.latitude, cfg.longitude):
         pretty_print(record)
         print('------------------------')
 
     j = NWSPoller.request_forecast(cfg, ForecastType.DAILY)
-    for record in NWSPoller.compose_records(j, ForecastType.DAILY):
+    for record in NWSPoller.compose_records(j, ForecastType.DAILY, cfg.latitude, cfg.longitude):
         pretty_print(record)
         print('------------------------')
 
     j = NWSPoller.request_forecast(cfg, ForecastType.ALERTS)
-    for record in NWSPoller.compose_records(j, ForecastType.ALERTS):
+    for record in NWSPoller.compose_records(j, ForecastType.ALERTS, cfg.latitude, cfg.longitude):
         pretty_print(record)
         print('------------------------')

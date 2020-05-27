@@ -71,6 +71,8 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
          $day.iconUrl
          $day.shortForecast
          $day.detailedForecast
+         $day.latitude    # Latitude of point for which forecasts were requested
+         $day.longitude   # Longitude of point for which forecasts were requested
      #end for
     ```
     Daily forecasts can be seen in action on the **7 Day** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
@@ -112,19 +114,21 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 1.  To get hourly forecasts (in this example, 168 (7 * 24) foreecasts are returned.
     ```
     #for $hour in $nwsforecast.hourly_forecasts() # Note: hourly_forecasts(24) will return 24 forecassts (1 day).
-        $hour.generatedTime
-        $hour.number
-        $hour.name
-        $hour.startTime
-        $hour.endTime
-        $hour.isDaytime
-        $hour.outTemp
-        $hour.outTempTrend
-        $hour.windSpeed
-        $hour.windDir
-        $hour.iconUrl
-        $hour.shortForecast
-        $hour.detailedForecast
+         $hour.generatedTime
+         $hour.number
+         $hour.name
+         $hour.startTime
+         $hour.endTime
+         $hour.isDaytime
+         $hour.outTemp
+         $hour.outTempTrend
+         $hour.windSpeed
+         $hour.windDir
+         $hour.iconUrl
+         $hour.shortForecast
+         $hour.detailedForecast
+         $hour.latitude    # Latitude of point for which forecasts were requested
+         $hour.longitude   # Longitude of point for which forecasts were requested
     #end for
     ```
     Hourly forecasts can be seen in action on the **24 Hour** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
@@ -152,12 +156,14 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 1.  To get all alerts for the station's location:
     ```
     #for $alert in $nwsforecast.alerts()
-        $alert.effective   # Time issued
-        $alert.onset       # Time it will begin
-        $alert.ends        # Time it will end
-        $alert.event       # Name of event (e.g., Heat Advisory)
-        $alert.headline    # Headline
-        $alert.description # Long description
+         $alert.effective   # Time issued
+         $alert.onset       # Time it will begin
+         $alert.ends        # Time it will end
+         $alert.event       # Name of event (e.g., Heat Advisory)
+         $alert.headline    # Headline
+         $alert.description # Long description
+         $alert.latitude    # Latitude of point for which alerts were requested
+         $alert.longitude   # Longitude of point for which alerts were requested
     #end for
     ```
     Alerts can be seen in action on the **Alerts** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
