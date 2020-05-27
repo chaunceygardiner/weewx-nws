@@ -35,7 +35,7 @@ from dateutil.parser import parse
 
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Any, Dict, IO, Iterator, List, Optional
+from typing import Any, Dict, IO, Iterator, List, Optional, Tuple
 
 import weedb
 import weewx
@@ -65,8 +65,8 @@ if weewx.__version__ < "4":
 table = [
     ('dateTime',         'INTEGER NOT NULL'), # When forecast/alert was inserted.
     ('interval',         'INTEGER NOT NULL'), # Always 60 for hourly,  720 for daily, 0 for alerts
-    ('latitude',         'FLOAT NOT NULL'),   # The latitude used to request the forecast
-    ('longitude',        'FLOAT NOT NULL'),   # The longitude used to request the forecast
+    ('latitude',         'STRING NOT NULL'),   # The latitude used to request the forecast
+    ('longitude',        'STRING NOT NULL'),   # The longitude used to request the forecast
     ('usUnits',          'INTEGER NOT NULL'),
     ('generatedTime',    'INTEGER NOT NULL'), # When forecast was generated., For alerts, holds effective
     ('number',           'INTEGER NOT NULL'),
@@ -95,8 +95,8 @@ class ForecastType(Enum):
 @dataclass
 class Forecast:
     interval        : int # 0 for ALERTS, 60 for HOURLY, 720 for DAILY
-    latitude        : float
-    longitude       : float
+    latitude        : str
+    longitude       : str
     usUnits         : int
     generatedTime   : int # When forecast was generated.  For alerts hold effective.
     number          : int # For alerts, numbered from 0 as parsed from the XML
@@ -121,8 +121,8 @@ class Configuration:
     alertsUrl        : Optional[str]  # Controlled by lock
     dailyForecastUrl : Optional[str]  # Controlled by lock
     hourlyForecastUrl: Optional[str]  # Controlled by lock
-    latitude         : float          # Immutable
-    longitude        : float          # Immutable
+    latitude         : str            # Immutable
+    longitude        : str            # Immutable
     timeout_secs     : int            # Immutable
     archive_interval : int            # Immutable
     user_agent       : str            # Immutable
@@ -138,13 +138,7 @@ class NWS(StdService):
         self.nws_config_dict = config_dict.get('NWS', {})
         self.engine = engine
 
-        # If specified, get lat/long, else get it from station.
-        latitude: str = self.nws_config_dict.get('latitude')
-        if latitude is None:
-            latitude = config_dict['Station'].get('latitude', None)
-        longitude: str = self.nws_config_dict.get('longitude')
-        if longitude is None:
-            longitude = config_dict['Station'].get('longitude', None)
+        latitude, longitude = NWS.get_lat_long(self.config_dict)
         if latitude is None or longitude is None:
             log.error("Could not determine station's latitude and longitude.")
             return
@@ -176,8 +170,8 @@ class NWS(StdService):
             dailyForecastUrl  = None,
             hourlyForecastUrl = None,
             alertsUrl         = None,
-            latitude          = to_float(latitude),
-            longitude         = to_float(longitude),
+            latitude          = latitude,
+            longitude         = longitude,
             timeout_secs      = to_int(self.nws_config_dict.get('timeout_secs', 5)),
             archive_interval  = int(config_dict['StdArchive']['archive_interval']),
             user_agent        = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
@@ -252,12 +246,24 @@ class NWS(StdService):
     def delete_old_rows(self, forecast_type: ForecastType):
         try:
             dbmanager = self.engine.db_binder.get_manager(self.data_binding)
-            delete = "DELETE FROM archive WHERE dateTime < (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d" % (
-                NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            delete = "DELETE FROM archive WHERE (dateTime < (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d) OR latitude != %s OR longitude != %s" % (
+                NWS.get_interval(forecast_type), NWS.get_interval(forecast_type), self.cfg.latitude, self.cfg.longitude)
             log.info('Pruning %s rows with %s.' % (forecast_type, delete))
             dbmanager.getSql(delete)
         except Exception as e:
             log.error('delete_old_rows(%s): %s failed with %s.' % (forecast_type, delete, e))
+
+    @staticmethod
+    def get_lat_long(config_dict) -> Tuple[str, str]:
+        # If specified, get lat/long, else get it from station.
+        nws_config_dict = config_dict.get('NWS', {})
+        latitude: str = nws_config_dict.get('latitude')
+        if latitude is None:
+            latitude = config_dict['Station'].get('latitude', None)
+        longitude: str = nws_config_dict.get('longitude')
+        if longitude is None:
+            longitude = config_dict['Station'].get('longitude', None)
+        return (latitude, longitude)
 
     @staticmethod
     def get_archive_interval_timestamp(archive_interval: int) -> int:
@@ -377,7 +383,7 @@ class NWSPoller:
     def request_urls(cfg):
         try:
             # Need to fetch (and cache) the forecast URLs
-            url = 'https://api.weather.gov/points/%f,%f' % (cfg.latitude, cfg.longitude)
+            url = 'https://api.weather.gov/points/%s,%s' % (cfg.latitude, cfg.longitude)
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
             log.debug('request_urls: headers: %s' % headers)
@@ -421,7 +427,7 @@ class NWSPoller:
                 with cfg.lock:
                     cfg.dailyForecastUrl  = j['properties']['forecast']
                     cfg.hourlyForecastUrl = j['properties']['forecastHourly']
-                    cfg.alertsUrl         = 'https://api.weather.gov/alerts/active?point=%f,%f' % (cfg.latitude, cfg.longitude)
+                    cfg.alertsUrl         = 'https://api.weather.gov/alerts/active?point=%s,%s' % (cfg.latitude, cfg.longitude)
                     log.info('request_urls: Cached dailyForecastUrl: %s' % cfg.dailyForecastUrl)
                     log.info('request_urls: Cached hourlyForecastUrl: %s' % cfg.hourlyForecastUrl)
                     log.info('request_urls: Cached alertsUrl: %s' % cfg.alertsUrl)
@@ -468,7 +474,7 @@ class NWSPoller:
             return None
 
     @staticmethod
-    def compose_alert_records(j, latitude: float, longitude: float):
+    def compose_alert_records(j, latitude: str, longitude: str):
         log.debug('compose_alert_records: len(j[features]): %d' % len(j['features']))
         alertCount = 0
         for feature in j['features']:
@@ -501,7 +507,7 @@ class NWSPoller:
             yield record
 
     @staticmethod
-    def compose_records(j, forecast_type: ForecastType, latitude: float, longitude: float):
+    def compose_records(j, forecast_type: ForecastType, latitude: str, longitude: str):
         if forecast_type == ForecastType.ALERTS:
             yield from NWSPoller.compose_alert_records(j, latitude, longitude)
             return
@@ -588,6 +594,8 @@ class NWSForecastVariables(SearchList):
         nws_dict = generator.config_dict.get('NWS', {})
         self.binding = nws_dict.get('data_binding', 'nws_binding')
 
+        self.latitude, self.longitude = NWS.get_lat_long(generator.config_dict)
+
     def get_extension_list(self, timespan, db_lookup):
         return [{'nwsforecast': self}]
 
@@ -651,7 +659,7 @@ class NWSForecastVariables(SearchList):
                                                   self.generator.config_dict['Databases'],self.binding)
         with weewx.manager.open_manager(dict) as dbm:
             # Latest insert date
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d ORDER BY startTime" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), self.latitude, self.longitude, NWS.get_interval(forecast_type), self.latitude, self.longitude)
             try:
                 records = []
                 forecast_count = 0
@@ -694,8 +702,8 @@ class NWSForecastVariables(SearchList):
 
 def pretty_print(record):
     print('interval        : %d' % record.interval)
-    print('latitude        : %f' % record.latitude)
-    print('longitude       : %f' % record.longitude)
+    print('latitude        : %s' % record.latitude)
+    print('longitude       : %s' % record.longitude)
     print('usUnits         : %d' % record.usUnits)
     print('generatedTime   : %s' % timestamp_to_string(record.generatedTime))
     print('number          : %d' % record.number)
@@ -720,8 +728,8 @@ if __name__ == '__main__':
         alertsUrl         = None,
         dailyForecastUrl  = None,
         hourlyForecastUrl = None,
-        latitude          = 37.431495,
-        longitude         = -122.110937,
+        latitude          = '37.431495',
+        longitude         = '-122.110937',
         timeout_secs      = 5,
         archive_interval  = 300,
         user_agent        = '(weewx-nws test run, weewx-nws-developer)',
