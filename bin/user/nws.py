@@ -416,6 +416,32 @@ class NWSPoller:
             log.debug('request_urls: headers: %s' % headers)
             log.info('Downloading URLs from %s' % url)
             response: requests.Response = session.get(url=url, headers=headers, timeout=cfg.timeout_secs)
+            if response.status_code == 404:
+                #{
+                #    "correlationId": "ac04ca11-ce4d-464e-8cef-602497b10aa1",
+                #    "title": "Data Unavailable For Requested Point",
+                #    "type": "https://api.weather.gov/problems/InvalidPoint",
+                #    "status": 404,
+                #    "detail": "Unable to provide data for requested point -20.9512,55.3085",
+                #    "instance": "https://api.weather.gov/requests/ac04ca11-ce4d-464e-8cef-602497b10aa1"
+                #}
+                j = response.json()
+                correlationId: str = j.get('correlationId')
+                title: str = j.get('title')
+                type_str: str = j.get('type')
+                status: str = j.get('status')
+                detail: str = j.get('detail')
+                instance: str = j.get('instance')
+                if title is not None:
+                    log.info(correlationId)
+                    log.info(title)
+                    log.info(type_str)
+                    log.info(status)
+                    log.info(detail)
+                    log.info(instance)
+                else:
+                    log.info('404 error for url: %s' % url)
+                return
             response.raise_for_status()
             log.debug('request_hourly_forecast: %s returned %r' % (url, response))
             if response:
