@@ -466,7 +466,10 @@ class NWSPoller:
                     log.info('request_urls: Cached dailyForecastUrl: %s' % cfg.dailyForecastUrl)
                     log.info('request_urls: Cached hourlyForecastUrl: %s' % cfg.hourlyForecastUrl)
                     log.info('request_urls: Cached alertsUrl: %s' % cfg.alertsUrl)
+        except requests.exceptions.Timeout as e:
+            log.error('request_urls(%s): Attempt to fetch from: %s failed: %s.' % (url, e))
         except Exception as e:
+            # Unexpected exceptions need a stack track to diagnose.
             log.error('request_urls: Attempt to fetch from: %s failed: %s.' % (url, e))
             weeutil.logger.log_traceback(log.critical, "    ****  ")
 
@@ -500,7 +503,10 @@ class NWSPoller:
                 headers = {'User-Agent': cfg.user_agent}
                 response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
                 return response.json()
+            except requests.exceptions.Timeout as e:
+                log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
             except Exception as e:
+                # Unexpected exceptions need a stack track to diagnose.
                 log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
                 weeutil.logger.log_traceback(log.critical, "    ****  ")
                 return None
