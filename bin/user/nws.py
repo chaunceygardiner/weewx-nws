@@ -51,7 +51,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "0.5"
+WEEWX_NWS_VERSION = "0.6"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -78,7 +78,7 @@ table = [
     ('outTempTrend',     'STRING'),
     ('windSpeed',        'FLOAT NOT NULL'),
     ('windDir',          'FLOAT'),
-    ('iconUrl',          'STRING NOT NULL'), # For alerts, holds the alert URL
+    ('iconUrl',          'STRING NOT NULL'),
     ('shortForecast',    'STRING NOT NULL'), # For alrerts, holds the headline
     ('detailedForecast', 'STRING'),          # For alerts, holds the description
     ]
@@ -108,13 +108,14 @@ class Forecast:
     outTempTrend    : Optional[str]
     windSpeed       : float
     windDir         : Optional[float]
-    iconUrl         : str    # For alerts, holds the alert URL
+    iconUrl         : str
     shortForecast   : str    # For alerts, holds the headline
     detailedForecast: Optional[str] # For alerts,hold the description
 
 @dataclass
 class Configuration:
     lock             : threading.Lock
+    alertsAllClear   : bool           # Controlled by lock
     alerts           : List[Forecast] # Controlled by lock
     dailyForecasts   : List[Forecast] # Controlled by lock
     hourlyForecasts  : List[Forecast] # Controlled by lock
@@ -165,9 +166,10 @@ class NWS(StdService):
 
         self.cfg = Configuration(
             lock              = threading.Lock(),
+            alertsAllClear    = False,
+            alerts            = [],
             dailyForecasts    = [],
             hourlyForecasts   = [],
-            alerts            = [],
             dailyForecastUrl  = None,
             hourlyForecastUrl = None,
             alertsUrl         = None,
@@ -220,10 +222,15 @@ class NWS(StdService):
                         for record in bucket:
                             self.save_forecast(NWS.convert_to_json(record, ts))
                         log.info('Saved %d %s records.' % (len(bucket), forecast_type))
-                        self.delete_old_rows(forecast_type);
+                        self.delete_old_forecasts(forecast_type);
                     else:
-                        log.info('Forecast %s, generated %s, already exists in the database.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
+                        log.debug('Forecast %s, generated %s, already exists in the database.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
                     bucket.clear()
+                elif forecast_type == ForecastType.ALERTS and self.cfg.alertsAllClear:
+                    # No alert records and all clear has been signaled (no alerts returned).
+                    # delete all alerts and reset all clear
+                    self.cfg.alertsAllClear = False
+                    self.delete_all_alerts()
         except Exception as e:
             # Include a stack traceback in the log:
             # but eat this exception as we don't want to bring down weewx
@@ -235,13 +242,35 @@ class NWS(StdService):
             dbmanager = self.engine.db_binder.get_manager(self.data_binding)
             select = "SELECT generatedTime FROM archive WHERE interval = %d AND generatedTime = %d LIMIT 1" % (
                 NWS.get_interval(forecast_type), generatedTime)
-            log.info('Checking if forecast already in db: select: %s.' % select)
+            log.debug('Checking if forecast already in db: select: %s.' % select)
             return dbmanager.getSql(select) is not None
         except Exception as e:
             log.error('forecast_in_db(%s, %d) failed with %s.' % (forecast_type, generatedTime, e))
             weeutil.logger.log_traceback(log.critical, "    ****  ")
 
-    def delete_old_rows(self, forecast_type: ForecastType):
+    def delete_all_alerts(self):
+        try:
+           dbmanager = self.engine.db_binder.get_manager(self.data_binding)
+           # Only delete if there are actually alerts in the table (to avoid confusing deletes in the log).
+           try:
+               select = 'SELECT COUNT(dateTime) FROM archive WHERE interval = %d' % NWS.get_interval(ForecastType.ALERTS)
+               log.debug('Checking if there are any alerts in the archive to delete: select: %s.' % select)
+               row = dbmanager.getSql(select)
+           except Exception as e:
+               log.error('delete_all_alerts: %s failed with %s.' % (select, e))
+               weeutil.logger.log_traceback(log.critical, "    ****  ")
+               return
+           if row[0] != 0:
+               delete = "DELETE FROM archive WHERE interval = %d" % NWS.get_interval(ForecastType.ALERTS)
+               log.info('Pruning ForecastType.ALERTS')
+               dbmanager.getSql(delete)
+        except Exception as e:
+           log.error('delete_all_alerts: %s failed with %s.' % (delete, e))
+           weeutil.logger.log_traceback(log.critical, "    ****  ")
+
+    def delete_old_forecasts(self, forecast_type: ForecastType):
+        if forecast_type == ForecastType.ALERTS:
+            return    # Alerts are not deleted here; rather they are deleted on cfg.alertsAllClear
         if self.cfg.days_to_keep == 0:
             log.info('days_to_keep set to zero, the database will not be pruned.')
         else:
@@ -253,7 +282,7 @@ class NWS(StdService):
                log.info('Pruning %s rows older than %s.' % (forecast_type, timestamp_to_string(n_days_ago)))
                dbmanager.getSql(delete)
             except Exception as e:
-               log.error('delete_old_rows(%s): %s failed with %s.' % (forecast_type, delete, e))
+               log.error('delete_old_forecasts(%s): %s failed with %s.' % (forecast_type, delete, e))
                weeutil.logger.log_traceback(log.critical, "    ****  ")
 
     @staticmethod
@@ -367,6 +396,7 @@ class NWSPoller:
                     cfg.dailyForecasts.clear()
                 else:
                     cfg.alerts.clear()
+                    cfg.alertsAllClear = True    # Will be set to False below if there are any alerts present
                 for record in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
                     log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
                     if forecast_type == ForecastType.HOURLY:
@@ -375,6 +405,7 @@ class NWSPoller:
                         cfg.dailyForecasts.append(record)
                     else: # Alerts
                         cfg.alerts.append(record)
+                        alertsAllClear = False    # Alerts will not be deleted from db since there is an active alert.
             return True
 
     @staticmethod
@@ -726,6 +757,7 @@ def pretty_print(record):
 if __name__ == '__main__':
     cfg = Configuration(
         lock              = threading.Lock(),
+        alertsAllClear    = False,
         alerts            = [],
         dailyForecasts    = [],
         hourlyForecasts   = [],

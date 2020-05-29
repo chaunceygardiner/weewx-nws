@@ -40,8 +40,9 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        longitude = -122.333  # Best practice is not to set longitude here.
    ```
 
-1. By default, nws will keep 90 days of forecasts and alerts.  One can change this
-   in weewx.conf.  Set days_to_keep to zero to keep all records.
+1. By default, nws will keep 90 days of forecasts.  One can change this in weewx.conf.
+   Set days_to_keep to zero to keep all forecasts.
+   Note: Alerts are deleted when they expire.  As such, days_to_keep has no affect on alerts.
    ```
    [NWS]
     days_to_keep = 90  # Set to zero to never delete any forecasts and alerts.
