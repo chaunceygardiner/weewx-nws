@@ -118,7 +118,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
     ![NWS Daily Forecasts screenshot](daily_forecasts.jpg)
 
-1.  To get hourly forecasts (in this example, 168 (7 * 24) foreecasts are returned.
+1.  To get hourly forecasts (in this example, all 156 foreecasts are returned (6.5 days worth).
     ```
     #for $hour in $nwsforecast.hourly_forecasts() # Note: hourly_forecasts(24) will return 24 forecassts (1 day).
          $hour.generatedTime
@@ -138,10 +138,10 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
          $hour.longitude   # Longitude of point for which forecasts were requested
     #end for
     ```
-    Hourly forecasts can be seen in action on the **24 Hour** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
+    Hourly forecasts can be seen in action on the **Hourly** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
-       #for $hour in $nwsforecast.hourly_forecasts(24)
+       #for $hour in $nwsforecast.hourly_forecasts(72)
        <tr class='forecast_hours'>
          #set icon = $hour.iconUrl
          #if $target_display == 'smartphone':
