@@ -51,7 +51,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "0.6"
+WEEWX_NWS_VERSION = "0.7"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -360,24 +360,37 @@ class NWSPoller:
         self.cfg = cfg
 
     def poll_nws(self) -> None:
+        on_retry: bool = False
         while True:
-            at_least_one_failed: bool = False
-            success = NWSPoller.populate_forecast(self.cfg, ForecastType.HOURLY)
-            if not success:
-                at_least_one_failed = True
-            success = NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY)
-            if not success:
-                at_least_one_failed = True
-            success = NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS)
-            if not success:
-                at_least_one_failed = True
-            if at_least_one_failed:
-                #TODO: Should only retry the one that failed.
-                time.sleep(cfg.retry_wait_secs)
-            else:
-                sleep_time = NWSPoller.time_to_next_poll()
-                log.debug('NWSPoller: poll_nws: Sleeping for %f seconds.' % sleep_time) 
-                time.sleep(sleep_time)
+            try:
+                daily_failed : bool = False
+                hourly_failed: bool = False
+                alerts_failed: bool = False
+                if not on_retry or daily_failed:
+                    success = NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY)
+                    if not success:
+                        daily_failed = True
+                if not on_retry or hourly_failed:
+                    success = NWSPoller.populate_forecast(self.cfg, ForecastType.HOURLY)
+                    if not success:
+                        hourly_failed = True
+                if not on_retry or alerts_failed:
+                    success = NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS)
+                    if not success:
+                        alerts_failed = True
+                if daily_failed or hourly_failed or alerts_failed:
+                    log.info('poll_nws: At least one forecast request failed.  Retrying in %d seconds.' % self.cfg.retry_wait_secs)
+                    on_retry = True
+                    # TODO: Perhaps back off on retries.
+                    time.sleep(self.cfg.retry_wait_secs)
+                else:
+                    on_retry = False
+                    sleep_time = NWSPoller.time_to_next_poll()
+                    log.debug('poll_nws: Sleeping for %f seconds.' % sleep_time)
+                    time.sleep(sleep_time)
+            except Exception as e:
+                log.error('poll_nws: Encountered exception. Retrying in %d seconds. exception: %s' % (self.cfg.retry_wait_secs, e))
+                time.sleep(self.cfg.retry_wait_secs)
 
     @staticmethod
     def populate_forecast(cfg, forecast_type: ForecastType) -> bool:
@@ -505,6 +518,7 @@ class NWSPoller:
                 return response.json()
             except requests.exceptions.Timeout as e:
                 log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
+                return None
             except Exception as e:
                 # Unexpected exceptions need a stack track to diagnose.
                 log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
@@ -593,7 +607,7 @@ class NWSPoller:
         if wdir_str == 'N':
             return 0.0
         elif wdir_str == 'NNE':
-            return 22.5 
+            return 22.5
         elif wdir_str == 'NE':
             return 45.0
         elif wdir_str == 'ENE':
