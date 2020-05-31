@@ -37,7 +37,6 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any, Dict, IO, Iterator, List, Optional, Tuple
 
-import weedb
 import weewx
 import weewx.units
 import weeutil.weeutil
@@ -51,7 +50,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "0.7"
+WEEWX_NWS_VERSION = "0.9"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -355,6 +354,11 @@ class NWS(StdService):
         dbmanager = self.engine.db_binder.get_manager(self.data_binding)
         dbmanager.addRecord(record)
 
+    def select_forecasts(self, forecast_type: ForecastType, max_forecasts: int=None) -> List[Dict[str, Any]]:
+        # Used for testing.
+        dbmanager = self.engine.db_binder.get_manager(self.data_binding)
+        return NWSForecastVariables.fetch_records(dbmanager, forecast_type, self.cfg.latitude, self.cfg.longitude, max_forecasts)
+
 class NWSPoller:
     def __init__(self, cfg: Configuration):
         self.cfg = cfg
@@ -379,7 +383,7 @@ class NWSPoller:
                     if not success:
                         alerts_failed = True
                 if daily_failed or hourly_failed or alerts_failed:
-                    log.info('poll_nws: At least one forecast request failed.  Retrying in %d seconds.' % self.cfg.retry_wait_secs)
+                    log.error('poll_nws: At least one forecast request failed.  Retrying in %d seconds.' % self.cfg.retry_wait_secs)
                     on_retry = True
                     # TODO: Perhaps back off on retries.
                     time.sleep(self.cfg.retry_wait_secs)
@@ -708,102 +712,257 @@ class NWSForecastVariables(SearchList):
             row['windDir'] = weewx.units.ValueHelper((row['windDir'], wind_dir_units, wind_dir_group))
         return rows
 
-    def getLatestForecastRows(self, forecast_type: ForecastType, max_forecasts: Optional[int]=None):
+    def getLatestForecastRows(self, forecast_type: ForecastType, max_forecasts: Optional[int]=None) -> List[Dict[str, Any]]:
         """get the latest hourly forecast"""
-        dict = weewx.manager.get_manager_dict(self.generator.config_dict['DataBindings'],
+        try:
+            dict = weewx.manager.get_manager_dict(self.generator.config_dict['DataBindings'],
                                                   self.generator.config_dict['Databases'],self.binding)
-        with weewx.manager.open_manager(dict) as dbm:
-            # Latest insert date
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), self.latitude, self.longitude, NWS.get_interval(forecast_type), self.latitude, self.longitude)
-            try:
-                records = []
-                forecast_count = 0
-                for row in dbm.genSql(select):
-                    END_TIME = 9
-                    # Only include if record hasn't expired (row[END_TIME] is endTime) and max_forecasts hasn't been exceeded.
-                    if time.time() < row[END_TIME] and (max_forecasts is None or forecast_count < max_forecasts):
-                        forecast_count += 1
-                        record = {}
-
-                        record['dateTime'] = row[0]
-                        record['interval'] = row[1]
-                        record['latitude'] = row[2]
-                        record['longitude'] = row[3]
-                        record['usUnits'] = row[4]
-                        record['generatedTime'] = row[5]
-                        record['number'] = row[6]
-                        record['name'] = row[7]
-                        record['startTime'] = row[8]
-                        record['endTime'] = row[9]
-                        record['isDaytime'] = row[10]
-                        record['outTemp'] = row[11]
-                        record['outTempTrend'] = row[12]
-                        record['windSpeed'] = row[13]
-                        record['windDir'] = row[14]
-                        record['iconUrl'] = row[15]
-                        record['shortForecast'] = row[16]
-                        record['detailedForecast'] = row[17]
-
-                        records.append(record)
-                return records
-            except Exception as e:
-                log.error('%s failed with %s.' % (select, e))
-                weeutil.logger.log_traceback(log.critical, "    ****  ")
-        return []
+            with weewx.manager.open_manager(dict) as dbm:
+                return NWSForecastVariables.fetch_records(dbm, forecast_type, self.latitude, self.longitude, max_forecasts)
+        except Exception as e:
+            log.error('getLatestForecastRows: %s' % e)
+            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            return []
 
     @staticmethod
     def top_of_current_hour():
         return int(time.time() / 3600) * 3600
 
-def pretty_print(record):
-    print('interval        : %d' % record.interval)
-    print('latitude        : %s' % record.latitude)
-    print('longitude       : %s' % record.longitude)
-    print('usUnits         : %d' % record.usUnits)
-    print('generatedTime   : %s' % timestamp_to_string(record.generatedTime))
-    print('number          : %d' % record.number)
-    print('name            : %s' % record.name)
-    print('startTime       : %s' % timestamp_to_string(record.startTime))
-    print('endTime         : %s' % timestamp_to_string(record.endTime))
-    print('isDaytime       : %d' % record.isDaytime)
-    print('outTemp         : %f' % record.outTemp)
-    print('outTempTrend    : %s' % record.outTempTrend)
-    print('windSpeed       : %f' % record.windSpeed)
-    print('windDir         : %f' % record.windDir)
-    print('iconUrl         : %s' % record.iconUrl)
-    print('shortForecast   : %s' % record.shortForecast)
-    print('detailedForecast: %s' % record.detailedForecast)
+    @staticmethod
+    def fetch_records(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
+        # Fetch last records inserted for this forecast_type
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
+        try:
+            records = []
+            forecast_count = 0
+            for row in dbm.genSql(select):
+                END_TIME = 9
+                # Only include if record hasn't expired (row[END_TIME] is endTime) and max_forecasts hasn't been exceeded.
+                if time.time() < row[END_TIME] and (max_forecasts is None or forecast_count < max_forecasts):
+                    forecast_count += 1
+                    record = {}
+
+                    record['dateTime'] = row[0]
+                    record['interval'] = row[1]
+                    record['latitude'] = row[2]
+                    record['longitude'] = row[3]
+                    record['usUnits'] = row[4]
+                    record['generatedTime'] = row[5]
+                    record['number'] = row[6]
+                    record['name'] = row[7]
+                    record['startTime'] = row[8]
+                    record['endTime'] = row[9]
+                    record['isDaytime'] = row[10]
+                    record['outTemp'] = row[11]
+                    record['outTempTrend'] = row[12]
+                    record['windSpeed'] = row[13]
+                    record['windDir'] = row[14]
+                    record['iconUrl'] = row[15]
+                    record['shortForecast'] = row[16]
+                    record['detailedForecast'] = row[17]
+
+                    records.append(record)
+            return records
+        except Exception as e:
+            log.error('%s failed with %s.' % (select, e))
+            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            return []
 
 if __name__ == '__main__':
-    cfg = Configuration(
-        lock              = threading.Lock(),
-        alertsAllClear    = False,
-        alerts            = [],
-        dailyForecasts    = [],
-        hourlyForecasts   = [],
-        alertsUrl         = None,
-        dailyForecastUrl  = None,
-        hourlyForecastUrl = None,
-        latitude          = '37.431495',
-        longitude         = '-122.110937',
-        timeout_secs      = 5,
-        archive_interval  = 300,
-        user_agent        = '(weewx-nws test run, weewx-nws-developer)',
-        retry_wait_secs   = 5,
-        days_to_keep      = 90,
-        )
+    usage = """%prog [options] [--help] [--debug]"""
 
-    j = NWSPoller.request_forecast(cfg, ForecastType.HOURLY)
-    for record in NWSPoller.compose_records(j, ForecastType.HOURLY, cfg.latitude, cfg.longitude):
-        pretty_print(record)
-        print('------------------------')
+    import weeutil.logger
 
-    j = NWSPoller.request_forecast(cfg, ForecastType.DAILY)
-    for record in NWSPoller.compose_records(j, ForecastType.DAILY, cfg.latitude, cfg.longitude):
-        pretty_print(record)
-        print('------------------------')
+    def main():
+        import optparse
+        import weecfg
 
-    j = NWSPoller.request_forecast(cfg, ForecastType.ALERTS)
-    for record in NWSPoller.compose_records(j, ForecastType.ALERTS, cfg.latitude, cfg.longitude):
-        pretty_print(record)
-        print('------------------------')
+        parser = optparse.OptionParser(usage=usage)
+        parser.add_option('--binding', dest="binding", metavar="BINDING",
+                          default='nws_binding',
+                          help="The data binding to use. Default is 'nws_binding'.")
+        parser.add_option('--test-requester', dest='tr', action='store_true',
+                          help='Test the forecast requester.  Must specify --type.')
+        parser.add_option('--type', dest='ty',
+                          help='ALERTS, DAILY, HOURLY')
+        parser.add_option('--nws-database', dest='db',
+                          help='Location of nws.sdb file (only works with sqlite3).')
+        parser.add_option('--test-service', dest='ts', action='store_true',
+                          help='Test the NWS service.')
+        parser.add_option('--dump-forecasts', dest='du', action='store_true',
+                          help='Dumps forecast records.  Must specify --type and --nws-database.')
+        (options, args) = parser.parse_args()
+
+        weeutil.logger.setup('nws', {})
+
+        if options.tr:
+            if not options.ty:
+                parser.error('--test-requester requires --type argument')
+            if options.ty == 'ALERTS':
+                test_requester(ForecastType.ALERTS)
+            elif options.ty == 'DAILY':
+                test_requester(ForecastType.DAILY)
+            elif options.ty == 'HOURLY':
+                test_requester(ForecastType.HOURLY)
+            else:
+                print('--type must be one of: ALERTS|DAILY|HOURLY')
+        if options.ts:
+            test_service()
+        if options.du:
+            if not options.db:
+                parser.error('--test-requester requires --nws-database argument')
+            if not options.ty:
+                parser.error('--dump-forecasts requires --type argument')
+            if options.ty == 'ALERTS':
+                dump_sqlite_database(options.db, ForecastType.ALERTS)
+            elif options.ty == 'DAILY':
+                dump_sqlite_database(options.db, ForecastType.DAILY)
+            elif options.ty == 'HOURLY':
+                dump_sqlite_database(options.db, ForecastType.HOURLY)
+            else:
+                print('--type must be one of: ALERTS|DAILY|HOURLY')
+
+    def test_requester(forecast_type: ForecastType) -> None:
+        cfg = Configuration(
+            lock              = threading.Lock(),
+            alertsAllClear    = False,
+            alerts            = [],
+            dailyForecasts    = [],
+            hourlyForecasts   = [],
+            alertsUrl         = None,
+            dailyForecastUrl  = None,
+            hourlyForecastUrl = None,
+            latitude          = '37.431495',
+            longitude         = '-122.110937',
+            timeout_secs      = 5,
+            archive_interval  = 300,
+            user_agent        = '(weewx-nws test run, weewx-nws-developer)',
+            retry_wait_secs   = 5,
+            days_to_keep      = 90,
+            )
+
+        j = NWSPoller.request_forecast(cfg, forecast_type)
+        for forecast in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
+            pretty_print_forecast(forecast)
+            print('------------------------')
+
+    def test_service():
+        from weewx.engine import StdEngine
+        from tempfile import NamedTemporaryFile
+
+        with NamedTemporaryFile() as temp_file:
+            config = configobj.ConfigObj({
+                'Station': {
+                    'station_type': 'Simulator',
+                    'altitude': [0, 'foot'],
+                    'latitude': 38.8977,
+                    'longitude': -77.0365},
+                'Simulator': {
+                    'driver': 'weewx.drivers.simulator',
+                    'mode': 'simulator'},
+                'StdArchive': {
+                    'archive_interval': 300},
+                'NWS': {
+                    'binding': 'nws_binding'},
+                'DataBindings': {
+                    'nws_binding': {
+                        'database': 'nws_sqlite',
+                        'manager': 'weewx.manager.Manager',
+                        'table_name': 'archive',
+                        'schema': 'user.nws.schema'}},
+                'Databases': {
+                    'nws_sqlite': {
+                        'database_name': temp_file.name,
+                        'database_type': 'SQLite'}},
+                'Engine': {
+                    'Services': {
+                        'data_services': 'user.nws.NWS'}},
+                'DatabaseTypes': {
+                    'SQLite': {
+                        'driver': 'weedb.sqlite'}}})
+            engine = StdEngine(config)
+            nws = NWS(engine, config)
+            for record in nws.select_forecasts(ForecastType.DAILY):
+                pretty_print_record(record)
+                print('------------------------')
+            for record in nws.select_forecasts(ForecastType.HOURLY):
+                pretty_print_record(record)
+                print('------------------------')
+            for record in nws.select_forecasts(ForecastType.ALERTS):
+                pretty_print_record(record)
+                print('------------------------')
+
+    def dump_sqlite_database(dbfile: str, forecast_type: ForecastType):
+        try:
+            import sqlite3
+        except:
+            print('Could not import sqlite3.')
+            return
+        conn = sqlite3.connect(dbfile)
+        dump_forecasts(conn, forecast_type)
+
+    def dump_forecasts(conn, forecast_type: ForecastType):
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d ORDER BY startTime" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+        for row in conn.execute(select):
+            record = {}
+            record['dateTime'] = row[0]
+            record['interval'] = row[1]
+            record['latitude'] = row[2]
+            record['longitude'] = row[3]
+            record['usUnits'] = row[4]
+            record['generatedTime'] = row[5]
+            record['number'] = row[6]
+            record['name'] = row[7]
+            record['startTime'] = row[8]
+            record['endTime'] = row[9]
+            record['isDaytime'] = row[10]
+            record['outTemp'] = row[11]
+            record['outTempTrend'] = row[12]
+            record['windSpeed'] = row[13]
+            record['windDir'] = row[14]
+            record['iconUrl'] = row[15]
+            record['shortForecast'] = row[16]
+            record['detailedForecast'] = row[17]
+            pretty_print_record(record)
+            print('------------------------')
+
+    def pretty_print_forecast(forecast):
+        print('interval        : %d' % forecast.interval)
+        print('latitude        : %s' % forecast.latitude)
+        print('longitude       : %s' % forecast.longitude)
+        print('usUnits         : %d' % forecast.usUnits)
+        print('generatedTime   : %s' % timestamp_to_string(forecast.generatedTime))
+        print('number          : %d' % forecast.number)
+        print('name            : %s' % forecast.name)
+        print('startTime       : %s' % timestamp_to_string(forecast.startTime))
+        print('endTime         : %s' % timestamp_to_string(forecast.endTime))
+        print('isDaytime       : %d' % forecast.isDaytime)
+        print('outTemp         : %f' % forecast.outTemp)
+        print('outTempTrend    : %s' % forecast.outTempTrend)
+        print('windSpeed       : %f' % forecast.windSpeed)
+        print('windDir         : %f' % forecast.windDir)
+        print('iconUrl         : %s' % forecast.iconUrl)
+        print('shortForecast   : %s' % forecast.shortForecast)
+        print('detailedForecast: %s' % forecast.detailedForecast)
+
+    def pretty_print_record(record):
+        print('dateTime        : %s' % timestamp_to_string(record['dateTime']))
+        print('interval        : %d' % record['interval'])
+        print('latitude        : %s' % record['latitude'])
+        print('longitude       : %s' % record['longitude'])
+        print('usUnits         : %d' % record['usUnits'])
+        print('gneratedTime    : %s' % timestamp_to_string(record['generatedTime']))
+        print('number          : %d' % record['number'])
+        print('name            : %s' % record['name'])
+        print('startTime       : %s' % timestamp_to_string(record['startTime']))
+        print('endTime         : %s' % timestamp_to_string(record['endTime']))
+        print('isDayTime       : %d' % record['isDaytime'])
+        print('outTemp         : %f' % record['outTemp'])
+        print('outTempTrend    : %s' % record['outTempTrend'])
+        print('windSpeed       : %f' % record['windSpeed'])
+        print('windDir         : %f' % record['windDir'])
+        print('iconUrl         : %s' % record['iconUrl'])
+        print('shortForecast   : %s' % record['shortForecast'])
+        print('detailedForecast: %s' % record['detailedForecast'])
+
+    main()

@@ -119,7 +119,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
     ![NWS Daily Forecasts screenshot](daily_forecasts.jpg)
 
-1.  To get hourly forecasts (in this example, all 156 foreecasts are returned (6.5 days worth).
+1.  To get hourly forecasts (in this example, up to 156 foreecasts are returned (6.5 days worth).
     ```
     #for $hour in $nwsforecast.hourly_forecasts() # Note: hourly_forecasts(24) will return 24 forecassts (1 day).
          $hour.generatedTime
