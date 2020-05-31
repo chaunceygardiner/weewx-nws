@@ -126,6 +126,7 @@ class Configuration:
     timeout_secs     : int            # Immutable
     archive_interval : int            # Immutable
     user_agent       : str            # Immutable
+    poll_secs        : int            # Immutable
     retry_wait_secs  : int            # Immutable
     days_to_keep     : int            # Immutable
 
@@ -177,7 +178,8 @@ class NWS(StdService):
             timeout_secs      = to_int(self.nws_config_dict.get('timeout_secs', 5)),
             archive_interval  = to_int(config_dict['StdArchive']['archive_interval']),
             user_agent        = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
-            retry_wait_secs   = to_int(self.nws_config_dict.get('retry_wait_secs', 5)),
+            poll_secs         = to_int(self.nws_config_dict.get('poll_secs', 1800)),
+            retry_wait_secs   = to_int(self.nws_config_dict.get('retry_wait_secs', 30)),
             days_to_keep      = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             )
 
@@ -364,23 +366,29 @@ class NWSPoller:
         self.cfg = cfg
 
     def poll_nws(self) -> None:
-        on_retry: bool = False
+        on_retry     : bool = False
+        daily_failed : bool = False
+        hourly_failed: bool = False
+        alerts_failed: bool = False
         while True:
             try:
-                daily_failed : bool = False
-                hourly_failed: bool = False
-                alerts_failed: bool = False
                 if not on_retry or daily_failed:
                     success = NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY)
-                    if not success:
+                    if success:
+                        daily_failed = False
+                    else:
                         daily_failed = True
                 if not on_retry or hourly_failed:
                     success = NWSPoller.populate_forecast(self.cfg, ForecastType.HOURLY)
-                    if not success:
+                    if success:
+                        hourly_failed = False
+                    else:
                         hourly_failed = True
                 if not on_retry or alerts_failed:
                     success = NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS)
-                    if not success:
+                    if success:
+                        alerts_failed = False
+                    else:
                         alerts_failed = True
                 if daily_failed or hourly_failed or alerts_failed:
                     log.error('poll_nws: At least one forecast request failed.  Retrying in %d seconds.' % self.cfg.retry_wait_secs)
@@ -389,7 +397,7 @@ class NWSPoller:
                     time.sleep(self.cfg.retry_wait_secs)
                 else:
                     on_retry = False
-                    sleep_time = NWSPoller.time_to_next_poll()
+                    sleep_time = NWSPoller.time_to_next_poll(self.cfg.poll_secs)
                     log.debug('poll_nws: Sleeping for %f seconds.' % sleep_time)
                     time.sleep(sleep_time)
             except Exception as e:
@@ -426,9 +434,8 @@ class NWSPoller:
             return True
 
     @staticmethod
-    def time_to_next_poll():
-        # Poll at the top of the hour.
-        time_of_next_poll = int(time.time() / 3600) * 3600 + 3600
+    def time_to_next_poll(poll_secs: int):
+        time_of_next_poll = int(time.time() / poll_secs) * poll_secs + poll_secs
         return time_of_next_poll - time.time()
 
     @staticmethod
@@ -725,10 +732,6 @@ class NWSForecastVariables(SearchList):
             return []
 
     @staticmethod
-    def top_of_current_hour():
-        return int(time.time() / 3600) * 3600
-
-    @staticmethod
     def fetch_records(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
         # Fetch last records inserted for this forecast_type
         select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
@@ -843,7 +846,8 @@ if __name__ == '__main__':
             timeout_secs      = 5,
             archive_interval  = 300,
             user_agent        = '(weewx-nws test run, weewx-nws-developer)',
-            retry_wait_secs   = 5,
+            poll_secs         = 3600,
+            retry_wait_secs   = 30,
             days_to_keep      = 90,
             )
 
