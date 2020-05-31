@@ -214,7 +214,38 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
 ## Troubleshooting
 
-Did you forget to add NWSForecastVariables to your report in weewx.conf?  See step 1 in the **How to access NWS Forecasts in reports.** section.
+1.  Did you forget to add NWSForecastVariables to your report in weewx.conf?  See step 1 in the **How to access NWS Forecasts in reports.** section.
+
+1.  The extension can be run from the command line to test:
+
+    1. To test requesting forecasts from NWS:
+       ```
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --test-requester --type DAILY --latitude 38.8977 --longitude -77.0365
+
+    1. To test the service as a whole, requesting and saving to a [temporary] sqlite database:
+       ```
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --test-service --latitude 38.8977 --longitude -77.0365
+       ```
+
+    1. To view the latest forecast records in the databse (only works for sqlite databases):
+       ```
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type HOURLY --nws-database /home/weewx/archive/nws.sdb --view-criterion LATEST --latitude 38.8977 --longitude -77.0365
+
+    1. To view the all forecast records in the databse (only works for sqlite databases):
+       ```
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type DAILY --nws-database /home/weewx/archive/nws.sdb --view-criterion ALL --latitude 38.8977 --longitude -77.0365
+       ```
+       ```
+
+    1. To view a summary of forecasts in the database (time inserted, time generated, start/end of forecast) (only works for sqlite databases):
+       ```
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type DAILY --nws-database /home/weewx/archive/nws.sdb --view-criterion SUMMARY --latitude 38.8977 --longitude -77.0365
+       ```
+
+    1. To see all options:
+       ```
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --help
+       ```
 
 ## Licensing
 

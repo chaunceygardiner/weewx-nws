@@ -772,7 +772,7 @@ class NWSForecastVariables(SearchList):
             return []
 
 if __name__ == '__main__':
-    usage = """%prog [options] [--help] [--debug]"""
+    usage = """%prog [options] [--help]"""
 
     import weeutil.logger
 
@@ -784,54 +784,79 @@ if __name__ == '__main__':
         parser.add_option('--binding', dest="binding", metavar="BINDING",
                           default='nws_binding',
                           help="The data binding to use. Default is 'nws_binding'.")
-        parser.add_option('--test-requester', dest='tr', action='store_true',
-                          help='Test the forecast requester.  Must specify --type.')
+        parser.add_option('--test-requester', dest='testreq', action='store_true',
+                          help='Test the forecast requester.  Requires specify --type, --latitude, --longitude.')
         parser.add_option('--type', dest='ty',
-                          help='ALERTS, DAILY, HOURLY')
+                          help='ALERTS|DAILY|HOURLY')
         parser.add_option('--nws-database', dest='db',
                           help='Location of nws.sdb file (only works with sqlite3).')
-        parser.add_option('--test-service', dest='ts', action='store_true',
+        parser.add_option('--test-service', dest='testserv', action='store_true',
                           help='Test the NWS service.  Requires --latitude and --longitude.')
         parser.add_option('--latitude', type='float', dest='lat',
                           help='The latitude to use when testing the service.')
         parser.add_option('--longitude', type='float', dest='long',
                           help='The longitude to use when testing the service.')
-        parser.add_option('--dump-forecasts', dest='du', action='store_true',
-                          help='Dumps forecast records.  Must specify --type and --nws-database.')
+        parser.add_option('--view-criterion', dest='view_criterion',
+                          help='ALL|LATEST|SUMMARY')
+        parser.add_option('--view-forecasts', dest='view', action='store_true',
+                          help='View forecast records.  Must specify --nws-database, --type and --view-criterion.')
         (options, args) = parser.parse_args()
 
         weeutil.logger.setup('nws', {})
 
-        if options.tr:
-            if not options.ty:
-                parser.error('--test-requester requires --type argument')
-            if options.ty == 'ALERTS':
-                test_requester(ForecastType.ALERTS)
-            elif options.ty == 'DAILY':
-                test_requester(ForecastType.DAILY)
-            elif options.ty == 'HOURLY':
-                test_requester(ForecastType.HOURLY)
-            else:
-                print('--type must be one of: ALERTS|DAILY|HOURLY')
-        if options.ts:
+        if options.testreq:
+            forecast_type = decode_forecast_type(options.ty)
+            if forecast_type == None:
+                parser.error('--type must be one of: ALERTS|DAILY|HOURLY')
+            if not options.lat or not options.long:
+                parser.error('--test-service requires --latitude and --longitude arguments')
+            test_requester(forecast_type, options.lat, options.long)
+
+        if options.testserv:
             if not options.lat or not options.long:
                 parser.error('--test-service requires --latitude and --longitude arguments')
             test_service(options.lat, options.long)
-        if options.du:
+
+        if options.view:
             if not options.db:
                 parser.error('--test-requester requires --nws-database argument')
-            if not options.ty:
-                parser.error('--dump-forecasts requires --type argument')
-            if options.ty == 'ALERTS':
-                dump_sqlite_database(options.db, ForecastType.ALERTS)
-            elif options.ty == 'DAILY':
-                dump_sqlite_database(options.db, ForecastType.DAILY)
-            elif options.ty == 'HOURLY':
-                dump_sqlite_database(options.db, ForecastType.HOURLY)
-            else:
-                print('--type must be one of: ALERTS|DAILY|HOURLY')
 
-    def test_requester(forecast_type: ForecastType) -> None:
+            forecast_type = decode_forecast_type(options.ty)
+            if forecast_type == None:
+                parser.error('--type must be one of: ALERTS|DAILY|HOURLY')
+
+            criterion = decode_criterion(options.view_criterion)
+            if criterion == None:
+                parser.error('--vew-criterion must be one of: ALL|LATEST|SUMMARY')
+
+            view_sqlite_database(options.db, forecast_type, criterion)
+
+    def decode_forecast_type(ty: str) -> Optional[ForecastType]:
+        if ty.upper() == 'ALERTS':
+            return ForecastType.ALERTS
+        elif ty.upper() == 'DAILY':
+            return ForecastType.DAILY
+        elif ty.upper() == 'HOURLY':
+            return ForecastType.HOURLY
+        else:
+            return None
+
+    class Criterion(Enum):
+        ALL     = 1
+        LATEST  = 2
+        SUMMARY = 3
+
+    def decode_criterion(cr: str) -> Optional[Criterion]:
+        if cr.upper() == 'ALL':
+            return Criterion.ALL
+        elif cr.upper() == 'LATEST':
+            return Criterion.LATEST
+        elif cr.upper() == 'SUMMARY':
+            return Criterion.SUMMARY
+        else:
+            return None
+
+    def test_requester(forecast_type: ForecastType, lat: float, long: float) -> None:
         cfg = Configuration(
             lock              = threading.Lock(),
             alertsAllClear    = False,
@@ -841,8 +866,8 @@ if __name__ == '__main__':
             alertsUrl         = None,
             dailyForecastUrl  = None,
             hourlyForecastUrl = None,
-            latitude          = '37.431495',
-            longitude         = '-122.110937',
+            latitude          = str(lat),
+            longitude         = str(long),
             timeout_secs      = 5,
             archive_interval  = 300,
             user_agent        = '(weewx-nws test run, weewx-nws-developer)',
@@ -902,17 +927,24 @@ if __name__ == '__main__':
                 pretty_print_record(record)
                 print('------------------------')
 
-    def dump_sqlite_database(dbfile: str, forecast_type: ForecastType):
+    def view_sqlite_database(dbfile: str, forecast_type: ForecastType, criterion: Criterion):
         try:
             import sqlite3
         except:
             print('Could not import sqlite3.')
             return
         conn = sqlite3.connect(dbfile)
-        dump_forecasts(conn, forecast_type)
+        if criterion == Criterion.ALL or criterion == Criterion.LATEST:
+            print_sqlite_records(conn, dbfile, forecast_type, criterion)
+        else:   # SUMMMARY
+            print_sqlite_summary(conn, dbfile, forecast_type)
 
-    def dump_forecasts(conn, forecast_type: ForecastType):
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d) AND interval = %d ORDER BY startTime" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+    def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion):
+        if criterion == Criterion.ALL:
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d ORDER BY dateTime, number" % NWS.get_interval(forecast_type)
+        elif criterion == Criterion.LATEST:
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d AND dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+
         for row in conn.execute(select):
             record = {}
             record['dateTime'] = row[0]
@@ -935,6 +967,14 @@ if __name__ == '__main__':
             record['detailedForecast'] = row[17]
             pretty_print_record(record)
             print('------------------------')
+
+    def print_sqlite_summary(conn, dbfile: str, forecast_type: ForecastType):
+        select = "SELECT dateTime, MAX(generatedTime), MIN(startTime), MAX(endTime) FROM archive WHERE interval = %d GROUP BY dateTime ORDER BY dateTime" % NWS.get_interval(forecast_type)
+
+        # 2020-05-28 14:00:00 PDT (1590699600)
+        print('%s %s %s %s' % ('Inserted'.ljust(36), 'Generated'.ljust(36), 'Start'.ljust(36), 'End'))
+        for row in conn.execute(select):
+            print('%s %s %s %s' % (timestamp_to_string(row[0]), timestamp_to_string(row[1]), timestamp_to_string(row[2]), timestamp_to_string(row[3])))
 
     def pretty_print_forecast(forecast):
         print('interval        : %d' % forecast.interval)
