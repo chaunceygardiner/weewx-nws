@@ -231,7 +231,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        ```
        PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type HOURLY --nws-database /home/weewx/archive/nws.sdb --view-criterion LATEST --latitude 38.8977 --longitude -77.0365
 
-    1. To view the all forecast records in the databse (only works for sqlite databases):
+    1. To view all forecast records in the databse (only works for sqlite databases):
        ```
        PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type DAILY --nws-database /home/weewx/archive/nws.sdb --view-criterion ALL --latitude 38.8977 --longitude -77.0365
        ```
