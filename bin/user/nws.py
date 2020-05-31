@@ -50,7 +50,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "0.9"
+WEEWX_NWS_VERSION = "1.0"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -788,7 +788,11 @@ if __name__ == '__main__':
         parser.add_option('--nws-database', dest='db',
                           help='Location of nws.sdb file (only works with sqlite3).')
         parser.add_option('--test-service', dest='ts', action='store_true',
-                          help='Test the NWS service.')
+                          help='Test the NWS service.  Requires --latitude and --longitude.')
+        parser.add_option('--latitude', type='float', dest='lat',
+                          help='The latitude to use when testing the service.')
+        parser.add_option('--longitude', type='float', dest='long',
+                          help='The longitude to use when testing the service.')
         parser.add_option('--dump-forecasts', dest='du', action='store_true',
                           help='Dumps forecast records.  Must specify --type and --nws-database.')
         (options, args) = parser.parse_args()
@@ -807,7 +811,9 @@ if __name__ == '__main__':
             else:
                 print('--type must be one of: ALERTS|DAILY|HOURLY')
         if options.ts:
-            test_service()
+            if not options.lat or not options.long:
+                parser.error('--test-service requires --latitude and --longitude arguments')
+            test_service(options.lat, options.long)
         if options.du:
             if not options.db:
                 parser.error('--test-requester requires --nws-database argument')
@@ -846,7 +852,7 @@ if __name__ == '__main__':
             pretty_print_forecast(forecast)
             print('------------------------')
 
-    def test_service():
+    def test_service(lat: float, long: float):
         from weewx.engine import StdEngine
         from tempfile import NamedTemporaryFile
 
@@ -854,9 +860,9 @@ if __name__ == '__main__':
             config = configobj.ConfigObj({
                 'Station': {
                     'station_type': 'Simulator',
-                    'altitude': [0, 'foot'],
-                    'latitude': 38.8977,
-                    'longitude': -77.0365},
+                    'altitude' : [0, 'foot'],
+                    'latitude' : lat,
+                    'longitude': long},
                 'Simulator': {
                     'driver': 'weewx.drivers.simulator',
                     'mode': 'simulator'},
