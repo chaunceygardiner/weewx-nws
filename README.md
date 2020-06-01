@@ -62,8 +62,8 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
 1. Restart WeeWX.
 
-1.  To get daily forecasts (in this example, all 14 (7 days * 2 per day) forecasts are returned.
-    Note: Although called daily forecasts, these are 12 hour forecasts.
+1.  To get daily forecasts (in this example, all forecasts are returned (usually 13, 6.5 days)
+    Note: Although this extension refers to these as daily forecasts, these are 12 hour forecasts.
     ```
      #for $day in $nwsforecast.daily_forecasts()  # daily_forecasts(4) will return 4 forecasts (2 days).
          $day.generatedTime
