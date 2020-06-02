@@ -430,7 +430,7 @@ class NWSPoller:
                         cfg.dailyForecasts.append(record)
                     else: # Alerts
                         cfg.alerts.append(record)
-                        alertsAllClear = False    # Alerts will not be deleted from db since there is an active alert.
+                        cfg.alertsAllClear = False    # Alerts will not be deleted from db since there is an active alert.
             return True
 
     @staticmethod
