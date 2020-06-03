@@ -144,7 +144,6 @@ class NWS(StdService):
         if latitude is None or longitude is None:
             log.error("Could not determine station's latitude and longitude.")
             return
-        log.info("Using latitude '%s', longitude '%s'." % (latitude, longitude))
 
         # get the database parameters we need to function
         self.data_binding = self.nws_config_dict.get('data_binding', 'nws_binding')
@@ -182,7 +181,14 @@ class NWS(StdService):
             retry_wait_secs   = to_int(self.nws_config_dict.get('retry_wait_secs', 30)),
             days_to_keep      = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             )
-
+        log.info('latitude        : %s' % self.cfg.latitude)
+        log.info('longitude       : %s' % self.cfg.longitude)
+        log.info('timeout_secs    : %d' % self.cfg.timeout_secs)
+        log.info('archive_interval: %d' % self.cfg.archive_interval)
+        log.info('user_agent      : %s' % self.cfg.user_agent)
+        log.info('poll_secs       : %d' % self.cfg.poll_secs)
+        log.info('retry_wait_secs : %d' % self.cfg.retry_wait_secs)
+        log.info('days_to_keep    : %d' % self.cfg.days_to_keep)
         # At startup, attempt to get the latest forecasts.
         if NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY):
             self.saveForecastsToDB(ForecastType.DAILY)
