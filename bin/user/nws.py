@@ -189,6 +189,16 @@ class NWS(StdService):
         log.info('poll_secs       : %d' % self.cfg.poll_secs)
         log.info('retry_wait_secs : %d' % self.cfg.retry_wait_secs)
         log.info('days_to_keep    : %d' % self.cfg.days_to_keep)
+
+        # If the machine was just rebooted, a temporary failure in name
+        # resolution is likely.  As such, try three times to get
+        # request urls.
+        for i in range(3):
+            if NWSPoller.request_urls(self.cfg):
+                break
+            if i < 2:
+                time.sleep(5)
+
         # At startup, attempt to get the latest forecasts.
         if NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY):
             self.saveForecastsToDB(ForecastType.DAILY)
@@ -450,7 +460,7 @@ class NWSPoller:
         return time_of_next_poll - time.time()
 
     @staticmethod
-    def request_urls(cfg):
+    def request_urls(cfg) -> bool:
         try:
             # Need to fetch (and cache) the forecast URLs
             url = 'https://api.weather.gov/points/%s,%s' % (cfg.latitude, cfg.longitude)
@@ -468,13 +478,13 @@ class NWSPoller:
                 #    "detail": "Unable to provide data for requested point -20.9512,55.3085",
                 #    "instance": "https://api.weather.gov/requests/ac04ca11-ce4d-464e-8cef-602497b10aa1"
                 #}
-                j = response.json()
-                correlationId: str = j.get('correlationId')
-                title: str = j.get('title')
-                type_str: str = j.get('type')
-                status: str = j.get('status')
-                detail: str = j.get('detail')
-                instance: str = j.get('instance')
+                d = response.json()
+                correlationId: str = d.get('correlationId')
+                title: str = d.get('title')
+                type_str: str = d.get('type')
+                status: str = d.get('status')
+                detail: str = d.get('detail')
+                instance: str = d.get('instance')
                 if title is not None:
                     log.info(correlationId)
                     log.info(title)
@@ -484,9 +494,9 @@ class NWSPoller:
                     log.info(instance)
                 else:
                     log.info('404 error for url: %s' % url)
-                return
+                return False
             response.raise_for_status()
-            log.debug('request_hourly_forecast: %s returned %r' % (url, response))
+            log.debug('request_urls: %s returned %r' % (url, response))
             if response:
                 j: Dict[str, Any] = response.json()
                 log.debug('id: %s' % j['id'])
@@ -501,12 +511,17 @@ class NWSPoller:
                     log.info('request_urls: Cached dailyForecastUrl: %s' % cfg.dailyForecastUrl)
                     log.info('request_urls: Cached hourlyForecastUrl: %s' % cfg.hourlyForecastUrl)
                     log.info('request_urls: Cached alertsUrl: %s' % cfg.alertsUrl)
-        except requests.exceptions.Timeout as e:
-            log.error('request_urls(%s): Attempt to fetch from: %s failed: %s.' % (url, e))
+                return True
+            else:
+                return False
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            log.info('request_urls: Attempt to fetch from: %s failed: %s.' % (url, e))
+            return False
         except Exception as e:
             # Unexpected exceptions need a stack track to diagnose.
             log.error('request_urls: Attempt to fetch from: %s failed: %s.' % (url, e))
             weeutil.logger.log_traceback(log.critical, "    ****  ")
+            return False
 
     @staticmethod
     def request_forecast(cfg, forecast_type: ForecastType):
@@ -520,9 +535,9 @@ class NWSPoller:
                 forecastUrl = cfg.alertsUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
         if forecastUrl == None:
-            NWSPoller.request_urls(cfg)
-        else:
-            log.debug('request_forecast(%s): Using cached forecastUrl: %s' % (forecast_type, forecastUrl))
+            if not NWSPoller.request_urls(cfg):
+                log.info('request_forecast(%s): skipping attempt since request_urls was unsuccessful.' % forecast_type)
+                return None
         with cfg.lock:
             if forecast_type == ForecastType.HOURLY:
                 forecastUrl = cfg.hourlyForecastUrl
@@ -530,24 +545,20 @@ class NWSPoller:
                 forecastUrl = cfg.dailyForecastUrl
             else:
                 forecastUrl = cfg.alertsUrl
-        log.debug('request_forecast(%s)2: forecastUrl %s' % (forecast_type, forecastUrl))
-        if forecastUrl != None:
-            try:
-                log.info('Downloading %s forecasts from %s.' % (forecast_type, forecastUrl))
-                session= requests.Session()
-                headers = {'User-Agent': cfg.user_agent}
-                response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
-                return response.json()
-            except requests.exceptions.Timeout as e:
-                log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
-                return None
-            except Exception as e:
-                # Unexpected exceptions need a stack track to diagnose.
-                log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
-                weeutil.logger.log_traceback(log.critical, "    ****  ")
-                return None
-        else:
-            log.info("request_forecast(%s): Couldn't get the forecast URL." % forecast_type)
+        log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
+        try:
+            log.info('Downloading %s forecasts from %s.' % (forecast_type, forecastUrl))
+            session= requests.Session()
+            headers = {'User-Agent': cfg.user_agent}
+            response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
+            return response.json()
+        except requests.exceptions.Timeout as e:
+            log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
+            return None
+        except Exception as e:
+            # Unexpected exceptions need a stack track to diagnose.
+            log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
+            weeutil.logger.log_traceback(log.critical, "    ****  ")
             return None
 
     @staticmethod
