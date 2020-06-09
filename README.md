@@ -62,35 +62,34 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
 1. Restart WeeWX.
 
-1.  To get daily forecasts (in this example, all forecasts are returned (usually 13, 6.5 days)
-    Note: Although this extension refers to these as daily forecasts, these are 12 hour forecasts.
+1.  To get twelve-hour forecasts (in this example, all forecasts are returned (usually 13, 6.5 days)
     ```
-     #for $day in $nwsforecast.daily_forecasts()  # daily_forecasts(4) will return 4 forecasts (2 days).
-         $day.generatedTime
-         $day.number
-         $day.name
-         $day.startTime
-         $day.endTime
-         $day.isDaytime
-         $day.outTemp
-         $day.outTempTrend
-         $day.windSpeed
-         $day.windDir
-         $day.iconUrl
-         $day.shortForecast
-         $day.detailedForecast
-         $day.latitude    # Latitude of point for which forecasts were requested
-         $day.longitude   # Longitude of point for which forecasts were requested
+     #for $twelve_hour in $nwsforecast.twelve_hour_forecasts()  # twelve_hour_forecasts(4) will return 4 forecasts.
+         $twelve_hour.generatedTime
+         $twelve_hour.number
+         $twelve_hour.name
+         $twelve_hour.startTime
+         $twelve_hour.endTime
+         $twelve_hour.isDaytime
+         $twelve_hour.outTemp
+         $twelve_hour.outTempTrend
+         $twelve_hour.windSpeed
+         $twelve_hour.windDir
+         $twelve_hour.iconUrl
+         $twelve_hour.shortForecast
+         $twelve_hour.detailedForecast
+         $twelve_hour.latitude    # Latitude of point for which forecasts were requested
+         $twelve_hour.longitude   # Longitude of point for which forecasts were requested
      #end for
     ```
-    Daily forecasts can be seen in action on the **7 Day** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
+    Twelve-hour forecasts can be seen in action on the **7 Day** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
-       #for $day in $nwsforecast.daily_forecasts()
+       #for $twelve_hour in $nwsforecast.twelve_hour_forecasts()
        <tr>
          <td>
            <table style='width:100%;border-bottom:1pt solid LightGray;padding:15px;'>
-             #set icon = $day.iconUrl
+             #set icon = $twelve_hour.iconUrl
              #if $target_display == 'smartphone':
                ## Change ?size=medium to ?size=large
                #set icon = $icon.replace('?size=medium', '?size=large')
@@ -99,15 +98,15 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
              <td style='width:30%;'>
                <table style='width:100%;text-align:center;'>
                  <tr style='width:100%;'><td>Temp</td></tr>
-                 <tr style='width:100%;'><td>$day.outTemp $day.outTempTrend </td></tr>
+                 <tr style='width:100%;'><td>$twelve_hour.outTemp $twelve_hour.outTempTrend </td></tr>
                  <tr style='width:100%;'><td>Wind</td></tr>
-                 <tr style='width:100%;'><td>$day.windSpeed $day.windDir.ordinal_compass</td></tr>
+                 <tr style='width:100%;'><td>$twelve_hour.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
                </table>
              </td>
              <td style='width:54%;'>
                <table style='width:100%;text-align:center;'>
-                 <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$day.name</td></tr>
-                 <tr style='width:100%;'><td>$day.detailedForecast</td></tr>
+                 <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$twelve_hour.name</td></tr>
+                 <tr style='width:100%;'><td>$twelve_hour.detailedForecast</td></tr>
                </table>
              </td>
            </table>
@@ -117,7 +116,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
     ```
     A screenshot follows:
 
-    ![NWS Daily Forecasts screenshot](daily_forecasts.jpg)
+    ![NWS Twelve-Hour Forecasts screenshot](twelve_hour_forecasts.jpg)
 
 1.  To get hourly forecasts (in this example, up to 156 foreecasts are returned (6.5 days worth).
     ```
@@ -220,7 +219,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
     1. To test requesting forecasts from NWS:
        ```
-       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --test-requester --type DAILY --latitude 38.8977 --longitude -77.0365
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --test-requester --type TWELVE_HOUR --latitude 38.8977 --longitude -77.0365
 
     1. To test the service as a whole, requesting and saving to a [temporary] sqlite database:
        ```
@@ -233,13 +232,13 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
     1. To view all forecast records in the databse (only works for sqlite databases):
        ```
-       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type DAILY --nws-database /home/weewx/archive/nws.sdb --view-criterion ALL --latitude 38.8977 --longitude -77.0365
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type TWELVE_HOUR --nws-database /home/weewx/archive/nws.sdb --view-criterion ALL --latitude 38.8977 --longitude -77.0365
        ```
        ```
 
     1. To view a summary of forecasts in the database (time inserted, time generated, start/end of forecast) (only works for sqlite databases):
        ```
-       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type DAILY --nws-database /home/weewx/archive/nws.sdb --view-criterion SUMMARY --latitude 38.8977 --longitude -77.0365
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type TWELVE_HOUR --nws-database /home/weewx/archive/nws.sdb --view-criterion SUMMARY --latitude 38.8977 --longitude -77.0365
        ```
 
     1. To see all options:

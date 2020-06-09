@@ -63,7 +63,7 @@ if weewx.__version__ < "4":
 # Schema for nws database (nws.sdb).
 table = [
     ('dateTime',         'INTEGER NOT NULL'), # When forecast/alert was inserted.
-    ('interval',         'INTEGER NOT NULL'), # Always 60 for hourly,  720 for daily, 0 for alerts
+    ('interval',         'INTEGER NOT NULL'), # Always 60 for hourly,  720 for twelve-hour, 0 for alerts
     ('latitude',         'STRING NOT NULL'),   # The latitude used to request the forecast
     ('longitude',        'STRING NOT NULL'),   # The longitude used to request the forecast
     ('usUnits',          'INTEGER NOT NULL'),
@@ -87,13 +87,13 @@ schema = {
 }
 
 class ForecastType(Enum):
-    HOURLY = 1
-    DAILY  = 2
-    ALERTS = 3
+    HOURLY      = 1
+    TWELVE_HOUR = 2
+    ALERTS      = 3
 
 @dataclass
 class Forecast:
-    interval        : int # 0 for ALERTS, 60 for HOURLY, 720 for DAILY
+    interval        : int # 0 for ALERTS, 60 for HOURLY, 720 for TWELVE_HOUR
     latitude        : str
     longitude       : str
     usUnits         : int
@@ -113,22 +113,22 @@ class Forecast:
 
 @dataclass
 class Configuration:
-    lock             : threading.Lock
-    alertsAllClear   : bool           # Controlled by lock
-    alerts           : List[Forecast] # Controlled by lock
-    dailyForecasts   : List[Forecast] # Controlled by lock
-    hourlyForecasts  : List[Forecast] # Controlled by lock
-    alertsUrl        : Optional[str]  # Controlled by lock
-    dailyForecastUrl : Optional[str]  # Controlled by lock
-    hourlyForecastUrl: Optional[str]  # Controlled by lock
-    latitude         : str            # Immutable
-    longitude        : str            # Immutable
-    timeout_secs     : int            # Immutable
-    archive_interval : int            # Immutable
-    user_agent       : str            # Immutable
-    poll_secs        : int            # Immutable
-    retry_wait_secs  : int            # Immutable
-    days_to_keep     : int            # Immutable
+    lock                 : threading.Lock
+    alertsAllClear       : bool           # Controlled by lock
+    alerts               : List[Forecast] # Controlled by lock
+    twelveHourForecasts  : List[Forecast] # Controlled by lock
+    hourlyForecasts      : List[Forecast] # Controlled by lock
+    alertsUrl            : Optional[str]  # Controlled by lock
+    twelveHourForecastUrl: Optional[str]  # Controlled by lock
+    hourlyForecastUrl    : Optional[str]  # Controlled by lock
+    latitude             : str            # Immutable
+    longitude            : str            # Immutable
+    timeout_secs         : int            # Immutable
+    archive_interval     : int            # Immutable
+    user_agent           : str            # Immutable
+    poll_secs            : int            # Immutable
+    retry_wait_secs      : int            # Immutable
+    days_to_keep         : int            # Immutable
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -164,22 +164,22 @@ class NWS(StdService):
             raise Exception('nws schema mismatch: %s != %s' % (dbcol, memcol))
 
         self.cfg = Configuration(
-            lock              = threading.Lock(),
-            alertsAllClear    = False,
-            alerts            = [],
-            dailyForecasts    = [],
-            hourlyForecasts   = [],
-            dailyForecastUrl  = None,
-            hourlyForecastUrl = None,
-            alertsUrl         = None,
-            latitude          = latitude,
-            longitude         = longitude,
-            timeout_secs      = to_int(self.nws_config_dict.get('timeout_secs', 5)),
-            archive_interval  = to_int(config_dict['StdArchive']['archive_interval']),
-            user_agent        = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
-            poll_secs         = to_int(self.nws_config_dict.get('poll_secs', 1800)),
-            retry_wait_secs   = to_int(self.nws_config_dict.get('retry_wait_secs', 30)),
-            days_to_keep      = to_int(self.nws_config_dict.get('days_to_keep', 90)),
+            lock                  = threading.Lock(),
+            alertsAllClear        = False,
+            alerts                = [],
+            twelveHourForecasts   = [],
+            hourlyForecasts       = [],
+            twelveHourForecastUrl = None,
+            hourlyForecastUrl     = None,
+            alertsUrl             = None,
+            latitude              = latitude,
+            longitude             = longitude,
+            timeout_secs          = to_int(self.nws_config_dict.get('timeout_secs', 5)),
+            archive_interval      = to_int(config_dict['StdArchive']['archive_interval']),
+            user_agent            = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
+            poll_secs             = to_int(self.nws_config_dict.get('poll_secs', 1800)),
+            retry_wait_secs       = to_int(self.nws_config_dict.get('retry_wait_secs', 30)),
+            days_to_keep          = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             )
         log.info('latitude        : %s' % self.cfg.latitude)
         log.info('longitude       : %s' % self.cfg.longitude)
@@ -200,8 +200,8 @@ class NWS(StdService):
                 time.sleep(5)
 
         # At startup, attempt to get the latest forecasts.
-        if NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY):
-            self.saveForecastsToDB(ForecastType.DAILY)
+        if NWSPoller.populate_forecast(self.cfg, ForecastType.TWELVE_HOUR):
+            self.saveForecastsToDB(ForecastType.TWELVE_HOUR)
         if NWSPoller.populate_forecast(self.cfg, ForecastType.HOURLY):
             self.saveForecastsToDB(ForecastType.HOURLY)
         if NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS):
@@ -218,7 +218,7 @@ class NWS(StdService):
 
     def end_archive_period(self, _event):
         """create new archive record and save them to the database"""
-        self.saveForecastsToDB(ForecastType.DAILY)
+        self.saveForecastsToDB(ForecastType.TWELVE_HOUR)
         self.saveForecastsToDB(ForecastType.HOURLY)
         self.saveForecastsToDB(ForecastType.ALERTS)
 
@@ -226,8 +226,8 @@ class NWS(StdService):
         try:
             now = int(time.time() + 0.5)
             with self.cfg.lock:
-                if forecast_type == ForecastType.DAILY:
-                    bucket = self.cfg.dailyForecasts
+                if forecast_type == ForecastType.TWELVE_HOUR:
+                    bucket = self.cfg.twelveHourForecasts
                 elif forecast_type == ForecastType.HOURLY:
                     bucket = self.cfg.hourlyForecasts
                 else:       # ForecastType.ALERTS
@@ -346,7 +346,7 @@ class NWS(StdService):
     def get_interval(forecast_type: ForecastType) -> int:
         if forecast_type == ForecastType.HOURLY:
             return 60
-        elif forecast_type == ForecastType.DAILY:
+        elif forecast_type == ForecastType.TWELVE_HOUR:
             return 720
         # ALERTS
         return 0
@@ -382,18 +382,18 @@ class NWSPoller:
         self.cfg = cfg
 
     def poll_nws(self) -> None:
-        on_retry     : bool = False
-        daily_failed : bool = False
-        hourly_failed: bool = False
-        alerts_failed: bool = False
+        on_retry          : bool = False
+        twelve_hour_failed: bool = False
+        hourly_failed     : bool = False
+        alerts_failed     : bool = False
         while True:
             try:
-                if not on_retry or daily_failed:
-                    success = NWSPoller.populate_forecast(self.cfg, ForecastType.DAILY)
+                if not on_retry or twelve_hour_failed:
+                    success = NWSPoller.populate_forecast(self.cfg, ForecastType.TWELVE_HOUR)
                     if success:
-                        daily_failed = False
+                        twelve_hour_failed = False
                     else:
-                        daily_failed = True
+                        twelve_hour_failed = True
                 if not on_retry or hourly_failed:
                     success = NWSPoller.populate_forecast(self.cfg, ForecastType.HOURLY)
                     if success:
@@ -406,9 +406,9 @@ class NWSPoller:
                         alerts_failed = False
                     else:
                         alerts_failed = True
-                if daily_failed or hourly_failed or alerts_failed:
-                    if daily_failed:
-                        log.error('poll_nws: ForecastType.DAILY request failed.  Will retry in %d seconds.' % self.cfg.retry_wait_secs)
+                if twelve_hour_failed or hourly_failed or alerts_failed:
+                    if twelve_hour_failed:
+                        log.error('poll_nws: ForecastType.TWELVE_HOUR request failed.  Will retry in %d seconds.' % self.cfg.retry_wait_secs)
                     if hourly_failed:
                         log.error('poll_nws: ForecastType.HOURLY request failed.  Will retry in %d seconds.' % self.cfg.retry_wait_secs)
                     if alerts_failed:
@@ -438,8 +438,8 @@ class NWSPoller:
             with cfg.lock:
                 if forecast_type == ForecastType.HOURLY:
                     cfg.hourlyForecasts.clear()
-                elif forecast_type == ForecastType.DAILY:
-                    cfg.dailyForecasts.clear()
+                elif forecast_type == ForecastType.TWELVE_HOUR:
+                    cfg.twelveHourForecasts.clear()
                 else:
                     cfg.alerts.clear()
                     cfg.alertsAllClear = True    # Will be set to False below if there are any alerts present
@@ -447,8 +447,8 @@ class NWSPoller:
                     log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
                     if forecast_type == ForecastType.HOURLY:
                         cfg.hourlyForecasts.append(record)
-                    elif forecast_type == ForecastType.DAILY:
-                        cfg.dailyForecasts.append(record)
+                    elif forecast_type == ForecastType.TWELVE_HOUR:
+                        cfg.twelveHourForecasts.append(record)
                     else: # Alerts
                         cfg.alerts.append(record)
                         cfg.alertsAllClear = False    # Alerts will not be deleted from db since there is an active alert.
@@ -505,10 +505,10 @@ class NWSPoller:
                 for k in j['properties']:
                     log.debug('properties key:  %s, value: %s' % (k, j['properties'][k]))
                 with cfg.lock:
-                    cfg.dailyForecastUrl  = j['properties']['forecast']
-                    cfg.hourlyForecastUrl = j['properties']['forecastHourly']
-                    cfg.alertsUrl         = 'https://api.weather.gov/alerts/active?point=%s,%s' % (cfg.latitude, cfg.longitude)
-                    log.info('request_urls: Cached dailyForecastUrl: %s' % cfg.dailyForecastUrl)
+                    cfg.twelveHourForecastUrl = j['properties']['forecast']
+                    cfg.hourlyForecastUrl     = j['properties']['forecastHourly']
+                    cfg.alertsUrl             = 'https://api.weather.gov/alerts/active?point=%s,%s' % (cfg.latitude, cfg.longitude)
+                    log.info('request_urls: Cached twelveHourForecastUrl: %s' % cfg.twelveHourForecastUrl)
                     log.info('request_urls: Cached hourlyForecastUrl: %s' % cfg.hourlyForecastUrl)
                     log.info('request_urls: Cached alertsUrl: %s' % cfg.alertsUrl)
                 return True
@@ -529,8 +529,8 @@ class NWSPoller:
         with cfg.lock:
             if forecast_type == ForecastType.HOURLY:
                 forecastUrl = cfg.hourlyForecastUrl
-            elif forecast_type == ForecastType.DAILY:
-                forecastUrl = cfg.dailyForecastUrl
+            elif forecast_type == ForecastType.TWELVE_HOUR:
+                forecastUrl = cfg.twelveHourForecastUrl
             else:
                 forecastUrl = cfg.alertsUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
@@ -541,8 +541,8 @@ class NWSPoller:
         with cfg.lock:
             if forecast_type == ForecastType.HOURLY:
                 forecastUrl = cfg.hourlyForecastUrl
-            elif forecast_type == ForecastType.DAILY:
-                forecastUrl = cfg.dailyForecastUrl
+            elif forecast_type == ForecastType.TWELVE_HOUR:
+                forecastUrl = cfg.twelveHourForecastUrl
             else:
                 forecastUrl = cfg.alertsUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
@@ -690,8 +690,8 @@ class NWSForecastVariables(SearchList):
     def hourly_forecasts(self, max_forecasts:Optional[int]=None):
         return self.forecasts(ForecastType.HOURLY, max_forecasts)
 
-    def daily_forecasts(self, max_forecasts:Optional[int]=None):
-        return self.forecasts(ForecastType.DAILY, max_forecasts)
+    def twelve_hour_forecasts(self, max_forecasts:Optional[int]=None):
+        return self.forecasts(ForecastType.TWELVE_HOUR, max_forecasts)
 
     def alerts(self):
         """Returns the latest alert records."""
@@ -809,7 +809,7 @@ if __name__ == '__main__':
         parser.add_option('--test-requester', dest='testreq', action='store_true',
                           help='Test the forecast requester.  Requires specify --type, --latitude, --longitude.')
         parser.add_option('--type', dest='ty',
-                          help='ALERTS|DAILY|HOURLY')
+                          help='ALERTS|TWELVE_HOUR|HOURLY')
         parser.add_option('--nws-database', dest='db',
                           help='Location of nws.sdb file (only works with sqlite3).')
         parser.add_option('--test-service', dest='testserv', action='store_true',
@@ -829,7 +829,7 @@ if __name__ == '__main__':
         if options.testreq:
             forecast_type = decode_forecast_type(options.ty)
             if forecast_type == None:
-                parser.error('--type must be one of: ALERTS|DAILY|HOURLY')
+                parser.error('--type must be one of: ALERTS|TWELVE_HOUR|HOURLY')
             if not options.lat or not options.long:
                 parser.error('--test-service requires --latitude and --longitude arguments')
             test_requester(forecast_type, options.lat, options.long)
@@ -845,7 +845,7 @@ if __name__ == '__main__':
 
             forecast_type = decode_forecast_type(options.ty)
             if forecast_type == None:
-                parser.error('--type must be one of: ALERTS|DAILY|HOURLY')
+                parser.error('--type must be one of: ALERTS|TWELVE_HOUR|HOURLY')
 
             criterion = decode_criterion(options.view_criterion)
             if criterion == None:
@@ -856,8 +856,8 @@ if __name__ == '__main__':
     def decode_forecast_type(ty: str) -> Optional[ForecastType]:
         if ty.upper() == 'ALERTS':
             return ForecastType.ALERTS
-        elif ty.upper() == 'DAILY':
-            return ForecastType.DAILY
+        elif ty.upper() == 'TWELVE_HOUR':
+            return ForecastType.TWELVE_HOUR
         elif ty.upper() == 'HOURLY':
             return ForecastType.HOURLY
         else:
@@ -880,22 +880,22 @@ if __name__ == '__main__':
 
     def test_requester(forecast_type: ForecastType, lat: float, long: float) -> None:
         cfg = Configuration(
-            lock              = threading.Lock(),
-            alertsAllClear    = False,
-            alerts            = [],
-            dailyForecasts    = [],
-            hourlyForecasts   = [],
-            alertsUrl         = None,
-            dailyForecastUrl  = None,
-            hourlyForecastUrl = None,
-            latitude          = str(lat),
-            longitude         = str(long),
-            timeout_secs      = 5,
-            archive_interval  = 300,
-            user_agent        = '(weewx-nws test run, weewx-nws-developer)',
-            poll_secs         = 3600,
-            retry_wait_secs   = 30,
-            days_to_keep      = 90,
+            lock                  = threading.Lock(),
+            alertsAllClear        = False,
+            alerts                = [],
+            twelveHourForecasts   = [],
+            hourlyForecasts       = [],
+            alertsUrl             = None,
+            twelveHourForecastUrl = None,
+            hourlyForecastUrl     = None,
+            latitude              = str(lat),
+            longitude             = str(long),
+            timeout_secs          = 5,
+            archive_interval      = 300,
+            user_agent            = '(weewx-nws test run, weewx-nws-developer)',
+            poll_secs             = 3600,
+            retry_wait_secs       = 30,
+            days_to_keep          = 90,
             )
 
         j = NWSPoller.request_forecast(cfg, forecast_type)
@@ -939,7 +939,7 @@ if __name__ == '__main__':
                         'driver': 'weedb.sqlite'}}})
             engine = StdEngine(config)
             nws = NWS(engine, config)
-            for record in nws.select_forecasts(ForecastType.DAILY):
+            for record in nws.select_forecasts(ForecastType.TWELVE_HOUR):
                 pretty_print_record(record)
                 print('------------------------')
             for record in nws.select_forecasts(ForecastType.HOURLY):
