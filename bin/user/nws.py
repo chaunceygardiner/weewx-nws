@@ -443,15 +443,19 @@ class NWSPoller:
                 else:
                     cfg.alerts.clear()
                     cfg.alertsAllClear = True    # Will be set to False below if there are any alerts present
-                for record in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
-                    log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
-                    if forecast_type == ForecastType.HOURLY:
-                        cfg.hourlyForecasts.append(record)
-                    elif forecast_type == ForecastType.TWELVE_HOUR:
-                        cfg.twelveHourForecasts.append(record)
-                    else: # Alerts
-                        cfg.alerts.append(record)
-                        cfg.alertsAllClear = False    # Alerts will not be deleted from db since there is an active alert.
+                try:
+                    for record in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
+                        log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
+                        if forecast_type == ForecastType.HOURLY:
+                            cfg.hourlyForecasts.append(record)
+                        elif forecast_type == ForecastType.TWELVE_HOUR:
+                            cfg.twelveHourForecasts.append(record)
+                        else: # Alerts
+                            cfg.alerts.append(record)
+                            cfg.alertsAllClear = False    # Alerts will not be deleted from db since there is an active alert.
+                except KeyError as e:
+                    log.error("populate_forecast(%s): Could not compose forecast record.  Key: '%s' missing in returned forecast." % (forecast_type, e))
+                    return False
             return True
 
     @staticmethod
@@ -551,7 +555,11 @@ class NWSPoller:
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
-            return response.json()
+            response.raise_for_status()
+            if response:
+                return response.json()
+            else:
+                return None
         except requests.exceptions.Timeout as e:
             log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
             return None
@@ -1028,7 +1036,7 @@ if __name__ == '__main__':
         print('name            : %s' % record['name'])
         print('startTime       : %s' % timestamp_to_string(record['startTime']))
         print('endTime         : %s' % timestamp_to_string(record['endTime']))
-        print('isDayTime       : %d' % record['isDaytime'])
+        print('isDaytime       : %d' % record['isDaytime'])
         print('outTemp         : %f' % record['outTemp'])
         print('outTempTrend    : %s' % record['outTempTrend'])
         print('windSpeed       : %f' % record['windSpeed'])

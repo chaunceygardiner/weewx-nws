@@ -82,6 +82,24 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
          $twelve_hour.longitude   # Longitude of point for which forecasts were requested
      #end for
     ```
+    Sample values for the above variables follow:
+    ```
+    $twelve_hour.gneratedTime    : 2020-06-08 15:25:13 PDT (1591655113)
+    $twelve_hour.number          : 14
+    $twelve_hour.name            : Sunday Night
+    $twelve_hour.startTime       : 2020-06-14 18:00:00 PDT (1592182800)
+    $twelve_hour.endTime         : 2020-06-15 06:00:00 PDT (1592226000)
+    $twelve_hour.isDaytime       : 0
+    $twelve_hour.outTemp         : 58.000000
+    $twelve_hour.outTempTrend    : None
+    $twelve_hour.windSpeed       : 2.000000
+    $twelve_hour.windDir         : 292.500000
+    $twelve_hour.iconUrl         : https://api.weather.gov/icons/land/night/few?size=medium
+    $twelve_hour.shortForecast   : Mostly Clear
+    $twelve_hour.detailedForecast: Mostly clear, with a low around 58.
+    $twelve_hour.latitude        : 37.431495
+    $twelve_hour.longitude       : -122.110937
+    ```
     Twelve-hour forecasts can be seen in action on the **7 Day** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
@@ -123,7 +141,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
     #for $hour in $nwsforecast.hourly_forecasts() # Note: hourly_forecasts(24) will return 24 forecassts (1 day).
          $hour.generatedTime
          $hour.number
-         $hour.name
+         $hour.name             ## Appears to be empty for hourly_forecasts
          $hour.startTime
          $hour.endTime
          $hour.isDaytime
@@ -133,10 +151,33 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
          $hour.windDir
          $hour.iconUrl
          $hour.shortForecast
-         $hour.detailedForecast
+         $hour.detailedForecast ## Appears to be empty for hourly_forecasts
          $hour.latitude    # Latitude of point for which forecasts were requested
          $hour.longitude   # Longitude of point for which forecasts were requested
     #end for
+    ```
+    Sample values for the above variables follow:
+    ```
+    $hour.dateTime        : 2020-06-09 04:30:00 PDT (1591702200)
+    $hour.interval        : 60
+    $hour.latitude        : 37.431495
+    $hour.longitude       : -122.110937
+    $hour.usUnits         : 1
+    $hour.gneratedTime    : 2020-06-09 04:01:35 PDT (1591700495)
+    $hour.number          : 156
+    $hour.name            :
+    $hour.startTime       : 2020-06-15 15:00:00 PDT (1592258400)
+    $hour.endTime         : 2020-06-15 16:00:00 PDT (1592262000)
+    $hour.isDaytime       : 1
+    $hour.outTemp         : 81.000000
+    $hour.outTempTrend    : None
+    $hour.windSpeed       : 10.000000
+    $hour.windDir         : 292.500000
+    $hour.iconUrl         : https://api.weather.gov/icons/land/day/few?size=small
+    $hour.shortForecast   : Sunny
+    $hour.detailedForecast:
+    $hour.latitude        : 37.431495
+    $hour.longitude       : -122.110937
     ```
     Hourly forecasts can be seen in action on the **Hourly** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
@@ -157,7 +198,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        #end for
     ```
     A screenshot follows:
- 
+
     ![NWS Hourly Forecasts screenshot](hourly_forecasts.jpg)
 
 1.  To get all alerts for the station's location:
@@ -194,7 +235,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        #end for
     ```
     A screenshot follows:
- 
+
     ![NWS Alerts screenshot](alerts.jpg)
 
 1.  alert_count() is a convenience function to get the number of active alerts
