@@ -178,7 +178,7 @@ class NWS(StdService):
             archive_interval      = to_int(config_dict['StdArchive']['archive_interval']),
             user_agent            = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
             poll_secs             = to_int(self.nws_config_dict.get('poll_secs', 1800)),
-            retry_wait_secs       = to_int(self.nws_config_dict.get('retry_wait_secs', 30)),
+            retry_wait_secs       = to_int(self.nws_config_dict.get('retry_wait_secs', 600)),
             days_to_keep          = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             )
         log.info('latitude        : %s' % self.cfg.latitude)
@@ -499,6 +499,9 @@ class NWSPoller:
                 else:
                     log.info('404 error for url: %s' % url)
                 return False
+            if response.status_code == 503:
+                log.info('503 SERVICE UNAVAILABLE: %s' % url)
+                return False
             response.raise_for_status()
             log.debug('request_urls: %s returned %r' % (url, response))
             if response:
@@ -555,6 +558,9 @@ class NWSPoller:
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
+            if response.status_code == 503:
+                log.info('503 SERVICE UNAVAILABLE: %s' % forecastUrl)
+                return None
             response.raise_for_status()
             if response:
                 return response.json()
@@ -907,9 +913,12 @@ if __name__ == '__main__':
             )
 
         j = NWSPoller.request_forecast(cfg, forecast_type)
-        for forecast in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
-            pretty_print_forecast(forecast)
-            print('------------------------')
+        if j is not None:
+            for forecast in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
+                pretty_print_forecast(forecast)
+                print('------------------------')
+        else:
+            print('request_forecast returned None.')
 
     def test_service(lat: float, long: float):
         from weewx.engine import StdEngine

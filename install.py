@@ -33,7 +33,7 @@ class NWSInstaller(ExtensionInstaller):
                     'data_binding'   : 'nws_binding',
                     'days_to_keep'   : 90,
                     'poll_secs'      : 1800,
-                    'retry_wait_secs': 30,
+                    'retry_wait_secs': 600,
                     'timeout_secs'   : 5,
                     'User-Agent'     : '(my-weather-site.com, me@my-weather-site.com)',
                 },
