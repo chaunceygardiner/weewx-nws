@@ -473,7 +473,7 @@ class NWSPoller:
             log.debug('request_urls: headers: %s' % headers)
             log.info('Downloading URLs from %s' % url)
             response: requests.Response = session.get(url=url, headers=headers, timeout=cfg.timeout_secs)
-            if response.status_code == 404:
+            if response.status_code == 404 or response.status_code == 503:
                 #{
                 #    "correlationId": "ac04ca11-ce4d-464e-8cef-602497b10aa1",
                 #    "title": "Data Unavailable For Requested Point",
@@ -481,6 +481,14 @@ class NWSPoller:
                 #    "status": 404,
                 #    "detail": "Unable to provide data for requested point -20.9512,55.3085",
                 #    "instance": "https://api.weather.gov/requests/ac04ca11-ce4d-464e-8cef-602497b10aa1"
+                #}
+                #{
+                #    "correlationId": "ba8277d6-de87-41fd-9ce5-dfb1868c1ced",
+                #    "title": "Forecast Grid Expired",
+                #    "type": "https://api.weather.gov/problems/ForecastGridExpired",
+                #    "status": 503,
+                #    "detail": "The requested forecast grid was issued 2020-06-09T11:01:35+00:00 and has expired.",
+                #    "instance": "https://api.weather.gov/requests/ba8277d6-de87-41fd-9ce5-dfb1868c1ced"
                 #}
                 d = response.json()
                 correlationId: str = d.get('correlationId')
@@ -497,10 +505,7 @@ class NWSPoller:
                     log.info(detail)
                     log.info(instance)
                 else:
-                    log.info('404 error for url: %s' % url)
-                return False
-            if response.status_code == 503:
-                log.info('503 SERVICE UNAVAILABLE: %s' % url)
+                    log.info('%d error for url: %s' % (response.status_code, url))
                 return False
             response.raise_for_status()
             log.debug('request_urls: %s returned %r' % (url, response))
@@ -558,8 +563,23 @@ class NWSPoller:
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
-            if response.status_code == 503:
-                log.info('503 SERVICE UNAVAILABLE: %s' % forecastUrl)
+            if response.status_code == 404 or response.status_code == 503:
+                d = response.json()
+                correlationId: str = d.get('correlationId')
+                title: str = d.get('title')
+                type_str: str = d.get('type')
+                status: str = d.get('status')
+                detail: str = d.get('detail')
+                instance: str = d.get('instance')
+                if title is not None:
+                    log.info(correlationId)
+                    log.info(title)
+                    log.info(type_str)
+                    log.info(status)
+                    log.info(detail)
+                    log.info(instance)
+                else:
+                    log.info('%d error for url: %s' % (response.status_code, forecastUrl))
                 return None
             response.raise_for_status()
             if response:
