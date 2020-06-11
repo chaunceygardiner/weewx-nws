@@ -136,12 +136,12 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
     ![NWS Twelve-Hour Forecasts screenshot](twelve_hour_forecasts.jpg)
 
-1.  To get hourly forecasts (in this example, up to 156 foreecasts are returned (6.5 days worth).
+1.  To get one-hour forecasts (in this example, up to 156 foreecasts are returned (6.5 days worth).
     ```
-    #for $hour in $nwsforecast.hourly_forecasts() # Note: hourly_forecasts(24) will return 24 forecassts (1 day).
+    #for $hour in $nwsforecast.one_hour_forecasts() # Note: one_hour_forecasts(24) will return 24 forecassts (1 day).
          $hour.generatedTime
          $hour.number
-         $hour.name             ## Appears to be empty for hourly_forecasts
+         $hour.name             ## Empty for one_hour_forecasts
          $hour.startTime
          $hour.endTime
          $hour.isDaytime
@@ -151,7 +151,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
          $hour.windDir
          $hour.iconUrl
          $hour.shortForecast
-         $hour.detailedForecast ## Appears to be empty for hourly_forecasts
+         $hour.detailedForecast ## Empty for one_hour_forecasts
          $hour.latitude    # Latitude of point for which forecasts were requested
          $hour.longitude   # Longitude of point for which forecasts were requested
     #end for
@@ -179,10 +179,10 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
     $hour.latitude        : 37.431495
     $hour.longitude       : -122.110937
     ```
-    Hourly forecasts can be seen in action on the **Hourly** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
+    One-hour forecasts can be seen in action on the **Hourly** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
-       #for $hour in $nwsforecast.hourly_forecasts(72)
+       #for $hour in $nwsforecast.one_hour_forecasts(72)
        <tr class='forecast_hours'>
          #set icon = $hour.iconUrl
          #if $target_display == 'smartphone':
@@ -199,7 +199,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
     ```
     A screenshot follows:
 
-    ![NWS Hourly Forecasts screenshot](hourly_forecasts.jpg)
+    ![NWS One-Hour Forecasts screenshot](one_hour_forecasts.jpg)
 
 1.  To get all alerts for the station's location:
     ```
@@ -269,7 +269,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
     1. To view the latest forecast records in the databse (only works for sqlite databases):
        ```
-       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type HOURLY --nws-database /home/weewx/archive/nws.sdb --view-criterion LATEST --latitude 38.8977 --longitude -77.0365
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type ONE_HOUR --nws-database /home/weewx/archive/nws.sdb --view-criterion LATEST --latitude 38.8977 --longitude -77.0365
 
     1. To view all forecast records in the databse (only works for sqlite databases):
        ```
@@ -278,6 +278,9 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
        ```
 
     1. To view a summary of forecasts in the database (time inserted, time generated, start/end of forecast) (only works for sqlite databases):
+       ```
+       PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type ONE_HOUR --nws-database /home/weewx/archive/nws.sdb --view-criterion SUMMARY --latitude 38.8977 --longitude -77.0365
+       ```
        ```
        PYTHONPATH=/home/weewx/bin python3 /home/weewx/bin/user/nws.py --view-forecasts --type TWELVE_HOUR --nws-database /home/weewx/archive/nws.sdb --view-criterion SUMMARY --latitude 38.8977 --longitude -77.0365
        ```
