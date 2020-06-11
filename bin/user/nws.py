@@ -408,11 +408,11 @@ class NWSPoller:
                         alerts_failed = True
                 if twelve_hour_failed or one_hour_failed or alerts_failed:
                     if twelve_hour_failed:
-                        log.error('poll_nws: ForecastType.TWELVE_HOUR request failed.  Will retry in %d seconds.' % self.cfg.retry_wait_secs)
+                        log.error('Retrying ForecastType.TWELVE_HOUR request in %d s.' % self.cfg.retry_wait_secs)
                     if one_hour_failed:
-                        log.error('poll_nws: ForecastType.ONE_HOUR request failed.  Will retry in %d seconds.' % self.cfg.retry_wait_secs)
+                        log.error('Retrying ForecastType.ONE_HOUR request in %d s.' % self.cfg.retry_wait_secs)
                     if alerts_failed:
-                        log.error('poll_nws: ForecastType.ALERTS request failed.  Will retry in %d seconds.' % self.cfg.retry_wait_secs)
+                        log.error('Retrying ForecastType.ALERTS request in %d s.' % self.cfg.retry_wait_secs)
                     on_retry = True
                     # TODO: Perhaps back off on retries.
                     time.sleep(self.cfg.retry_wait_secs)
