@@ -214,6 +214,17 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
          $alert.longitude   # Longitude of point for which alerts were requested
     #end for
     ```
+    Sample values for the above variables follow:
+    ```
+    effective  : 2020-06-11 09:12:00 PDT (1591891920)
+    onset      : 2020-06-11 09:12:00 PDT (1591891920)
+    ends       : 2020-06-11 10:12:00 PDT (1591895520)
+    event      : Tsunami Warning
+    headline   : TEST Tsunami Warning issued June 11 at 9:12AM PDT until June 11 at 10:12AM PDT by NWS National Tsunami Warning Center
+    description: PZZ530...THIS_MESSAGE_IS_FOR_TEST_PURPOSES_ONLY...THIS IS A TEST TO DETERMINE TRANSMISSION TIMES INVOLVED IN THE...
+    latitude   : 37.431495
+    longitude  : -122.110937
+    ```
     Alerts can be seen in action on the **Alerts** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
