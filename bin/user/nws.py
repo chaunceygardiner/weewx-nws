@@ -251,8 +251,8 @@ class NWS(StdService):
         except Exception as e:
             # Include a stack traceback in the log:
             # but eat this exception as we don't want to bring down weewx
-            log.error('saveForedcastsToDB(%s): %s' % (forecast_type, e))
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            log.error('saveForedcastsToDB(%s): %s (%s)' % (forecast_type, e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
 
     def forecast_in_db(self, forecast_type: ForecastType, generatedTime: int):
         try:
@@ -262,8 +262,8 @@ class NWS(StdService):
             log.debug('Checking if forecast already in db: select: %s.' % select)
             return dbmanager.getSql(select) is not None
         except Exception as e:
-            log.error('forecast_in_db(%s, %d) failed with %s.' % (forecast_type, generatedTime, e))
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            log.error('forecast_in_db(%s, %d) failed with %s (%s).' % (forecast_type, generatedTime, e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
 
     def delete_all_alerts(self):
         try:
@@ -274,16 +274,16 @@ class NWS(StdService):
                log.debug('Checking if there are any alerts in the archive to delete: select: %s.' % select)
                row = dbmanager.getSql(select)
            except Exception as e:
-               log.error('delete_all_alerts: %s failed with %s.' % (select, e))
-               weeutil.logger.log_traceback(log.critical, "    ****  ")
+               log.error('delete_all_alerts: %s failed with %s (%s).' % (select, e, type(e)))
+               weeutil.logger.log_traceback(log.error, "    ****  ")
                return
            if row[0] != 0:
                delete = "DELETE FROM archive WHERE interval = %d" % NWS.get_interval(ForecastType.ALERTS)
                log.info('Pruning ForecastType.ALERTS')
                dbmanager.getSql(delete)
         except Exception as e:
-           log.error('delete_all_alerts: %s failed with %s.' % (delete, e))
-           weeutil.logger.log_traceback(log.critical, "    ****  ")
+           log.error('delete_all_alerts: %s failed with %s (%s).' % (delete, e, type(e)))
+           weeutil.logger.log_traceback(log.error, "    ****  ")
 
     def delete_old_forecasts(self, forecast_type: ForecastType):
         if forecast_type == ForecastType.ALERTS:
@@ -299,8 +299,8 @@ class NWS(StdService):
                log.info('Pruning %s rows older than %s.' % (forecast_type, timestamp_to_string(n_days_ago)))
                dbmanager.getSql(delete)
             except Exception as e:
-               log.error('delete_old_forecasts(%s): %s failed with %s.' % (forecast_type, delete, e))
-               weeutil.logger.log_traceback(log.critical, "    ****  ")
+               log.error('delete_old_forecasts(%s): %s failed with %s (%s).' % (forecast_type, delete, e, type(e)))
+               weeutil.logger.log_traceback(log.error, "    ****  ")
 
     @staticmethod
     def get_lat_long(config_dict) -> Tuple[str, str]:
@@ -363,8 +363,8 @@ class NWS(StdService):
                     log.debug('get_latest_ts(%s): no rows in database, returning 0.' % forecast_type)
                     return 0
         except Exception as e:
-            log.error('get_latest_type(%s): %s failed with %s.' % (forecast_type, select, e))
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            log.error('get_latest_type(%s): %s failed with %s (%s).' % (forecast_type, select, e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
             return 0
 
     def save_forecast(self, record):
@@ -422,7 +422,7 @@ class NWSPoller:
                     log.debug('poll_nws: Sleeping for %f seconds.' % sleep_time)
                     time.sleep(sleep_time)
             except Exception as e:
-                log.error('poll_nws: Encountered exception. Retrying in %d seconds. exception: %s' % (self.cfg.retry_wait_secs, e))
+                log.error('poll_nws: Encountered exception. Retrying in %d seconds. exception: %s (%s)' % (self.cfg.retry_wait_secs, e, type(e)))
                 time.sleep(self.cfg.retry_wait_secs)
 
     @staticmethod
@@ -526,13 +526,13 @@ class NWSPoller:
                 return True
             else:
                 return False
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-            log.info('request_urls: Attempt to fetch from: %s failed: %s.' % (url, e))
+        except requests.exceptions.RequestException as e:
+            log.info('request_urls: Attempt to fetch from: %s failed: %s (%s).' % (url, e, type(e)))
             return False
         except Exception as e:
             # Unexpected exceptions need a stack track to diagnose.
-            log.error('request_urls: Attempt to fetch from: %s failed: %s.' % (url, e))
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            log.error('request_urls: Attempt to fetch from: %s failed: %s (%s).' % (url, e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
             return False
 
     @staticmethod
@@ -586,13 +586,13 @@ class NWSPoller:
                 return response.json()
             else:
                 return None
-        except requests.exceptions.Timeout as e:
-            log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
+        except requests.exceptions.RequestException as e:
+            log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
             return None
         except Exception as e:
             # Unexpected exceptions need a stack track to diagnose.
-            log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s.' % (forecast_type, forecastUrl, e))
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
             return None
 
     @staticmethod
@@ -783,8 +783,8 @@ class NWSForecastVariables(SearchList):
             with weewx.manager.open_manager(dict) as dbm:
                 return NWSForecastVariables.fetch_records(dbm, forecast_type, self.latitude, self.longitude, max_forecasts)
         except Exception as e:
-            log.error('getLatestForecastRows: %s' % e)
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            log.error('getLatestForecastRows: %s (%s)' % (e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
             return []
 
     @staticmethod
@@ -823,8 +823,8 @@ class NWSForecastVariables(SearchList):
                     records.append(record)
             return records
         except Exception as e:
-            log.error('%s failed with %s.' % (select, e))
-            weeutil.logger.log_traceback(log.critical, "    ****  ")
+            log.error('%s failed with %s (%s).' % (select, e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
             return []
 
 if __name__ == '__main__':
