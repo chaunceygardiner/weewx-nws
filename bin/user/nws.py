@@ -495,7 +495,7 @@ class NWSPoller:
         detail: str = d.get('detail')
         instance: str = d.get('instance')
         if title is not None:
-            log.info('%s: %s, %s, %s, %s, %s, %s' % (caller, status, title, type, detail, instance, correlation_id))
+            log.info('%s: %s, %s, %s, %s, %s, %s' % (caller, status, title, type_str, detail, instance, correlation_id))
         else:
             log.info('%s: %d error for url: %s' % (caller, response.status_code, url))
 
