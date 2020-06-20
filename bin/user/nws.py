@@ -569,7 +569,7 @@ class NWSPoller:
             headers = {'User-Agent': cfg.user_agent}
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
             if response.status_code == 404 or response.status_code == 503:
-                NWSPoller.log_404_and_503('request_forecast', forecastUrl, response)
+                NWSPoller.log_404_and_503('request_forecast(%s)' % forecast_type, forecastUrl, response)
                 return None
             response.raise_for_status()
             if response:
