@@ -218,12 +218,14 @@ class NWS(StdService):
 
     def end_archive_period(self, _event):
         """create new archive record and save them to the database"""
+        log.debug('end_archive_period: saving forecasts to DB')
         self.saveForecastsToDB(ForecastType.TWELVE_HOUR)
         self.saveForecastsToDB(ForecastType.ONE_HOUR)
         self.saveForecastsToDB(ForecastType.ALERTS)
 
     def saveForecastsToDB(self, forecast_type: ForecastType):
         try:
+            log.debug('saveForecastsToDB(%s): start' % forecast_type)
             now = int(time.time() + 0.5)
             with self.cfg.lock:
                 if forecast_type == ForecastType.TWELVE_HOUR:
@@ -232,8 +234,10 @@ class NWS(StdService):
                     bucket = self.cfg.oneHourForecasts
                 else:       # ForecastType.ALERTS
                     bucket = self.cfg.alerts
+                log.debug('saveForecastsToDB(%s): bucket: %s' % (forecast_type, bucket))
                 if len(bucket) != 0:
                     ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
+                    log.debug('saveForecastsToDB(%s): bucket[0].generatedTime: %s' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
                     # Never write the same forecast twice.  This is determined by generatedTime
                     if not self.forecast_in_db(forecast_type, bucket[0].generatedTime):
                         for record in bucket:
@@ -321,6 +325,7 @@ class NWS(StdService):
 
     @staticmethod
     def convert_to_json(record, ts):
+        log.debug('convert_to_json: start')
         j = {}
         j['dateTime']         = ts
         j['interval']         = record.interval
@@ -340,6 +345,7 @@ class NWS(StdService):
         j['iconUrl']          = record.iconUrl
         j['shortForecast']    = record.shortForecast
         j['detailedForecast'] = record.detailedForecast
+        log.debug('convert_to_json: returning: %s' % j)
         return j
 
     @staticmethod
@@ -568,6 +574,7 @@ class NWSPoller:
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
+            log.debug('response: %s' % response)
             if response.status_code == 404 or response.status_code == 503:
                 NWSPoller.log_404_and_503('request_forecast(%s)' % forecast_type, forecastUrl, response)
                 return None
@@ -575,6 +582,7 @@ class NWSPoller:
             if response:
                 return response.json()
             else:
+                log.debug('returning None')
                 return None
         except requests.exceptions.RequestException as e:
             log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
@@ -625,8 +633,10 @@ class NWSPoller:
             return
 
         # 2020-05-18T22:02:26+00:00
+        log.debug('compose_records(%s): updateTime: %s' % (forecast_type, j['properties']['updateTime']))
         tzinfos = {'UTC': tz.gettz("UTC")}
         updateTime = parse(j['properties']['updateTime'], tzinfos=tzinfos).timestamp()
+        log.debug('compose_records(%s): updateTime: %s' % (forecast_type, timestamp_to_string(updateTime)))
 
         units = j['properties']['units']
         if units == 'us':
@@ -650,7 +660,7 @@ class NWSPoller:
                 startTime        = datetime.datetime.fromisoformat(period['startTime']).timestamp(),
                 endTime          = datetime.datetime.fromisoformat(period['endTime']).timestamp(),
                 isDaytime        = period['isDaytime'],
-                outTemp          = period['temperature'],
+                outTemp          = to_float(period['temperature']),
                 outTempTrend     = period['temperatureTrend'],
                 windSpeed        = windSpeed,
                 windDir          = NWSPoller.translate_wind_dir(period['windDirection']),
