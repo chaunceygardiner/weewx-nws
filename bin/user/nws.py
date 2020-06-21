@@ -846,19 +846,40 @@ if __name__ == '__main__':
                           help='ALERTS|TWELVE_HOUR|ONE_HOUR')
         parser.add_option('--nws-database', dest='db',
                           help='Location of nws.sdb file (only works with sqlite3).')
+        parser.add_option('--insert-forecast', dest='manually_insert_forecast', action='store_true',
+                          help='Manually insert a forecast from a file.  Requires --nws-database, --type, --filename, --latitude, --longitude and --archive-interval')
         parser.add_option('--test-service', dest='testserv', action='store_true',
                           help='Test the NWS service.  Requires --latitude and --longitude.')
         parser.add_option('--latitude', type='float', dest='lat',
-                          help='The latitude to use when testing the service.')
+                          help='The latitude of the station.')
         parser.add_option('--longitude', type='float', dest='long',
-                          help='The longitude to use when testing the service.')
+                          help='The longitude of the station.')
+        parser.add_option('--archive_interval', type='int', dest='arcint',
+                          default=300,
+                          help='The archive interval.')
         parser.add_option('--view-criterion', dest='view_criterion',
                           help='ALL|LATEST|SUMMARY')
         parser.add_option('--view-forecasts', dest='view', action='store_true',
                           help='View forecast records.  Must specify --nws-database, --type and --view-criterion.')
+        parser.add_option('--filename', type='str', dest='fname',
+                          help='The filename from which to read the forecast.')
         (options, args) = parser.parse_args()
 
         weeutil.logger.setup('nws', {})
+
+        if options.manually_insert_forecast:
+            if not options.ty:
+                parser.error('--insert-forecast requires --type argument')
+            forecast_type = decode_forecast_type(options.ty)
+            if forecast_type == None:
+                parser.error('--type must be one of: ALERTS|TWELVE_HOUR|ONE_HOUR')
+            if not options.fname:
+                parser.error('--insert-forecast requires --filename argument')
+            if not options.db:
+                parser.error('--insert-forecast requires --nws-database argument')
+            if not options.lat or not options.long:
+                parser.error('--test-service requires --latitude and --longitude arguments')
+            manually_insert_forecast(forecast_type, options.fname, options.db, options.lat, options.long, options.arcint)
 
         if options.testreq:
             forecast_type = decode_forecast_type(options.ty)
@@ -911,6 +932,54 @@ if __name__ == '__main__':
             return Criterion.SUMMARY
         else:
             return None
+
+    def manually_insert_forecast(forecast_type: ForecastType, fname: str, dbfile: str, latitude: float, longitude: float, arcint) -> None:
+        f = open(fname)
+        contents: str = f.read()
+        j = json.loads(contents)
+        try:
+            import sqlite3
+        except:
+            print('Could not import sqlite3.')
+            return
+        ts = NWS.get_archive_interval_timestamp(arcint)
+        conn = sqlite3.connect(dbfile)
+        # Check to see if forecast already in DB
+        tzinfos = {'UTC': tz.gettz("UTC")}
+        generatedTime = int(parse(j['properties']['updateTime'], tzinfos=tzinfos).timestamp())
+        select = "SELECT COUNT(*) FROM archive WHERE interval = %d AND generatedTime = %d LIMIT 1" % (
+            NWS.get_interval(forecast_type), generatedTime)
+        existing_count: int = 0
+        for row in conn.execute(select):
+            existing_count = row[0]
+        if existing_count > 0:
+            print('%s forecast generated at %s is already in the databse.  Skipping insert.' % (forecast_type, timestamp_to_string(generatedTime)))
+            return
+        cursor = conn.cursor()
+        count: int = 0
+        for record in NWSPoller.compose_records(j, forecast_type, str(latitude), str(longitude)):
+            json_record = NWS.convert_to_json(record, ts)
+            insert_statement = compose_insert_statement(json_record)
+            cursor.execute(insert_statement)
+            count += 1
+        conn.commit()
+        cursor.close()
+        print('Inserted %d forecasts.' % count)
+
+    def compose_insert_statement(json_record) -> str:
+        # We need ordering so columns matches values
+        columns = []
+        values = []
+        for key in json_record:
+            if json_record[key] is not None:
+                columns.append(key)
+                # String values need quotes
+                string_columns = ['latitude', 'longitude', 'name', 'outTempTrend', 'iconUrl', 'shortForecast', 'detailedForecast' ]
+                if key in string_columns:
+                    values.append("'%s'" % json_record[key])
+                else:
+                    values.append(str(json_record[key]))
+        return 'INSERT INTO archive (%s) VALUES(%s)' % (','.join(columns), ','.join(values))
 
     def test_requester(forecast_type: ForecastType, lat: float, long: float) -> None:
         cfg = Configuration(
