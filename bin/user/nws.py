@@ -199,14 +199,6 @@ class NWS(StdService):
             if i < 2:
                 time.sleep(5)
 
-        # At startup, attempt to get the latest forecasts.
-        if NWSPoller.populate_forecast(self.cfg, ForecastType.TWELVE_HOUR):
-            self.saveForecastsToDB(ForecastType.TWELVE_HOUR)
-        if NWSPoller.populate_forecast(self.cfg, ForecastType.ONE_HOUR):
-            self.saveForecastsToDB(ForecastType.ONE_HOUR)
-        if NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS):
-            self.saveForecastsToDB(ForecastType.ALERTS)
-
         # Start a thread to query NWS for forecasts
         nws_poller: NWSPoller = NWSPoller(self.cfg)
         t: threading.Thread = threading.Thread(target=nws_poller.poll_nws)
@@ -450,7 +442,11 @@ class NWSPoller:
                     cfg.alerts.clear()
                     cfg.alertsAllClear = True    # Will be set to False below if there are any alerts present
                 try:
+                    first_time: bool = True
                     for record in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
+                        if first_time:
+                            log.info('Downloaded %s generated at %s' % (forecast_type, timestamp_to_string(record.generatedTime)))
+                            first_time = False
                         log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
                         if forecast_type == ForecastType.ONE_HOUR:
                             cfg.oneHourForecasts.append(record)
@@ -1045,6 +1041,14 @@ if __name__ == '__main__':
                         'driver': 'weedb.sqlite'}}})
             engine = StdEngine(config)
             nws = NWS(engine, config)
+
+            if NWSPoller.populate_forecast(nws.cfg, ForecastType.TWELVE_HOUR):
+                nws.saveForecastsToDB(ForecastType.TWELVE_HOUR)
+            if NWSPoller.populate_forecast(nws.cfg, ForecastType.ONE_HOUR):
+                nws.saveForecastsToDB(ForecastType.ONE_HOUR)
+            if NWSPoller.populate_forecast(nws.cfg, ForecastType.ALERTS):
+                nws.saveForecastsToDB(ForecastType.ALERTS)
+
             for record in nws.select_forecasts(ForecastType.TWELVE_HOUR):
                 pretty_print_record(record)
                 print('------------------------')
