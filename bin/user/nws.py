@@ -349,22 +349,6 @@ class NWS(StdService):
         # ALERTS
         return 0
 
-    def get_latest_ts(self, forecast_type: ForecastType):
-        dbmanager = self.engine.db_binder.get_manager(self.data_binding)
-        select = 'SELECT MAX(dateTime) FROM archive WHERE interval = %d' % NWS.get_interval(forecast_type)
-        try:
-            for row in dbmanager.genSql(select):
-                if row[0] != None:
-                    log.debug('get_latest_ts(%s): returning %d' % (forecast_type, row[0]))
-                    return row[0]
-                else:
-                    log.debug('get_latest_ts(%s): no rows in database, returning 0.' % forecast_type)
-                    return 0
-        except Exception as e:
-            log.error('get_latest_type(%s): %s failed with %s (%s).' % (forecast_type, select, e, type(e)))
-            weeutil.logger.log_traceback(log.error, "    ****  ")
-            return 0
-
     def save_forecast(self, record):
         """save data to database"""
         dbmanager = self.engine.db_binder.get_manager(self.data_binding)
@@ -442,11 +426,11 @@ class NWSPoller:
                     cfg.alerts.clear()
                     cfg.alertsAllClear = True    # Will be set to False below if there are any alerts present
                 try:
-                    first_time: bool = True
+                    record_count: int = 0
+                    generatedTime: Optional[int] = None
                     for record in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
-                        if first_time:
-                            log.info('Downloaded %s generated at %s' % (forecast_type, timestamp_to_string(record.generatedTime)))
-                            first_time = False
+                        record_count += 1
+                        generatedTime = record.generatedTime
                         log.debug('NWSPoller: poll_nws: adding %s forecast(%s) to array.' % (forecast_type, record))
                         if forecast_type == ForecastType.ONE_HOUR:
                             cfg.oneHourForecasts.append(record)
@@ -458,6 +442,10 @@ class NWSPoller:
                 except KeyError as e:
                     log.error("populate_forecast(%s): Could not compose forecast record.  Key: '%s' missing in returned forecast." % (forecast_type, e))
                     return False
+            if record_count == 0:
+                log.info('Downloaded 0 %s records.' % forecast_type)
+            else:
+                log.info('Downloaded %d %s records generated at %s' % (record_count, forecast_type, timestamp_to_string(generatedTime)))
             return True
 
     @staticmethod
@@ -785,43 +773,53 @@ class NWSForecastVariables(SearchList):
 
     @staticmethod
     def fetch_records(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
+        for i in range(3):
+            try:
+                return NWSForecastVariables.fetch_records_internal(dbm, forecast_type, latitude, longitude, max_forecasts)
+            except Exception as e:
+                # Datbase locked exception has been observed.  If first try, print info and sleep 1s.
+                if i < 2:
+                    log.info('fetch_records failed with %s (%s), retrying.' % (e, type(e)))
+                    time.sleep(1)
+                else:
+                    log.error('Fetch records failed with %s (%s).' % (e, type(e)))
+                    weeutil.logger.log_traceback(log.error, "    ****  ")
+        return []
+
+    @staticmethod
+    def fetch_records_internal(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
         # Fetch last records inserted for this forecast_type
         select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
-        try:
-            records = []
-            forecast_count = 0
-            for row in dbm.genSql(select):
-                END_TIME = 9
-                # Only include if record hasn't expired (row[END_TIME] is endTime) and max_forecasts hasn't been exceeded.
-                if time.time() < row[END_TIME] and (max_forecasts is None or forecast_count < max_forecasts):
-                    forecast_count += 1
-                    record = {}
+        records = []
+        forecast_count = 0
+        for row in dbm.genSql(select):
+            END_TIME = 9
+            # Only include if record hasn't expired (row[END_TIME] is endTime) and max_forecasts hasn't been exceeded.
+            if time.time() < row[END_TIME] and (max_forecasts is None or forecast_count < max_forecasts):
+                forecast_count += 1
+                record = {}
 
-                    record['dateTime'] = row[0]
-                    record['interval'] = row[1]
-                    record['latitude'] = row[2]
-                    record['longitude'] = row[3]
-                    record['usUnits'] = row[4]
-                    record['generatedTime'] = row[5]
-                    record['number'] = row[6]
-                    record['name'] = row[7]
-                    record['startTime'] = row[8]
-                    record['endTime'] = row[9]
-                    record['isDaytime'] = row[10]
-                    record['outTemp'] = row[11]
-                    record['outTempTrend'] = row[12]
-                    record['windSpeed'] = row[13]
-                    record['windDir'] = row[14]
-                    record['iconUrl'] = row[15]
-                    record['shortForecast'] = row[16]
-                    record['detailedForecast'] = row[17]
+                record['dateTime'] = row[0]
+                record['interval'] = row[1]
+                record['latitude'] = row[2]
+                record['longitude'] = row[3]
+                record['usUnits'] = row[4]
+                record['generatedTime'] = row[5]
+                record['number'] = row[6]
+                record['name'] = row[7]
+                record['startTime'] = row[8]
+                record['endTime'] = row[9]
+                record['isDaytime'] = row[10]
+                record['outTemp'] = row[11]
+                record['outTempTrend'] = row[12]
+                record['windSpeed'] = row[13]
+                record['windDir'] = row[14]
+                record['iconUrl'] = row[15]
+                record['shortForecast'] = row[16]
+                record['detailedForecast'] = row[17]
 
-                    records.append(record)
-            return records
-        except Exception as e:
-            log.error('%s failed with %s (%s).' % (select, e, type(e)))
-            weeutil.logger.log_traceback(log.error, "    ****  ")
-            return []
+                records.append(record)
+        return records
 
 if __name__ == '__main__':
     usage = """%prog [options] [--help]"""
