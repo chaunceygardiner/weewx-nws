@@ -789,7 +789,7 @@ class NWSForecastVariables(SearchList):
     @staticmethod
     def fetch_records_internal(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
         # Fetch last records inserted for this forecast_type
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
@@ -1071,9 +1071,9 @@ if __name__ == '__main__':
 
     def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion):
         if criterion == Criterion.ALL:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d ORDER BY dateTime, number" % NWS.get_interval(forecast_type)
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
         elif criterion == Criterion.LATEST:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d AND dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
 
         for row in conn.execute(select):
             record = {}
@@ -1099,7 +1099,7 @@ if __name__ == '__main__':
             print('------------------------')
 
     def print_sqlite_summary(conn, dbfile: str, forecast_type: ForecastType):
-        select = "SELECT dateTime, MAX(generatedTime), MIN(startTime), MAX(endTime) FROM archive WHERE interval = %d GROUP BY dateTime ORDER BY dateTime" % NWS.get_interval(forecast_type)
+        select = "SELECT dateTime, MAX(generatedTime), MIN(startTime), MAX(endTime) FROM archive WHERE interval = %d GROUP BY dateTime ORDER BY generatedTime" % NWS.get_interval(forecast_type)
 
         # 2020-05-28 14:00:00 PDT (1590699600)
         print('%s %s %s %s' % ('Inserted'.ljust(36), 'Generated'.ljust(36), 'Start'.ljust(36), 'End'))
