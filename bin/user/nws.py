@@ -958,7 +958,7 @@ if __name__ == '__main__':
             count += 1
         conn.commit()
         cursor.close()
-        print('Inserted %d forecasts.' % count)
+        print('Inserted %d %s forecasts generated at %s.' % (count, forecast_type, timestamp_to_string(generatedTime)))
 
     def compose_insert_statement(json_record) -> str:
         # We need ordering so columns matches values
