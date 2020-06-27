@@ -174,7 +174,7 @@ class NWS(StdService):
             alertsUrl             = None,
             latitude              = latitude,
             longitude             = longitude,
-            timeout_secs          = to_int(self.nws_config_dict.get('timeout_secs', 5)),
+            timeout_secs          = to_int(self.nws_config_dict.get('timeout_secs', 10)),
             archive_interval      = to_int(config_dict['StdArchive']['archive_interval']),
             user_agent            = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
             poll_secs             = to_int(self.nws_config_dict.get('poll_secs', 1800)),
