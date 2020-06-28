@@ -11,6 +11,12 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
 # Installation Instructions
 
+1. Install dateutil for python3 (it is required by the nws extension).
+   On debian, this can be accomplished with:
+   ```
+   sudo apt install python3-dateutil
+   ```
+
 1. Download weewx-nws-master.zip from the https://github.com/chaunceygardiner/weewx-nws page.
 
 1. Run the following command.
