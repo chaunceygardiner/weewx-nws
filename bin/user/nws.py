@@ -19,12 +19,10 @@
 
 See the README for installation and usage.
 """
-import calendar
 import configobj
 import datetime
 import json
 import logging
-import os
 import requests
 import sys
 import threading
@@ -34,15 +32,14 @@ from dateutil import tz
 from dateutil.parser import parse
 
 from enum import Enum
-from dataclasses import dataclass, field
-from typing import Any, Dict, IO, Iterator, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 import weewx
 import weewx.units
 import weeutil.weeutil
 
 from weeutil.weeutil import timestamp_to_string
-from weeutil.weeutil import to_bool
 from weeutil.weeutil import to_float
 from weeutil.weeutil import to_int
 from weewx.engine import StdService
@@ -50,7 +47,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.0"
+WEEWX_NWS_VERSION = "1.1"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -218,7 +215,6 @@ class NWS(StdService):
     def saveForecastsToDB(self, forecast_type: ForecastType):
         try:
             log.debug('saveForecastsToDB(%s): start' % forecast_type)
-            now = int(time.time() + 0.5)
             with self.cfg.lock:
                 if forecast_type == ForecastType.TWELVE_HOUR:
                     bucket = self.cfg.twelveHourForecasts
@@ -477,17 +473,20 @@ class NWSPoller:
         # status        : 503
         # detail        : The resource you requested is currently unavailable.  Please try again later.
         # instance      : https://api.weather.gov/requests/574b53f3-6f15-4a17-9008-08627ceb80f0
-        d = response.json()
-        correlation_id: str = d.get('correlationId')
-        title: str = d.get('title')
-        type_str: str = d.get('type')
-        status: str = d.get('status')
-        detail: str = d.get('detail')
-        instance: str = d.get('instance')
-        if title is not None:
-            log.info('%s: %s, %s, %s, %s, %s, %s' % (caller, status, title, type_str, detail, instance, correlation_id))
-        else:
-            log.info('%s: %d error for url: %s' % (caller, response.status_code, url))
+        try:
+            d = response.json()
+            correlation_id: str = d.get('correlationId')
+            title: str = d.get('title')
+            type_str: str = d.get('type')
+            status: str = d.get('status')
+            detail: str = d.get('detail')
+            instance: str = d.get('instance')
+            if title is not None:
+                log.info('%s: %s, %s, %s, %s, %s, %s' % (caller, status, title, type_str, detail, instance, correlation_id))
+            else:
+                log.info('%s: %d error for url: %s' % (caller, response.status_code, url))
+        except json.decoder.JSONDecodeError as e:
+            log.info('%s: %d error for url: %s: %s' % (caller, response.status_code, url, e))
 
     @staticmethod
     def request_urls(cfg) -> bool:
@@ -632,7 +631,7 @@ class NWSPoller:
             windSpeedStr = period['windSpeed']
             windSpeedArray = windSpeedStr.split()
             windSpeed = to_int(windSpeedArray[0])
-            windSpeedUnit = windSpeedArray[1]
+            #windSpeedUnit = windSpeedArray[1]
             record = Forecast(
                 interval         = NWS.get_interval(forecast_type),
                 latitude         = latitude,
@@ -828,7 +827,6 @@ if __name__ == '__main__':
 
     def main():
         import optparse
-        import weecfg
 
         parser = optparse.OptionParser(usage=usage)
         parser.add_option('--binding', dest="binding", metavar="BINDING",

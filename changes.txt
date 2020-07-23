@@ -1,0 +1,15 @@
+loopdata change history
+-----------------------
+
+1.1 07/22/2020
+--------------
+1. Handle case where 404/503 responses are not proper json.
+
+1.0 05/30/2020
+--------------
+Initial release of NWS.
+
+0.1 05/22/2020
+--------------
+Initial check-in.
+
