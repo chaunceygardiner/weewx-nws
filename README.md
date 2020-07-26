@@ -17,11 +17,11 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    sudo apt install python3-dateutil
    ```
 
-1. Download weewx-nws-master.zip from the https://github.com/chaunceygardiner/weewx-nws page.
+1. Download weewx-nws-1.1.zip from the [github](https://github.com/chaunceygardiner/weewx-nws).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-master.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-1.1.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
@@ -67,6 +67,8 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    ```
 
 1. Restart WeeWX.
+
+1. After the next reporting cycle, navigate to <weewx-html-directory>/nws to see forecasts in the sample report.
 
 1.  To get twelve-hour forecasts (in this example, all forecasts are returned (usually 13, 6.5 days)
     ```
@@ -207,7 +209,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
 
     ![NWS One-Hour Forecasts screenshot](one_hour_forecasts.jpg)
 
-1.  To get all alerts for the station's location:
+1.  To all alerts for the station's location:
     ```
     #for $alert in $nwsforecast.alerts()
          $alert.effective   # Time issued
