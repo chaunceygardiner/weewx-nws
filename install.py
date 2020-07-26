@@ -22,7 +22,7 @@ def loader():
 class NWSInstaller(ExtensionInstaller):
     def __init__(self):
         super(NWSInstaller, self).__init__(
-            version="1.0",
+            version="1.1",
             name='nws',
             description='Fetch NWS Hourly Forecast.',
             author="John A Kline",
@@ -42,11 +42,31 @@ class NWSInstaller(ExtensionInstaller):
                         'manager'   : 'weewx.manager.Manager',
                         'schema'    : 'user.nws.schema',
                         'table_name': 'archive',
-                        'database'  : 'nws_sqlite'}},
+                        'database'  : 'nws_sqlite'
+                    }
+                },
                 'Databases': {
                     'nws_sqlite': {
                         'database_name': 'nws.sdb',
-                        'driver': 'weedb.sqlite'}},
+                        'driver': 'weedb.sqlite'
+                    }
+                },
+                'StdReport': {
+                    'NWSReport': {
+                        'HTML_ROOT':'nws',
+                        'enable': 'true',
+                        'skin':'nws',
+                    },
+                },
             },
-            files=[('bin/user', ['bin/user/nws.py']), ]
-            )
+            files=[
+                ('bin/user', ['bin/user/nws.py']),
+                ('skins/nws', [
+                    'skins/nws/forecast_alerts.inc',
+                    'skins/nws/forecast_days.inc',
+                    'skins/nws/forecast_hours.inc',
+                    'skins/nws/index.html.tmpl',
+                    'skins/nws/skin.conf',
+                ]),
+            ]
+        )
