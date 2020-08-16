@@ -582,40 +582,43 @@ class NWSPoller:
         log.debug('compose_alert_records: len(j[features]): %d' % len(j['features']))
         alertCount = 0
         for feature in j['features']:
-            alert = feature['properties']
-            tzinfos = {'UTC': tz.gettz("UTC")}
-            if alert is None or 'effective' not in alert or 'onset' not in alert or 'ends' not in alert:
-                log.info('malformed alert (skipping): %s' % alert)
-                continue
-            effective = parse(alert['effective'], tzinfos=tzinfos).timestamp()
-            onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp()
-            if alert['ends'] is not None:
-                ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
-            else:
-                # Sometimes alert['ends'] is None, use expires instead.
-                ends      = parse(alert['expires'], tzinfos=tzinfos).timestamp()
-            record = Forecast(
-                interval         = NWS.get_interval(ForecastType.ALERTS),
-                latitude         = latitude,
-                longitude        = longitude,
-                usUnits          = weewx.US,                # Dummy
-                generatedTime    = int(effective),
-                number           = alertCount,
-                name             = alert['event'],
-                startTime        = onset,
-                endTime          = ends,
-                isDaytime        = True,                    # Dummy
-                outTemp          = 0.0,                     # Dummy
-                outTempTrend     = '',                      # Dummy
-                windSpeed        = 0.0,                     # Dummy
-                windDir          = 0.0,                     # Dummy
-                iconUrl          = '',                      # Dummy
-                shortForecast    = alert['headline'],
-                detailedForecast = alert['description'],
-                )
-            alertCount += 1
-            log.debug('compose_alert_records: yielding record %s' % record)
-            yield record
+            try:
+                alert = feature['properties']
+                tzinfos = {'UTC': tz.gettz("UTC")}
+                if alert is None or 'effective' not in alert or 'onset' not in alert or 'ends' not in alert:
+                    log.info('malformed alert (skipping): %s' % alert)
+                    continue
+                effective = parse(alert['effective'], tzinfos=tzinfos).timestamp()
+                onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp()
+                if alert['ends'] is not None:
+                    ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
+                else:
+                    # Sometimes alert['ends'] is None, use expires instead.
+                    ends      = parse(alert['expires'], tzinfos=tzinfos).timestamp()
+                record = Forecast(
+                    interval         = NWS.get_interval(ForecastType.ALERTS),
+                    latitude         = latitude,
+                    longitude        = longitude,
+                    usUnits          = weewx.US,                # Dummy
+                    generatedTime    = int(effective),
+                    number           = alertCount,
+                    name             = alert['event'],
+                    startTime        = onset,
+                    endTime          = ends,
+                    isDaytime        = True,                    # Dummy
+                    outTemp          = 0.0,                     # Dummy
+                    outTempTrend     = '',                      # Dummy
+                    windSpeed        = 0.0,                     # Dummy
+                    windDir          = 0.0,                     # Dummy
+                    iconUrl          = '',                      # Dummy
+                    shortForecast    = alert['headline'],
+                    detailedForecast = alert['description'],
+                    )
+                alertCount += 1
+                log.debug('compose_alert_records: yielding record %s' % record)
+                yield record
+            except Exception as e:
+                log.info('malformed alert (skipping): %s' % feature)
 
     @staticmethod
     def compose_records(j, forecast_type: ForecastType, latitude: str, longitude: str):
