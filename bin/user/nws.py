@@ -788,7 +788,18 @@ class NWSForecastVariables(SearchList):
     @staticmethod
     def fetch_records_internal(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
         # Fetch last records inserted for this forecast_type
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
+        # This is tricky.  Sometimes, servers return older forecasts (i.e., generated at a time older than the latest generated).
+        # As such, we'd like to select only the records that match MAX(generatedTime).  Alas, if we do that, when multiple alerts are
+        # in effect, only the effective alert with the latest generated time will be shown.  As such:
+        # for forecasts:
+        #     select where generatedTime = MAX(generatedTime)
+        # for alerts:
+        #     select where dateTime = MAX(dateTime)
+        if forecast_type == ForecastType.ALERTS:
+            time_select_phrase = "dateTime = (SELECT MAX(dateTime)"
+        else:
+            time_select_phrase = "generatedTime = (SELECT MAX(generatedTime)"
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
