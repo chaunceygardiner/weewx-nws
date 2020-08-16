@@ -401,6 +401,7 @@ class NWSPoller:
                     time.sleep(sleep_time)
             except Exception as e:
                 log.error('poll_nws: Encountered exception. Retrying in %d seconds. exception: %s (%s)' % (self.cfg.retry_wait_secs, e, type(e)))
+                weeutil.logger.log_traceback(log.error, "    ****  ")
                 time.sleep(self.cfg.retry_wait_secs)
 
     @staticmethod
@@ -583,9 +584,16 @@ class NWSPoller:
         for feature in j['features']:
             alert = feature['properties']
             tzinfos = {'UTC': tz.gettz("UTC")}
+            if alert is None or 'effective' not in alert or 'onset' not in alert or 'ends' not in alert:
+                log.info('malformed alert (skipping): %s' % alert)
+                continue
             effective = parse(alert['effective'], tzinfos=tzinfos).timestamp()
             onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp()
-            ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
+            if alert['ends'] is not None:
+                ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
+            else:
+                # Sometimes alert['ends'] is None, use expires instead.
+                ends      = parse(alert['expires'], tzinfos=tzinfos).timestamp()
             record = Forecast(
                 interval         = NWS.get_interval(ForecastType.ALERTS),
                 latitude         = latitude,
