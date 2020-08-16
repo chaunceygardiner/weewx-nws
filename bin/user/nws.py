@@ -788,7 +788,7 @@ class NWSForecastVariables(SearchList):
     @staticmethod
     def fetch_records_internal(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
         # Fetch last records inserted for this forecast_type
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE dateTime = (SELECT MAX(dateTime) FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
