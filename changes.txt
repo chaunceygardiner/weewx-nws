@@ -1,6 +1,11 @@
 loopdata change history
 -----------------------
 
+1.2 08/16/2020
+--------------
+1. Handle multiple simutaneous alerts.
+   Regression caused by https://github.com/chaunceygardiner/weewx-nws/commit/1b11f462232066d8daae7cb7b890fd307601c069
+
 1.1 07/22/2020
 --------------
 1. Handle case where 404/503 responses are not proper json.
