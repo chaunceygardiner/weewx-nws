@@ -34,7 +34,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    information.
    ```
    [NWS]
-       User-Agent: '(my-weather-site.com, me@my-weather-site.com)'
+       User-Agent = "(my-weather-site.com, me@my-weather-site.com)"
    ```
 
 1. Best pratice is to let weewx-nws pick up your station's latitude an longtitude from
