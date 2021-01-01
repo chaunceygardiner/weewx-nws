@@ -990,7 +990,7 @@ if __name__ == '__main__':
                 # String values need quotes
                 string_columns = ['latitude', 'longitude', 'name', 'outTempTrend', 'iconUrl', 'shortForecast', 'detailedForecast' ]
                 if key in string_columns:
-                    values.append("'%s'" % json_record[key])
+                    values.append('"%s"' % json_record[key])
                 else:
                     values.append(str(json_record[key]))
         return 'INSERT INTO archive (%s) VALUES(%s)' % (','.join(columns), ','.join(values))
