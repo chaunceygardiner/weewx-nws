@@ -571,6 +571,9 @@ class NWSPoller:
         except requests.exceptions.RequestException as e:
             log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
             return None
+        except json.decoder.JSONDecodeError as e:
+            log.error('request_forecast(%s): Could not convert response to json: %s, error: %s (%s).' % (forecast_type, response, e, type(e)))
+            return None
         except Exception as e:
             # Unexpected exceptions need a stack track to diagnose.
             log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
@@ -618,7 +621,7 @@ class NWSPoller:
                 log.debug('compose_alert_records: yielding record %s' % record)
                 yield record
             except Exception as e:
-                log.info('malformed alert (skipping): %s' % feature)
+                log.info('malformed alert (skipping): %s, %s' % (feature, e))
 
     @staticmethod
     def compose_records(j, forecast_type: ForecastType, latitude: str, longitude: str):
