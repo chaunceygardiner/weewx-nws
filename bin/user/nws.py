@@ -486,8 +486,9 @@ class NWSPoller:
                 log.info('%s: %s, %s, %s, %s, %s, %s' % (caller, status, title, type_str, detail, instance, correlation_id))
             else:
                 log.info('%s: %d error for url: %s' % (caller, response.status_code, url))
-        except json.decoder.JSONDecodeError as e:
-            log.info('%s: %d error for url: %s: %s' % (caller, response.status_code, url, e))
+        except json.decoder.JSONDecodeError:
+            # Couldn't get any further information about 404 or 503 errors.  That's OK.
+            log.info('%s: %d error for url: %s.' % (caller, response.status_code, url))
 
     @staticmethod
     def request_urls(cfg) -> bool:
