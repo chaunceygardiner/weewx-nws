@@ -971,7 +971,7 @@ if __name__ == '__main__':
         for row in conn.execute(select):
             existing_count = row[0]
         if existing_count > 0:
-            print('%s forecast generated at %s is already in the databse.  Skipping insert.' % (forecast_type, timestamp_to_string(generatedTime)))
+            print('%s forecast generated at %s is already in the database.  Skipping insert.' % (forecast_type, timestamp_to_string(generatedTime)))
             return
         cursor = conn.cursor()
         count: int = 0
