@@ -403,6 +403,9 @@ class NWSPoller:
                 log.error('poll_nws: Encountered exception. Retrying in %d seconds. exception: %s (%s)' % (self.cfg.retry_wait_secs, e, type(e)))
                 weeutil.logger.log_traceback(log.error, "    ****  ")
                 time.sleep(self.cfg.retry_wait_secs)
+            # After the sleep, get new URLs (there is a slim chance they could have changed.
+            if not NWSPoller.request_urls(self.cfg):
+                log.info('Could not refresh URLs, will continue to use cached URLs (unlikely to be an issue).')
 
     @staticmethod
     def populate_forecast(cfg, forecast_type: ForecastType) -> bool:
@@ -516,9 +519,9 @@ class NWSPoller:
                     cfg.twelveHourForecastUrl = j['properties']['forecast']
                     cfg.oneHourForecastUrl    = j['properties']['forecastHourly']
                     cfg.alertsUrl             = 'https://api.weather.gov/alerts/active?point=%s,%s' % (cfg.latitude, cfg.longitude)
-                    log.info('request_urls: Cached twelveHourForecastUrl: %s' % cfg.twelveHourForecastUrl)
-                    log.info('request_urls: Cached oneHourForecastUrl: %s' % cfg.oneHourForecastUrl)
-                    log.info('request_urls: Cached alertsUrl: %s' % cfg.alertsUrl)
+                    log.info('request_urls: twelveHourForecastUrl: %s' % cfg.twelveHourForecastUrl)
+                    log.info('request_urls: oneHourForecastUrl: %s' % cfg.oneHourForecastUrl)
+                    log.info('request_urls: alertsUrl: %s' % cfg.alertsUrl)
                 return True
             else:
                 return False
