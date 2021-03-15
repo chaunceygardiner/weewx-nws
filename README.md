@@ -17,7 +17,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    sudo apt install python3-dateutil
    ```
 
-1. Download weewx-nws-1.2.zip from the [github](https://github.com/chaunceygardiner/weewx-nws).
+1. Download weewx-nws-1.3.zip from the [github](https://github.com/chaunceygardiner/weewx-nws).
 
 1. Run the following command.
    ```
