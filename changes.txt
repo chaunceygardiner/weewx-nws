@@ -1,6 +1,10 @@
 loopdata change history
 -----------------------
 
+1.3 03/15/2021
+--------------
+1. Fetch fresh URLs from NWS on every poll (just in case they ever change).
+
 1.2 08/16/2020
 --------------
 1. Handle multiple simutaneous alerts.
