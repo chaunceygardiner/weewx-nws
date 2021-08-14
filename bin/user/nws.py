@@ -367,19 +367,37 @@ class NWSPoller:
         while True:
             try:
                 if not on_retry or twelve_hour_failed:
-                    success = NWSPoller.populate_forecast(self.cfg, ForecastType.TWELVE_HOUR)
+                    for i in range(4):
+                        success = NWSPoller.populate_forecast(self.cfg, ForecastType.TWELVE_HOUR)
+                        if success:
+                            break
+                        if i < 3:
+                            log.info('Retrying ForecastType.TWELVE_HOUR request in 5s.')
+                            time.sleep(5)
                     if success:
                         twelve_hour_failed = False
                     else:
                         twelve_hour_failed = True
                 if not on_retry or one_hour_failed:
-                    success = NWSPoller.populate_forecast(self.cfg, ForecastType.ONE_HOUR)
+                    for i in range(4):
+                        success = NWSPoller.populate_forecast(self.cfg, ForecastType.ONE_HOUR)
+                        if success:
+                            break
+                        if i < 3:
+                            log.info('Retrying ForecastType.ONE_HOUR request in 5s.')
+                            time.sleep(5)
                     if success:
                         one_hour_failed = False
                     else:
                         one_hour_failed = True
                 if not on_retry or alerts_failed:
-                    success = NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS)
+                    for i in range(4):
+                        success = NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS)
+                        if success:
+                            break
+                        if i < 3:
+                            log.info('Retrying ForecastType.ALERTS request in 5s.')
+                            time.sleep(5)
                     if success:
                         alerts_failed = False
                     else:
