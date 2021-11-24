@@ -1,5 +1,10 @@
-loopdata change history
------------------------
+nws change history
+------------------
+
+1.4 11/23/2021
+--------------
+1. Allow twelve and one hour forecast URLs to be hardcoded
+   (necessary since the NWS is returning the wrong grid for the author's lat/long)
 
 1.3 03/15/2021
 --------------

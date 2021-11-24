@@ -5,7 +5,7 @@
 
 A WeeWX extension for NWS forecasts.
 
-Copyright (C)2020 by John A Kline (john@johnkline.com)
+Copyright (C)2020-2021 by John A Kline (john@johnkline.com)
 
 **THIS PLUGIN REQUIRES PYTHON 3 AND WEEWX 4**
 
@@ -17,7 +17,7 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    sudo apt install python3-dateutil
    ```
 
-1. Download weewx-nws-1.3.zip from the [github](https://github.com/chaunceygardiner/weewx-nws).
+1. Download weewx-nws-1.4.zip from the [github](https://github.com/chaunceygardiner/weewx-nws).
 
 1. Run the following command.
    ```
@@ -44,6 +44,15 @@ Copyright (C)2020 by John A Kline (john@johnkline.com)
    [NWS]
        latitude = 37.431995  # Best practice is not to set latitude here.
        longitude = -122.333  # Best practice is not to set longitude here.
+   ```
+
+1. If NWS is returning the wrong grid for your lat/long (as is the case for the author),
+   the twelve hour and one hour forecast URLs can be hardcoded with the correct grid
+   with the `one_hour_forecast_url` and `twelve_hour_forecast_url` entries as follows:
+   ```
+   [NWS]
+       twelve_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast"
+       one_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast/hourly"
    ```
 
 1. By default, nws will keep 90 days of forecasts.  One can change this in weewx.conf.

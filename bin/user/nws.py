@@ -47,7 +47,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.3"
+WEEWX_NWS_VERSION = "1.4"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -110,22 +110,24 @@ class Forecast:
 
 @dataclass
 class Configuration:
-    lock                 : threading.Lock
-    alertsAllClear       : bool           # Controlled by lock
-    alerts               : List[Forecast] # Controlled by lock
-    twelveHourForecasts  : List[Forecast] # Controlled by lock
-    oneHourForecasts     : List[Forecast] # Controlled by lock
-    alertsUrl            : Optional[str]  # Controlled by lock
-    twelveHourForecastUrl: Optional[str]  # Controlled by lock
-    oneHourForecastUrl   : Optional[str]  # Controlled by lock
-    latitude             : str            # Immutable
-    longitude            : str            # Immutable
-    timeout_secs         : int            # Immutable
-    archive_interval     : int            # Immutable
-    user_agent           : str            # Immutable
-    poll_secs            : int            # Immutable
-    retry_wait_secs      : int            # Immutable
-    days_to_keep         : int            # Immutable
+    lock                          : threading.Lock
+    alertsAllClear                : bool           # Controlled by lock
+    alerts                        : List[Forecast] # Controlled by lock
+    twelveHourForecasts           : List[Forecast] # Controlled by lock
+    oneHourForecasts              : List[Forecast] # Controlled by lock
+    alertsUrl                     : Optional[str]  # Controlled by lock
+    twelveHourForecastUrl         : Optional[str]  # Controlled by lock
+    oneHourForecastUrl            : Optional[str]  # Controlled by lock
+    hardCodedTwelveHourForecastUrl: Optional[str]  # Immutable
+    hardCodedOneHourForecastUrl   : Optional[str]  # Immutable
+    latitude                      : str            # Immutable
+    longitude                     : str            # Immutable
+    timeout_secs                  : int            # Immutable
+    archive_interval              : int            # Immutable
+    user_agent                    : str            # Immutable
+    poll_secs                     : int            # Immutable
+    retry_wait_secs               : int            # Immutable
+    days_to_keep                  : int            # Immutable
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -161,31 +163,35 @@ class NWS(StdService):
             raise Exception('nws schema mismatch: %s != %s' % (dbcol, memcol))
 
         self.cfg = Configuration(
-            lock                  = threading.Lock(),
-            alertsAllClear        = False,
-            alerts                = [],
-            twelveHourForecasts   = [],
-            oneHourForecasts      = [],
-            twelveHourForecastUrl = None,
-            oneHourForecastUrl    = None,
-            alertsUrl             = None,
-            latitude              = latitude,
-            longitude             = longitude,
-            timeout_secs          = to_int(self.nws_config_dict.get('timeout_secs', 10)),
-            archive_interval      = to_int(config_dict['StdArchive']['archive_interval']),
-            user_agent            = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
-            poll_secs             = to_int(self.nws_config_dict.get('poll_secs', 1800)),
-            retry_wait_secs       = to_int(self.nws_config_dict.get('retry_wait_secs', 600)),
-            days_to_keep          = to_int(self.nws_config_dict.get('days_to_keep', 90)),
+            lock                           = threading.Lock(),
+            alertsAllClear                 = False,
+            alerts                         = [],
+            twelveHourForecasts            = [],
+            oneHourForecasts               = [],
+            twelveHourForecastUrl          = None,
+            oneHourForecastUrl             = None,
+            hardCodedTwelveHourForecastUrl = self.nws_config_dict.get('twelve_hour_forecast_url', None),
+            hardCodedOneHourForecastUrl    = self.nws_config_dict.get('one_hour_forecast_url', None),
+            alertsUrl                      = None,
+            latitude                       = latitude,
+            longitude                      = longitude,
+            timeout_secs                   = to_int(self.nws_config_dict.get('timeout_secs', 10)),
+            archive_interval               = to_int(config_dict['StdArchive']['archive_interval']),
+            user_agent                     = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
+            poll_secs                      = to_int(self.nws_config_dict.get('poll_secs', 1800)),
+            retry_wait_secs                = to_int(self.nws_config_dict.get('retry_wait_secs', 600)),
+            days_to_keep                   = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             )
-        log.info('latitude        : %s' % self.cfg.latitude)
-        log.info('longitude       : %s' % self.cfg.longitude)
-        log.info('timeout_secs    : %d' % self.cfg.timeout_secs)
-        log.info('archive_interval: %d' % self.cfg.archive_interval)
-        log.info('user_agent      : %s' % self.cfg.user_agent)
-        log.info('poll_secs       : %d' % self.cfg.poll_secs)
-        log.info('retry_wait_secs : %d' % self.cfg.retry_wait_secs)
-        log.info('days_to_keep    : %d' % self.cfg.days_to_keep)
+        log.info('latitude                      : %s' % self.cfg.latitude)
+        log.info('longitude                     : %s' % self.cfg.longitude)
+        log.info('hardCodedOneHourForecastUrl   : %s' % self.cfg.hardCodedOneHourForecastUrl)
+        log.info('hardCodedTwelveHourForecastUrl: %s' % self.cfg.hardCodedTwelveHourForecastUrl)
+        log.info('timeout_secs                  : %d' % self.cfg.timeout_secs)
+        log.info('archive_interval              : %d' % self.cfg.archive_interval)
+        log.info('user_agent                    : %s' % self.cfg.user_agent)
+        log.info('poll_secs                     : %d' % self.cfg.poll_secs)
+        log.info('retry_wait_secs               : %d' % self.cfg.retry_wait_secs)
+        log.info('days_to_keep                  : %d' % self.cfg.days_to_keep)
 
         # If the machine was just rebooted, a temporary failure in name
         # resolution is likely.  As such, try three times to get
@@ -557,9 +563,15 @@ class NWSPoller:
         log.debug('request_forecast(%s): start' % forecast_type)
         with cfg.lock:
             if forecast_type == ForecastType.ONE_HOUR:
-                forecastUrl = cfg.oneHourForecastUrl
+                if cfg.hardCodedOneHourForecastUrl is not None:
+                    forecastUrl = cfg.hardCodedOneHourForecastUrl
+                else:
+                    forecastUrl = cfg.oneHourForecastUrl
             elif forecast_type == ForecastType.TWELVE_HOUR:
-                forecastUrl = cfg.twelveHourForecastUrl
+                if cfg.hardCodedTwelveHourForecastUrl is not None:
+                    forecastUrl = cfg.hardCodedTwelveHourForecastUrl
+                else:
+                    forecastUrl = cfg.twelveHourForecastUrl
             else:
                 forecastUrl = cfg.alertsUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
@@ -569,9 +581,15 @@ class NWSPoller:
                 return None
         with cfg.lock:
             if forecast_type == ForecastType.ONE_HOUR:
-                forecastUrl = cfg.oneHourForecastUrl
+                if cfg.hardCodedOneHourForecastUrl is not None:
+                    forecastUrl = cfg.hardCodedOneHourForecastUrl
+                else:
+                    forecastUrl = cfg.oneHourForecastUrl
             elif forecast_type == ForecastType.TWELVE_HOUR:
-                forecastUrl = cfg.twelveHourForecastUrl
+                if cfg.hardCodedTwelveHourForecastUrl is not None:
+                    forecastUrl = cfg.hardCodedTwelveHourForecastUrl
+                else:
+                    forecastUrl = cfg.twelveHourForecastUrl
             else:
                 forecastUrl = cfg.alertsUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
