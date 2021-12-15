@@ -47,7 +47,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.4"
+WEEWX_NWS_VERSION = "1.5"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -228,6 +228,9 @@ class NWS(StdService):
                     bucket = self.cfg.oneHourForecasts
                 else:       # ForecastType.ALERTS
                     bucket = self.cfg.alerts
+                if len(bucket) != 0 and (forecast_type == ForecastType.TWELVE_HOUR or forecast_type == ForecastType.ONE_HOUR) and bucket[0].generatedTime > time.time():
+                    log.info('Forecast %s, generated %s, ignored because the generated time is in the future.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
+                    return
                 log.debug('saveForecastsToDB(%s): bucket: %s' % (forecast_type, bucket))
                 if len(bucket) != 0:
                     ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
