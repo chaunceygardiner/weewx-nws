@@ -1007,6 +1007,9 @@ if __name__ == '__main__':
         # Check to see if forecast already in DB
         tzinfos = {'UTC': tz.gettz("UTC")}
         generatedTime = int(parse(j['properties']['updateTime'], tzinfos=tzinfos).timestamp())
+        if (forecast_type == ForecastType.TWELVE_HOUR or forecast_type == ForecastType.ONE_HOUR) and generatedTime > time.time():
+            print('%s forecast generated at %s is in the future!  Skipping insert.' % (forecast_type, timestamp_to_string(generatedTime)))
+            return
         select = "SELECT COUNT(*) FROM archive WHERE interval = %d AND generatedTime = %d LIMIT 1" % (
             NWS.get_interval(forecast_type), generatedTime)
         existing_count: int = 0
