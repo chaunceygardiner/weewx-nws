@@ -997,6 +997,13 @@ if __name__ == '__main__':
         f = open(fname)
         contents: str = f.read()
         j = json.loads(contents)
+        # Check that the forecast is the correct size (14 for 12-hour, 156 for hourly).
+        if (forecast_type == ForecastType.TWELVE_HOUR) and len(j['properties']['periods']) != 14:
+            print("Expecting 14 periods for a TWELVE_HOUR forecast, found %d." % len(j['properties']['periods']))
+            return
+        if (forecast_type == ForecastType.ONE_HOUR) and len(j['properties']['periods']) != 156:
+            print("Expecting 156 periods for a ONE_HOUR forecast, found %d." % len(j['properties']['periods']))
+            return
         try:
             import sqlite3
         except:
@@ -1004,12 +1011,13 @@ if __name__ == '__main__':
             return
         ts = NWS.get_archive_interval_timestamp(arcint)
         conn = sqlite3.connect(dbfile)
-        # Check to see if forecast already in DB
         tzinfos = {'UTC': tz.gettz("UTC")}
         generatedTime = int(parse(j['properties']['updateTime'], tzinfos=tzinfos).timestamp())
+        # Check to see if forecast is in the future
         if (forecast_type == ForecastType.TWELVE_HOUR or forecast_type == ForecastType.ONE_HOUR) and generatedTime > time.time():
             print('%s forecast generated at %s is in the future!  Skipping insert.' % (forecast_type, timestamp_to_string(generatedTime)))
             return
+        # Check to see if forecast already in DB
         select = "SELECT COUNT(*) FROM archive WHERE interval = %d AND generatedTime = %d LIMIT 1" % (
             NWS.get_interval(forecast_type), generatedTime)
         existing_count: int = 0
