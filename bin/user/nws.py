@@ -23,6 +23,7 @@ import configobj
 import datetime
 import json
 import logging
+import os.path
 import requests
 import sys
 import threading
@@ -47,7 +48,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.5"
+WEEWX_NWS_VERSION = "1.6"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -114,12 +115,16 @@ class Configuration:
     alertsAllClear                : bool           # Controlled by lock
     alerts                        : List[Forecast] # Controlled by lock
     twelveHourForecasts           : List[Forecast] # Controlled by lock
+    twelveHourForecastsJson       : str            # Controlled by lock
     oneHourForecasts              : List[Forecast] # Controlled by lock
+    oneHourForecastsJson          : str            # Controlled by lock
     alertsUrl                     : Optional[str]  # Controlled by lock
     twelveHourForecastUrl         : Optional[str]  # Controlled by lock
     oneHourForecastUrl            : Optional[str]  # Controlled by lock
     hardCodedTwelveHourForecastUrl: Optional[str]  # Immutable
     hardCodedOneHourForecastUrl   : Optional[str]  # Immutable
+    readTwelveHourForecastFromFile : Optional[str]  # Immutable
+    readOneHourForecastFromFile   : Optional[str]  # Immutable
     latitude                      : str            # Immutable
     longitude                     : str            # Immutable
     timeout_secs                  : int            # Immutable
@@ -128,6 +133,7 @@ class Configuration:
     poll_secs                     : int            # Immutable
     retry_wait_secs               : int            # Immutable
     days_to_keep                  : int            # Immutable
+    forecasts_dir                 : str            # Immutable
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -167,11 +173,15 @@ class NWS(StdService):
             alertsAllClear                 = False,
             alerts                         = [],
             twelveHourForecasts            = [],
+            twelveHourForecastsJson        = '',
             oneHourForecasts               = [],
+            oneHourForecastsJson           = '',
             twelveHourForecastUrl          = None,
             oneHourForecastUrl             = None,
             hardCodedTwelveHourForecastUrl = self.nws_config_dict.get('twelve_hour_forecast_url', None),
             hardCodedOneHourForecastUrl    = self.nws_config_dict.get('one_hour_forecast_url', None),
+            readTwelveHourForecastFromFile = self.nws_config_dict.get('read_twelve_hour_forecast_from_file', None),
+            readOneHourForecastFromFile    = self.nws_config_dict.get('read_one_hour_forecast_from_file', None),
             alertsUrl                      = None,
             latitude                       = latitude,
             longitude                      = longitude,
@@ -181,17 +191,21 @@ class NWS(StdService):
             poll_secs                      = to_int(self.nws_config_dict.get('poll_secs', 1800)),
             retry_wait_secs                = to_int(self.nws_config_dict.get('retry_wait_secs', 600)),
             days_to_keep                   = to_int(self.nws_config_dict.get('days_to_keep', 90)),
+            forecasts_dir                  = self.nws_config_dict.get('forecasts_dir', ''),
             )
         log.info('latitude                      : %s' % self.cfg.latitude)
         log.info('longitude                     : %s' % self.cfg.longitude)
         log.info('hardCodedOneHourForecastUrl   : %s' % self.cfg.hardCodedOneHourForecastUrl)
         log.info('hardCodedTwelveHourForecastUrl: %s' % self.cfg.hardCodedTwelveHourForecastUrl)
+        log.info('readTwelveHourForecastFromFile: %s' % self.cfg.readTwelveHourForecastFromFile)
+        log.info('readOneHourForecastFromFile   : %s' % self.cfg.readOneHourForecastFromFile)
         log.info('timeout_secs                  : %d' % self.cfg.timeout_secs)
         log.info('archive_interval              : %d' % self.cfg.archive_interval)
         log.info('user_agent                    : %s' % self.cfg.user_agent)
         log.info('poll_secs                     : %d' % self.cfg.poll_secs)
         log.info('retry_wait_secs               : %d' % self.cfg.retry_wait_secs)
         log.info('days_to_keep                  : %d' % self.cfg.days_to_keep)
+        log.info('forecasts_dir                 : %s' % self.cfg.forecasts_dir)
 
         # If the machine was just rebooted, a temporary failure in name
         # resolution is likely.  As such, try three times to get
@@ -224,8 +238,12 @@ class NWS(StdService):
             with self.cfg.lock:
                 if forecast_type == ForecastType.TWELVE_HOUR:
                     bucket = self.cfg.twelveHourForecasts
+                    forecast_json = self.cfg.twelveHourForecastsJson
+                    forecast_filename = 'TWELVE_HOUR'
                 elif forecast_type == ForecastType.ONE_HOUR:
                     bucket = self.cfg.oneHourForecasts
+                    forecast_json = self.cfg.oneHourForecastsJson
+                    forecast_filename = 'ONE_HOUR'
                 else:       # ForecastType.ALERTS
                     bucket = self.cfg.alerts
                 if len(bucket) != 0 and (forecast_type == ForecastType.TWELVE_HOUR or forecast_type == ForecastType.ONE_HOUR) and bucket[0].generatedTime > time.time():
@@ -241,6 +259,10 @@ class NWS(StdService):
                             self.save_forecast(NWS.convert_to_json(record, ts))
                         log.info('Saved %d %s records.' % (len(bucket), forecast_type))
                         self.delete_old_forecasts(forecast_type);
+                        # If requested, write forecast to a file
+                        if self.cfg.forecasts_dir is not None and self.cfg.forecasts_dir != '':
+                            with open('%s/%s' % (self.cfg.forecasts_dir, forecast_filename), 'w') as outfile:
+                                json.dump(forecast_json, outfile)
                     else:
                         log.debug('Forecast %s, generated %s, already exists in the database.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
                     bucket.clear()
@@ -447,8 +469,10 @@ class NWSPoller:
             with cfg.lock:
                 if forecast_type == ForecastType.ONE_HOUR:
                     cfg.oneHourForecasts.clear()
+                    cfg.oneHourForecastsJson = j
                 elif forecast_type == ForecastType.TWELVE_HOUR:
                     cfg.twelveHourForecasts.clear()
+                    cfg.twelveHourForecastsJson = j
                 else:
                     cfg.alerts.clear()
                     cfg.alertsAllClear = True    # Will be set to False below if there are any alerts present
@@ -566,11 +590,21 @@ class NWSPoller:
         log.debug('request_forecast(%s): start' % forecast_type)
         with cfg.lock:
             if forecast_type == ForecastType.ONE_HOUR:
+                if cfg.readOneHourForecastFromFile is not None and os.path.exists(cfg.readOneHourForecastFromFile):
+                    log.info('Reading %s forecasts from file: %s.' % (forecast_type, cfg.readOneHourForecastFromFile))
+                    f = open(cfg.readOneHourForecastFromFile)
+                    one_hour_contents: str = f.read()
+                    return json.loads(one_hour_contents)
                 if cfg.hardCodedOneHourForecastUrl is not None:
                     forecastUrl = cfg.hardCodedOneHourForecastUrl
                 else:
                     forecastUrl = cfg.oneHourForecastUrl
             elif forecast_type == ForecastType.TWELVE_HOUR:
+                if cfg.readTwelveHourForecastFromFile is not None and os.path.exists(cfg.readTwelveHourForecastFromFile):
+                    log.info('Reading %s forecasts from file: %s.' % (forecast_type, cfg.readTwelveHourForecastFromFile))
+                    f = open(cfg.readTwelveHourForecastFromFile)
+                    twelve_hour_contents: str = f.read()
+                    return json.loads(twelve_hour_contents)
                 if cfg.hardCodedTwelveHourForecastUrl is not None:
                     forecastUrl = cfg.hardCodedTwelveHourForecastUrl
                 else:
@@ -997,13 +1031,6 @@ if __name__ == '__main__':
         f = open(fname)
         contents: str = f.read()
         j = json.loads(contents)
-        # Check that the forecast is the correct size (14 for 12-hour, 156 for hourly).
-        if (forecast_type == ForecastType.TWELVE_HOUR) and len(j['properties']['periods']) != 14:
-            print("Expecting 14 periods for a TWELVE_HOUR forecast, found %d." % len(j['properties']['periods']))
-            return
-        if (forecast_type == ForecastType.ONE_HOUR) and len(j['properties']['periods']) != 156:
-            print("Expecting 156 periods for a ONE_HOUR forecast, found %d." % len(j['properties']['periods']))
-            return
         try:
             import sqlite3
         except:
@@ -1011,13 +1038,12 @@ if __name__ == '__main__':
             return
         ts = NWS.get_archive_interval_timestamp(arcint)
         conn = sqlite3.connect(dbfile)
+        # Check to see if forecast already in DB
         tzinfos = {'UTC': tz.gettz("UTC")}
         generatedTime = int(parse(j['properties']['updateTime'], tzinfos=tzinfos).timestamp())
-        # Check to see if forecast is in the future
         if (forecast_type == ForecastType.TWELVE_HOUR or forecast_type == ForecastType.ONE_HOUR) and generatedTime > time.time():
             print('%s forecast generated at %s is in the future!  Skipping insert.' % (forecast_type, timestamp_to_string(generatedTime)))
             return
-        # Check to see if forecast already in DB
         select = "SELECT COUNT(*) FROM archive WHERE interval = %d AND generatedTime = %d LIMIT 1" % (
             NWS.get_interval(forecast_type), generatedTime)
         existing_count: int = 0
@@ -1058,10 +1084,16 @@ if __name__ == '__main__':
             alertsAllClear        = False,
             alerts                = [],
             twelveHourForecasts   = [],
+            twelveHourForecastsJson = '',
             oneHourForecasts      = [],
+            oneHourForecastsJson  = '',
             alertsUrl             = None,
             twelveHourForecastUrl = None,
             oneHourForecastUrl    = None,
+            hardCodedTwelveHourForecastUrl = None,
+            hardCodedOneHourForecastUrl = None,
+            readTwelveHourForecastFromFile = None,
+            readOneHourForecastFromFile = None,
             latitude              = str(lat),
             longitude             = str(long),
             timeout_secs          = 5,
@@ -1070,6 +1102,7 @@ if __name__ == '__main__':
             poll_secs             = 3600,
             retry_wait_secs       = 30,
             days_to_keep          = 90,
+            forecasts_dir         = '',
             )
 
         j = NWSPoller.request_forecast(cfg, forecast_type)

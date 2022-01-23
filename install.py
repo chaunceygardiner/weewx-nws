@@ -22,7 +22,7 @@ def loader():
 class NWSInstaller(ExtensionInstaller):
     def __init__(self):
         super(NWSInstaller, self).__init__(
-            version="1.5",
+            version="1.6",
             name='nws',
             description='Fetch NWS Hourly Forecast.',
             author="John A Kline",

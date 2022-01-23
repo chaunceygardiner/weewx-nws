@@ -1,9 +1,23 @@
 nws change history
 ------------------
 
+1.6 01/23/2022
+1. Support sharing forecasts between instances.  To accomplish this,
+   a. for the "master" machine (i.e., the instance that will make
+      forecasts available to share), add the following to the NWS
+      section:
+        forecasts_dir = <directory-to-write-TWELVE_HOUR-and-ONE_HOUR-forecasts>
+   b. distribute the TWELVE_HOUR and ONE_HOUR files on your own (with rsync or scp commands in crontab)
+   c. on the machines where the TWELVE_HOUR and ONE_HOUR files are distributed, add
+      the following to the NWS section:
+        read_twelve_hour_forecast_from_file = /<path>/TWELVE_HOUR
+        read_one_hour_forecast_from_file = /<path>/ONE_HOUR
+   With the above setup, only one instance (the master) will actually call nws.
+   Note: It is not anticipated that this feature will be popular, as such, it is not described in the README.
+
 1.5 12/14/2021
 --------------
-1. Gaurd against downloading forecasts with a generated time in the future.
+1. Guard against downloading forecasts with a generated time in the future.
    (Unfortunately, NWS is sometimes returning bogus generated times.)
 
 1.4 11/23/2021
