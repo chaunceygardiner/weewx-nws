@@ -123,6 +123,7 @@ class Configuration:
     oneHourForecastUrl            : Optional[str]  # Controlled by lock
     hardCodedTwelveHourForecastUrl: Optional[str]  # Immutable
     hardCodedOneHourForecastUrl   : Optional[str]  # Immutable
+    readAlertsFromFile            : Optional[str]  # Immutable
     readTwelveHourForecastFromFile : Optional[str]  # Immutable
     readOneHourForecastFromFile   : Optional[str]  # Immutable
     latitude                      : str            # Immutable
@@ -180,6 +181,7 @@ class NWS(StdService):
             oneHourForecastUrl             = None,
             hardCodedTwelveHourForecastUrl = self.nws_config_dict.get('twelve_hour_forecast_url', None),
             hardCodedOneHourForecastUrl    = self.nws_config_dict.get('one_hour_forecast_url', None),
+            readAlertsFromFile             = self.nws_config_dict.get('read_alerts_from_file', None),
             readTwelveHourForecastFromFile = self.nws_config_dict.get('read_twelve_hour_forecast_from_file', None),
             readOneHourForecastFromFile    = self.nws_config_dict.get('read_one_hour_forecast_from_file', None),
             alertsUrl                      = None,
@@ -197,6 +199,7 @@ class NWS(StdService):
         log.info('longitude                     : %s' % self.cfg.longitude)
         log.info('hardCodedOneHourForecastUrl   : %s' % self.cfg.hardCodedOneHourForecastUrl)
         log.info('hardCodedTwelveHourForecastUrl: %s' % self.cfg.hardCodedTwelveHourForecastUrl)
+        log.info('readAlertsFromFile            : %s' % self.cfg.readAlertsFromFile)
         log.info('readTwelveHourForecastFromFile: %s' % self.cfg.readTwelveHourForecastFromFile)
         log.info('readOneHourForecastFromFile   : %s' % self.cfg.readOneHourForecastFromFile)
         log.info('timeout_secs                  : %d' % self.cfg.timeout_secs)
@@ -259,8 +262,8 @@ class NWS(StdService):
                             self.save_forecast(NWS.convert_to_json(record, ts))
                         log.info('Saved %d %s records.' % (len(bucket), forecast_type))
                         self.delete_old_forecasts(forecast_type);
-                        # If requested, write forecast to a file
-                        if self.cfg.forecasts_dir is not None and self.cfg.forecasts_dir != '':
+                        # If requested, write forecast to a file (don't do this for alerts, the file is writen elsewhere for alerts)
+                        if forecast_type != ForecastType.ALERTS and self.cfg.forecasts_dir is not None and self.cfg.forecasts_dir != '':
                             with open('%s/%s' % (self.cfg.forecasts_dir, forecast_filename), 'w') as outfile:
                                 json.dump(forecast_json, outfile)
                     else:
@@ -497,6 +500,10 @@ class NWSPoller:
                 log.info('Downloaded 0 %s records.' % forecast_type)
             else:
                 log.info('Downloaded %d %s records generated at %s' % (record_count, forecast_type, timestamp_to_string(generatedTime)))
+            # Save alerts to a file if requested (skip lock as forecasts_dir is immutable)
+            if forecast_type == ForecastType.ALERTS and cfg.forecasts_dir is not None and cfg.forecasts_dir != '':
+                with open('%s/%s' % (cfg.forecasts_dir, 'ALERTS'), 'w') as outfile:
+                    json.dump(j, outfile)
             return True
 
     @staticmethod
@@ -610,6 +617,11 @@ class NWSPoller:
                 else:
                     forecastUrl = cfg.twelveHourForecastUrl
             else:
+                if cfg.readAlertsFromFile is not None and os.path.exists(cfg.readAlertsFromFile):
+                    log.info('Reading alerts from file: %s.' % cfg.readAlertsFromFile)
+                    f = open(cfg.readAlertsFromFile)
+                    alerts_contents: str = f.read()
+                    return json.loads(alerts_contents)
                 forecastUrl = cfg.alertsUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
         if forecastUrl == None:
@@ -1092,6 +1104,7 @@ if __name__ == '__main__':
             oneHourForecastUrl    = None,
             hardCodedTwelveHourForecastUrl = None,
             hardCodedOneHourForecastUrl = None,
+            readAlertsFromFile    = None,
             readTwelveHourForecastFromFile = None,
             readOneHourForecastFromFile = None,
             latitude              = str(lat),
