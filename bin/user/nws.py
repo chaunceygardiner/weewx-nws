@@ -618,7 +618,7 @@ class NWSPoller:
                     forecastUrl = cfg.twelveHourForecastUrl
             else:
                 if cfg.readAlertsFromFile is not None and os.path.exists(cfg.readAlertsFromFile):
-                    log.info('Reading alerts from file: %s.' % cfg.readAlertsFromFile)
+                    log.info('Reading ForecastType.ALERTS forecasts from file: %s.' % cfg.readAlertsFromFile)
                     f = open(cfg.readAlertsFromFile)
                     alerts_contents: str = f.read()
                     return json.loads(alerts_contents)
