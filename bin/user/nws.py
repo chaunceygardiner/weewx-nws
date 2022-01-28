@@ -193,6 +193,9 @@ class NWS(StdService):
             )
         log.info('latitude                      : %s' % self.cfg.latitude)
         log.info('longitude                     : %s' % self.cfg.longitude)
+        log.info('alertsUrl                     : %s' % self.cfg.alertsUrl)
+        log.info('oneHourForecastUrl            : %s' % self.cfg.oneHourForecastUrl)
+        log.info('twelveHourForecastUrl         : %s' % self.cfg.twelveHourForecastUrl)
         log.info('hardCodedOneHourForecastUrl   : %s' % self.cfg.hardCodedOneHourForecastUrl)
         log.info('hardCodedTwelveHourForecastUrl: %s' % self.cfg.hardCodedTwelveHourForecastUrl)
         log.info('timeout_secs                  : %d' % self.cfg.timeout_secs)
@@ -207,11 +210,12 @@ class NWS(StdService):
         # If the machine was just rebooted, a temporary failure in name
         # resolution is likely.  As such, try three times to get
         # request urls.
-        for i in range(3):
-            if NWSPoller.request_urls(self.cfg):
-                break
-            if i < 2:
-                time.sleep(5)
+        if self.cfg.read_forecasts_dir is None or self.cfg.read_forecasts_dir == '':
+            for i in range(3):
+                if NWSPoller.request_urls(self.cfg):
+                    break
+                if i < 2:
+                    time.sleep(5)
 
         # Start a thread to query NWS for forecasts
         nws_poller: NWSPoller = NWSPoller(self.cfg)
@@ -450,8 +454,9 @@ class NWSPoller:
                 weeutil.logger.log_traceback(log.error, "    ****  ")
                 time.sleep(self.cfg.retry_wait_secs)
             # After the sleep, get new URLs (there is a slim chance they could have changed.
-            if not NWSPoller.request_urls(self.cfg):
-                log.info('Could not refresh URLs, will continue to use cached URLs (unlikely to be an issue).')
+            if self.cfg.read_forecasts_dir is None or self.cfg.read_forecasts_dir == '':
+                if not NWSPoller.request_urls(self.cfg):
+                    log.info('Could not refresh URLs, will continue to use cached URLs (unlikely to be an issue).')
 
     @staticmethod
     def populate_forecast(cfg, forecast_type: ForecastType) -> bool:
