@@ -1,6 +1,42 @@
 nws change history
 ------------------
 
+1.7 01/28/2022
+1. Revamped support for sharing forecasts between instances.
+
+   a. Master weewx instances (i.e., instances of weewx that will
+      query NWS for forecasts and distribute them), should add
+      the following to the NWS section in weewx.conf:
+
+   [NWS]
+       .
+       .
+       .
+       [[RsyncSpec]]
+           enable = true
+           remote_clients = <weewx-machine-1>, <weewx-machine-2>
+           remote_user = root
+           remote_dir = /root/forecasts
+           compress = false
+           log_success = false
+           ssh_options = -o ConnectTimeout=1
+           timeout = 1
+
+   b. client weewx instances that will read forecast files distributed
+      by the master (auto-magically via ssh), need to add the following
+      to the NWS section of weewx.conf:
+
+   [NWS]
+       .
+       .
+       .
+       read_from_dir = /root/forecasts
+
+    c. passwordless ssh also needs to be setup between the master and the
+       clients from the user on the master to the user specified by
+       remote_user.  If you don't understand this, this feature is not for
+       you.
+
 1.6 01/23/2022
 1. Support sharing forecasts between instances.  To accomplish this,
    a. for the "master" machine (i.e., the instance that will make

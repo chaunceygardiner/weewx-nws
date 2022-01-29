@@ -41,6 +41,7 @@ import weewx.units
 import weeutil.weeutil
 
 from weeutil.weeutil import timestamp_to_string
+from weeutil.weeutil import to_bool
 from weeutil.weeutil import to_float
 from weeutil.weeutil import to_int
 from weewx.engine import StdService
@@ -48,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.6"
+WEEWX_NWS_VERSION = "1.7"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -110,29 +111,41 @@ class Forecast:
     detailedForecast: Optional[str] # For alerts,hold the description
 
 @dataclass
+class SshConfiguration:
+    enable        : bool
+    remote_clients: List[str]
+    remote_port   : int
+    remote_user   : str
+    remote_dir    : str
+    compress      : bool
+    log_success   : bool
+    ssh_options   : List[str]
+    timeout       : int
+
+@dataclass
 class Configuration:
     lock                          : threading.Lock
-    alertsAllClear                : bool           # Controlled by lock
-    alerts                        : List[Forecast] # Controlled by lock
-    twelveHourForecasts           : List[Forecast] # Controlled by lock
-    twelveHourForecastsJson       : str            # Controlled by lock
-    oneHourForecasts              : List[Forecast] # Controlled by lock
-    oneHourForecastsJson          : str            # Controlled by lock
-    alertsUrl                     : Optional[str]  # Controlled by lock
-    twelveHourForecastUrl         : Optional[str]  # Controlled by lock
-    oneHourForecastUrl            : Optional[str]  # Controlled by lock
-    hardCodedTwelveHourForecastUrl: Optional[str]  # Immutable
-    hardCodedOneHourForecastUrl   : Optional[str]  # Immutable
-    latitude                      : str            # Immutable
-    longitude                     : str            # Immutable
-    timeout_secs                  : int            # Immutable
-    archive_interval              : int            # Immutable
-    user_agent                    : str            # Immutable
-    poll_secs                     : int            # Immutable
-    retry_wait_secs               : int            # Immutable
-    days_to_keep                  : int            # Immutable
-    write_forecasts_dir           : Optional[str]  # Immutable
-    read_forecasts_dir            : Optional[str]  # Immutable
+    alertsAllClear                : bool                       # Controlled by lock
+    alerts                        : List[Forecast]             # Controlled by lock
+    twelveHourForecasts           : List[Forecast]             # Controlled by lock
+    twelveHourForecastsJson       : str                        # Controlled by lock
+    oneHourForecasts              : List[Forecast]             # Controlled by lock
+    oneHourForecastsJson          : str                        # Controlled by lock
+    alertsUrl                     : Optional[str]              # Controlled by lock
+    twelveHourForecastUrl         : Optional[str]              # Controlled by lock
+    oneHourForecastUrl            : Optional[str]              # Controlled by lock
+    hardCodedTwelveHourForecastUrl: Optional[str]              # Immutable
+    hardCodedOneHourForecastUrl   : Optional[str]              # Immutable
+    latitude                      : str                        # Immutable
+    longitude                     : str                        # Immutable
+    timeout_secs                  : int                        # Immutable
+    archive_interval              : int                        # Immutable
+    user_agent                    : str                        # Immutable
+    poll_secs                     : int                        # Immutable
+    retry_wait_secs               : int                        # Immutable
+    days_to_keep                  : int                        # Immutable
+    read_from_dir                 : Optional[str]              # Immutable
+    ssh_config                    : Optional[SshConfiguration] # Immutable
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -167,6 +180,8 @@ class NWS(StdService):
         if dbcol != memcol:
             raise Exception('nws schema mismatch: %s != %s' % (dbcol, memcol))
 
+        rsync_spec_dict = self.nws_config_dict.get('RsyncSpec', {})
+
         self.cfg = Configuration(
             lock                           = threading.Lock(),
             alertsAllClear                 = False,
@@ -188,8 +203,19 @@ class NWS(StdService):
             poll_secs                      = to_int(self.nws_config_dict.get('poll_secs', 1800)),
             retry_wait_secs                = to_int(self.nws_config_dict.get('retry_wait_secs', 600)),
             days_to_keep                   = to_int(self.nws_config_dict.get('days_to_keep', 90)),
-            write_forecasts_dir            = self.nws_config_dict.get('write_forecasts_dir', None),
-            read_forecasts_dir             = self.nws_config_dict.get('read_forecasts_dir', None),
+            read_from_dir                  = self.nws_config_dict.get('read_from_dir', None),
+            ssh_config                     = SshConfiguration(
+                enable                         = to_bool(rsync_spec_dict.get('enable')),
+                remote_clients                 = rsync_spec_dict.get('remote_clients'),
+                remote_port                    = to_int(rsync_spec_dict.get('remote_port')) if rsync_spec_dict.get(
+                                                 'remote_port') is not None else None,
+                remote_user                    = rsync_spec_dict.get('remote_user'),
+                remote_dir                     = rsync_spec_dict.get('remote_dir'),
+                compress                       = to_bool(rsync_spec_dict.get('compress')),
+                log_success                    = to_bool(rsync_spec_dict.get('log_success')),
+                ssh_options                    = rsync_spec_dict.get('ssh_options', '-o ConnectTimeout=1'),
+                timeout                        = to_int(rsync_spec_dict.get('timeout', 1)),
+                ),
             )
         log.info('latitude                      : %s' % self.cfg.latitude)
         log.info('longitude                     : %s' % self.cfg.longitude)
@@ -204,13 +230,26 @@ class NWS(StdService):
         log.info('poll_secs                     : %d' % self.cfg.poll_secs)
         log.info('retry_wait_secs               : %d' % self.cfg.retry_wait_secs)
         log.info('days_to_keep                  : %d' % self.cfg.days_to_keep)
-        log.info('write_forecasts_dir           : %s' % self.cfg.write_forecasts_dir)
-        log.info('read_forecasts_dir            : %s' % self.cfg.read_forecasts_dir)
+        log.info('read_from_dir                 : %s' % self.cfg.read_from_dir)
+        if self.cfg.ssh_config is None:
+            log.info('ssh_config                    : None')
+        else:
+            log.info('ssh_config(')
+            log.info('enable                        : %r' % self.cfg.ssh_config.enable)
+            log.info('remote_clients                : %r' % self.cfg.ssh_config.remote_clients)
+            log.info('remote_port                   : %r' % self.cfg.ssh_config.remote_port if self.cfg.ssh_config.remote_port is not None else None)
+            log.info('remote_user                   : %s' % self.cfg.ssh_config.remote_user)
+            log.info('remote_dir                    : %s' % self.cfg.ssh_config.remote_dir)
+            log.info('compress                      : %r' % self.cfg.ssh_config.compress)
+            log.info('log_success                   : %r' % self.cfg.ssh_config.log_success)
+            log.info('ssh_options                   : %r' % self.cfg.ssh_config.ssh_options)
+            log.info('timeout                       : %i' % self.cfg.ssh_config.timeout)
+            log.info(')')
 
         # If the machine was just rebooted, a temporary failure in name
         # resolution is likely.  As such, try three times to get
         # request urls.
-        if self.cfg.read_forecasts_dir is None or self.cfg.read_forecasts_dir == '':
+        if self.cfg.read_from_dir is None or self.cfg.read_from_dir == '':
             for i in range(3):
                 if NWSPoller.request_urls(self.cfg):
                     break
@@ -260,10 +299,18 @@ class NWS(StdService):
                             self.save_forecast(NWS.convert_to_json(record, ts))
                         log.info('Saved %d %s records.' % (len(bucket), forecast_type))
                         self.delete_old_forecasts(forecast_type);
-                        # If requested, write forecast to a file (don't do this for alerts, the file is writen elsewhere for alerts)
-                        if forecast_type != ForecastType.ALERTS and self.cfg.write_forecasts_dir is not None and self.cfg.write_forecasts_dir != '':
-                            with open('%s/%s' % (self.cfg.write_forecasts_dir, forecast_filename), 'w') as outfile:
+                        # If requested, scp forecast to remote clients (don't do this for alerts, the file is writen elsewhere for alerts)
+                        if forecast_type != ForecastType.ALERTS and self.cfg.ssh_config is not None and self.cfg.ssh_config.enable:
+                            # Write json to temp file, then scp to clients
+                            local_file = '/tmp/%s' % forecast_filename
+                            with open(local_file, 'w') as outfile:
                                 json.dump(forecast_json, outfile)
+                            remote_file = '%s/%s' % (self.cfg.ssh_config.remote_dir, forecast_filename)
+                            for remote_host in self.cfg.ssh_config.remote_clients:
+                                NWS.rsync_forecast(local_file, remote_file, remote_host,
+                                    self.cfg.ssh_config.remote_port, self.cfg.ssh_config.timeout,
+                                    self.cfg.ssh_config.remote_user, self.cfg.ssh_config.ssh_options,
+                                    self.cfg.ssh_config.compress, self.cfg.ssh_config.log_success)
                     else:
                         log.debug('Forecast %s, generated %s, already exists in the database.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
                     bucket.clear()
@@ -342,6 +389,28 @@ class NWS(StdService):
     def get_archive_interval_timestamp(archive_interval: int) -> int:
         now_ts = int(time.time() + 0.5)
         return int(now_ts / archive_interval) * archive_interval
+
+    @staticmethod
+    def rsync_forecast(local_file: str, remote_file: str, remote_host: str,
+            remote_port: int, timeout: int, remote_user: str, ssh_options: str,
+            compress: bool, log_success: bool) -> None:
+        log.debug('rsync_forecast() start')
+        rsync_upload = weeutil.rsyncupload.RsyncUpload(
+            local_file,
+            remote_file,
+            server=remote_host,
+            user=remote_user,
+            port=str(remote_port) if remote_port is not None else None,
+            ssh_options=ssh_options,
+            compress=compress,
+            delete=False,
+            log_success=log_success,
+            timeout=timeout)
+        try:
+            rsync_upload.run()
+        except IOError as e:
+            (cl, unused_ob, unused_tr) = sys.exc_info()
+            log.error("rsync_forecast: Caught exception %s: %s" % (cl, e))
 
     @staticmethod
     def convert_to_json(record, ts):
@@ -454,7 +523,7 @@ class NWSPoller:
                 weeutil.logger.log_traceback(log.error, "    ****  ")
                 time.sleep(self.cfg.retry_wait_secs)
             # After the sleep, get new URLs (there is a slim chance they could have changed.
-            if self.cfg.read_forecasts_dir is None or self.cfg.read_forecasts_dir == '':
+            if self.cfg.read_from_dir is None or self.cfg.read_from_dir == '':
                 if not NWSPoller.request_urls(self.cfg):
                     log.info('Could not refresh URLs, will continue to use cached URLs (unlikely to be an issue).')
 
@@ -499,10 +568,18 @@ class NWSPoller:
                 log.info('Downloaded 0 %s records.' % forecast_type)
             else:
                 log.info('Downloaded %d %s records generated at %s' % (record_count, forecast_type, timestamp_to_string(generatedTime)))
-            # Save alerts to a file if requested (skip lock as write_forecasts_dir is immutable)
-            if forecast_type == ForecastType.ALERTS and cfg.write_forecasts_dir is not None and cfg.write_forecasts_dir != '':
-                with open('%s/%s' % (cfg.write_forecasts_dir, 'ALERTS'), 'w') as outfile:
+            # scp alerts to remote clients (skip lock as write_forecasts_dir is immutable)
+            if forecast_type == ForecastType.ALERTS and cfg.ssh_config is not None and cfg.ssh_config.enable:
+                # Write json to temp file, then scp to clients
+                local_file = '/tmp/ALERTS'
+                with open(local_file, 'w') as outfile:
                     json.dump(j, outfile)
+                remote_file = '%s/ALERTS' % cfg.ssh_config.remote_dir
+                for remote_host in cfg.ssh_config.remote_clients:
+                    NWS.rsync_forecast(local_file, remote_file, remote_host,
+                        cfg.ssh_config.remote_port, cfg.ssh_config.timeout,
+                        cfg.ssh_config.remote_user, cfg.ssh_config.ssh_options,
+                        cfg.ssh_config.compress, cfg.ssh_config.log_success)
             return True
 
     @staticmethod
@@ -596,9 +673,9 @@ class NWSPoller:
         log.debug('request_forecast(%s): start' % forecast_type)
         with cfg.lock:
             if forecast_type == ForecastType.ONE_HOUR:
-                if cfg.read_forecasts_dir is not None and os.path.exists('%s/ONE_HOUR' % cfg.read_forecasts_dir):
-                    log.info('Reading %s forecasts from file: %s/ONE_HOUR.' % (forecast_type, cfg.read_forecasts_dir))
-                    f = open('%s/ONE_HOUR' % cfg.read_forecasts_dir)
+                if cfg.read_from_dir is not None and os.path.exists('%s/ONE_HOUR' % cfg.read_from_dir):
+                    log.info('Reading %s forecasts from file: %s/ONE_HOUR.' % (forecast_type, cfg.read_from_dir))
+                    f = open('%s/ONE_HOUR' % cfg.read_from_dir)
                     one_hour_contents: str = f.read()
                     return json.loads(one_hour_contents)
                 if cfg.hardCodedOneHourForecastUrl is not None:
@@ -606,9 +683,9 @@ class NWSPoller:
                 else:
                     forecastUrl = cfg.oneHourForecastUrl
             elif forecast_type == ForecastType.TWELVE_HOUR:
-                if cfg.read_forecasts_dir is not None and os.path.exists('%s/TWELVE_HOUR' % cfg.read_forecasts_dir):
-                    log.info('Reading %s forecasts from file: %s/TWELVE_HOUR.' % (forecast_type, cfg.read_forecasts_dir))
-                    f = open('%s/TWELVE_HOUR' % cfg.read_forecasts_dir)
+                if cfg.read_from_dir is not None and os.path.exists('%s/TWELVE_HOUR' % cfg.read_from_dir):
+                    log.info('Reading %s forecasts from file: %s/TWELVE_HOUR.' % (forecast_type, cfg.read_from_dir))
+                    f = open('%s/TWELVE_HOUR' % cfg.read_from_dir)
                     twelve_hour_contents: str = f.read()
                     return json.loads(twelve_hour_contents)
                 if cfg.hardCodedTwelveHourForecastUrl is not None:
@@ -616,9 +693,9 @@ class NWSPoller:
                 else:
                     forecastUrl = cfg.twelveHourForecastUrl
             else:
-                if cfg.read_forecasts_dir is not None and os.path.exists('%s/ALERTS' % cfg.read_forecasts_dir):
-                    log.info('Reading ForecastType.ALERTS forecasts from file: %s/ALERTS.' % cfg.read_forecasts_dir)
-                    f = open('%s/ALERTS' % cfg.read_forecasts_dir)
+                if cfg.read_from_dir is not None and os.path.exists('%s/ALERTS' % cfg.read_from_dir):
+                    log.info('Reading ForecastType.ALERTS forecasts from file: %s/ALERTS.' % cfg.read_from_dir)
+                    f = open('%s/ALERTS' % cfg.read_from_dir)
                     alerts_contents: str = f.read()
                     return json.loads(alerts_contents)
                 forecastUrl = cfg.alertsUrl
@@ -1111,8 +1188,8 @@ if __name__ == '__main__':
             poll_secs             = 3600,
             retry_wait_secs       = 30,
             days_to_keep          = 90,
-            write_forecasts_dir   = None,
-            read_forecasts_dir    = None,
+            read_from_dir         = None,
+            ssh_config            = None,
             )
 
         j = NWSPoller.request_forecast(cfg, forecast_type)
