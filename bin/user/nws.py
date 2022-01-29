@@ -568,7 +568,7 @@ class NWSPoller:
                 log.info('Downloaded 0 %s records.' % forecast_type)
             else:
                 log.info('Downloaded %d %s records generated at %s' % (record_count, forecast_type, timestamp_to_string(generatedTime)))
-            # scp alerts to remote clients (skip lock as write_forecasts_dir is immutable)
+            # scp alerts to remote clients (skip lock as the ssh parameters are immutable)
             if forecast_type == ForecastType.ALERTS and cfg.ssh_config is not None and cfg.ssh_config.enable:
                 # Write json to temp file, then scp to clients
                 local_file = '/tmp/ALERTS'
