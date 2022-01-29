@@ -237,7 +237,7 @@ class NWS(StdService):
             log.info('ssh_config(')
             log.info('enable                        : %r' % self.cfg.ssh_config.enable)
             log.info('remote_clients                : %r' % self.cfg.ssh_config.remote_clients)
-            log.info('remote_port                   : %r' % self.cfg.ssh_config.remote_port if self.cfg.ssh_config.remote_port is not None else None)
+            log.info('remote_port                   : %r' % (self.cfg.ssh_config.remote_port if self.cfg.ssh_config.remote_port is not None else None))
             log.info('remote_user                   : %s' % self.cfg.ssh_config.remote_user)
             log.info('remote_dir                    : %s' % self.cfg.ssh_config.remote_dir)
             log.info('compress                      : %r' % self.cfg.ssh_config.compress)
