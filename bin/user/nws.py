@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.7"
+WEEWX_NWS_VERSION = "1.8"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -125,27 +125,30 @@ class SshConfiguration:
 @dataclass
 class Configuration:
     lock                          : threading.Lock
-    alertsAllClear                : bool                       # Controlled by lock
-    alerts                        : List[Forecast]             # Controlled by lock
-    twelveHourForecasts           : List[Forecast]             # Controlled by lock
-    twelveHourForecastsJson       : str                        # Controlled by lock
-    oneHourForecasts              : List[Forecast]             # Controlled by lock
-    oneHourForecastsJson          : str                        # Controlled by lock
-    alertsUrl                     : Optional[str]              # Controlled by lock
-    twelveHourForecastUrl         : Optional[str]              # Controlled by lock
-    oneHourForecastUrl            : Optional[str]              # Controlled by lock
-    hardCodedTwelveHourForecastUrl: Optional[str]              # Immutable
-    hardCodedOneHourForecastUrl   : Optional[str]              # Immutable
-    latitude                      : str                        # Immutable
-    longitude                     : str                        # Immutable
-    timeout_secs                  : int                        # Immutable
-    archive_interval              : int                        # Immutable
-    user_agent                    : str                        # Immutable
-    poll_secs                     : int                        # Immutable
-    retry_wait_secs               : int                        # Immutable
-    days_to_keep                  : int                        # Immutable
-    read_from_dir                 : Optional[str]              # Immutable
-    ssh_config                    : Optional[SshConfiguration] # Immutable
+    alertsAllClear                : bool                        # Controlled by lock
+    alerts                        : List[Forecast]              # Controlled by lock
+    lastModifiedAlerts            : Optional[datetime.datetime] # Controlled by lock
+    twelveHourForecasts           : List[Forecast]              # Controlled by lock
+    twelveHourForecastsJson       : str                         # Controlled by lock
+    lastModifiedTwelveHour        : Optional[datetime.datetime] # Controlled by lock
+    oneHourForecasts              : List[Forecast]              # Controlled by lock
+    oneHourForecastsJson          : str                         # Controlled by lock
+    lastModifiedOneHour           : Optional[datetime.datetime] # Controlled by lock
+    alertsUrl                     : str                         # Immutable
+    twelveHourForecastUrl         : Optional[str]               # Controlled by lock
+    oneHourForecastUrl            : Optional[str]               # Controlled by lock
+    hardCodedTwelveHourForecastUrl: Optional[str]               # Immutable
+    hardCodedOneHourForecastUrl   : Optional[str]               # Immutable
+    latitude                      : str                         # Immutable
+    longitude                     : str                         # Immutable
+    timeout_secs                  : int                         # Immutable
+    archive_interval              : int                         # Immutable
+    user_agent                    : str                         # Immutable
+    poll_secs                     : int                         # Immutable
+    retry_wait_secs               : int                         # Immutable
+    days_to_keep                  : int                         # Immutable
+    read_from_dir                 : Optional[str]               # Immutable
+    ssh_config                    : Optional[SshConfiguration]  # Immutable
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -186,15 +189,18 @@ class NWS(StdService):
             lock                           = threading.Lock(),
             alertsAllClear                 = False,
             alerts                         = [],
+            lastModifiedAlerts             = None,
             twelveHourForecasts            = [],
             twelveHourForecastsJson        = '',
+            lastModifiedTwelveHour         = None,
             oneHourForecasts               = [],
             oneHourForecastsJson           = '',
+            lastModifiedOneHour            = None,
             twelveHourForecastUrl          = None,
             oneHourForecastUrl             = None,
             hardCodedTwelveHourForecastUrl = self.nws_config_dict.get('twelve_hour_forecast_url', None),
             hardCodedOneHourForecastUrl    = self.nws_config_dict.get('one_hour_forecast_url', None),
-            alertsUrl                      = None,
+            alertsUrl                      = 'https://api.weather.gov/alerts/active?point=%s,%s' % (latitude, longitude),
             latitude                       = latitude,
             longitude                      = longitude,
             timeout_secs                   = to_int(self.nws_config_dict.get('timeout_secs', 10)),
@@ -249,12 +255,15 @@ class NWS(StdService):
         # If the machine was just rebooted, a temporary failure in name
         # resolution is likely.  As such, try three times to get
         # request urls.
+        # Skip if we're reading forecasts from files.
         if self.cfg.read_from_dir is None or self.cfg.read_from_dir == '':
-            for i in range(3):
-                if NWSPoller.request_urls(self.cfg):
-                    break
-                if i < 2:
-                    time.sleep(5)
+            # Skip if the 1H and 12H forecast URLs are hard coded.
+            if self.cfg.hardCodedTwelveHourForecastUrl is None or self.cfg.hardCodedOneHourForecastUrl is None:
+                for i in range(3):
+                    if NWSPoller.request_urls(self.cfg):
+                        break
+                    if i < 2:
+                        time.sleep(5)
 
         # Start a thread to query NWS for forecasts
         nws_poller: NWSPoller = NWSPoller(self.cfg)
@@ -469,37 +478,40 @@ class NWSPoller:
             try:
                 if not on_retry or twelve_hour_failed:
                     for i in range(4):
-                        success = NWSPoller.populate_forecast(self.cfg, ForecastType.TWELVE_HOUR)
-                        if success:
+                        retry, success = NWSPoller.populate_forecast(self.cfg, ForecastType.TWELVE_HOUR)
+                        if success or not retry:
                             break
-                        if i < 3:
-                            log.info('Retrying ForecastType.TWELVE_HOUR request in 5s.')
-                            time.sleep(5)
-                    if success:
+                        else:
+                            if i < 3:
+                                log.info('Retrying ForecastType.TWELVE_HOUR request in 5s.')
+                                time.sleep(5)
+                    if success or not retry:
                         twelve_hour_failed = False
                     else:
                         twelve_hour_failed = True
                 if not on_retry or one_hour_failed:
                     for i in range(4):
-                        success = NWSPoller.populate_forecast(self.cfg, ForecastType.ONE_HOUR)
-                        if success:
+                        retry, success = NWSPoller.populate_forecast(self.cfg, ForecastType.ONE_HOUR)
+                        if success or not retry:
                             break
-                        if i < 3:
-                            log.info('Retrying ForecastType.ONE_HOUR request in 5s.')
-                            time.sleep(5)
-                    if success:
+                        else:
+                            if i < 3:
+                                log.info('Retrying ForecastType.ONE_HOUR request in 5s.')
+                                time.sleep(5)
+                    if success or not retry:
                         one_hour_failed = False
                     else:
                         one_hour_failed = True
                 if not on_retry or alerts_failed:
                     for i in range(4):
-                        success = NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS)
-                        if success:
+                        retry, success = NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS)
+                        if success or not retry:
                             break
-                        if i < 3:
-                            log.info('Retrying ForecastType.ALERTS request in 5s.')
-                            time.sleep(5)
-                    if success:
+                        else:
+                            if i < 3:
+                                log.info('Retrying ForecastType.ALERTS request in 5s.')
+                                time.sleep(5)
+                    if success or not retry:
                         alerts_failed = False
                     else:
                         alerts_failed = True
@@ -522,18 +534,19 @@ class NWSPoller:
                 log.error('poll_nws: Encountered exception. Retrying in %d seconds. exception: %s (%s)' % (self.cfg.retry_wait_secs, e, type(e)))
                 weeutil.logger.log_traceback(log.error, "    ****  ")
                 time.sleep(self.cfg.retry_wait_secs)
+            # For now, don't refresh URLs.  Perhaps we could refresh URLs once a day.
             # After the sleep, get new URLs (there is a slim chance they could have changed.
-            if self.cfg.read_from_dir is None or self.cfg.read_from_dir == '':
-                if not NWSPoller.request_urls(self.cfg):
-                    log.info('Could not refresh URLs, will continue to use cached URLs (unlikely to be an issue).')
+            #if self.cfg.read_from_dir is None or self.cfg.read_from_dir == '':
+            #    if not NWSPoller.request_urls(self.cfg):
+            #        log.info('Could not refresh URLs, will continue to use cached URLs (unlikely to be an issue).')
 
     @staticmethod
-    def populate_forecast(cfg, forecast_type: ForecastType) -> bool:
+    def populate_forecast(cfg, forecast_type: ForecastType) -> Tuple[bool, bool]:
         log.debug('populate_forecast(%s): start' % forecast_type)
         start_time = time.time()
-        j = NWSPoller.request_forecast(cfg, forecast_type)
+        retry, j = NWSPoller.request_forecast(cfg, forecast_type)
         if j == None:
-            return False
+            return retry, False # Retry will be False if forecast has not been modified
         else:
             elapsed_time = time.time() - start_time
             log.debug('Queries to NWS took %f seconds' % elapsed_time)
@@ -563,7 +576,7 @@ class NWSPoller:
                             cfg.alertsAllClear = False    # Alerts will not be deleted from db since there is an active alert.
                 except KeyError as e:
                     log.error("populate_forecast(%s): Could not compose forecast record.  Key: '%s' missing in returned forecast." % (forecast_type, e))
-                    return False
+                    return True, False  # retry since unsuccessful
             if record_count == 0:
                 log.info('Downloaded 0 %s records.' % forecast_type)
             else:
@@ -580,7 +593,7 @@ class NWSPoller:
                         cfg.ssh_config.remote_port, cfg.ssh_config.timeout,
                         cfg.ssh_config.remote_user, cfg.ssh_config.ssh_options,
                         cfg.ssh_config.compress, cfg.ssh_config.log_success)
-            return True
+            return False, True # no-need to retry as successful
 
     @staticmethod
     def time_to_next_poll(poll_secs: int):
@@ -652,10 +665,8 @@ class NWSPoller:
                 with cfg.lock:
                     cfg.twelveHourForecastUrl = j['properties']['forecast']
                     cfg.oneHourForecastUrl    = j['properties']['forecastHourly']
-                    cfg.alertsUrl             = 'https://api.weather.gov/alerts/active?point=%s,%s' % (cfg.latitude, cfg.longitude)
                     log.info('request_urls: twelveHourForecastUrl: %s' % cfg.twelveHourForecastUrl)
                     log.info('request_urls: oneHourForecastUrl: %s' % cfg.oneHourForecastUrl)
-                    log.info('request_urls: alertsUrl: %s' % cfg.alertsUrl)
                 return True
             else:
                 return False
@@ -677,7 +688,7 @@ class NWSPoller:
                     log.info('Reading %s forecasts from file: %s/ONE_HOUR.' % (forecast_type, cfg.read_from_dir))
                     f = open('%s/ONE_HOUR' % cfg.read_from_dir)
                     one_hour_contents: str = f.read()
-                    return json.loads(one_hour_contents)
+                    return False, json.loads(one_hour_contents)
                 if cfg.hardCodedOneHourForecastUrl is not None:
                     forecastUrl = cfg.hardCodedOneHourForecastUrl
                 else:
@@ -687,7 +698,7 @@ class NWSPoller:
                     log.info('Reading %s forecasts from file: %s/TWELVE_HOUR.' % (forecast_type, cfg.read_from_dir))
                     f = open('%s/TWELVE_HOUR' % cfg.read_from_dir)
                     twelve_hour_contents: str = f.read()
-                    return json.loads(twelve_hour_contents)
+                    return False, json.loads(twelve_hour_contents)
                 if cfg.hardCodedTwelveHourForecastUrl is not None:
                     forecastUrl = cfg.hardCodedTwelveHourForecastUrl
                 else:
@@ -697,53 +708,76 @@ class NWSPoller:
                     log.info('Reading ForecastType.ALERTS forecasts from file: %s/ALERTS.' % cfg.read_from_dir)
                     f = open('%s/ALERTS' % cfg.read_from_dir)
                     alerts_contents: str = f.read()
-                    return json.loads(alerts_contents)
+                    return False, json.loads(alerts_contents)
                 forecastUrl = cfg.alertsUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
         if forecastUrl == None:
             if not NWSPoller.request_urls(cfg):
                 log.info('request_forecast(%s): skipping attempt since request_urls was unsuccessful.' % forecast_type)
-                return None
-        with cfg.lock:
-            if forecast_type == ForecastType.ONE_HOUR:
-                if cfg.hardCodedOneHourForecastUrl is not None:
-                    forecastUrl = cfg.hardCodedOneHourForecastUrl
-                else:
-                    forecastUrl = cfg.oneHourForecastUrl
-            elif forecast_type == ForecastType.TWELVE_HOUR:
-                if cfg.hardCodedTwelveHourForecastUrl is not None:
-                    forecastUrl = cfg.hardCodedTwelveHourForecastUrl
-                else:
-                    forecastUrl = cfg.twelveHourForecastUrl
+                return True, None
             else:
-                forecastUrl = cfg.alertsUrl
+                # We now have filled in the urls.  It must be either 1H or 12H (and not hardcoded).
+                with cfg.lock:
+                    if forecast_type == ForecastType.ONE_HOUR:
+                        forecastUrl = cfg.oneHourForecastUrl
+                    elif forecast_type == ForecastType.TWELVE_HOUR:
+                        forecastUrl = cfg.twelveHourForecastUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
         try:
             log.info('Downloading %s forecasts from %s.' % (forecast_type, forecastUrl))
             session= requests.Session()
             headers = {'User-Agent': cfg.user_agent}
+            with cfg.lock:
+                if forecast_type == ForecastType.ONE_HOUR:
+                    lastModified = cfg.lastModifiedOneHour
+                elif forecast_type == ForecastType.TWELVE_HOUR:
+                    lastModified = cfg.lastModifiedTwelveHour
+                else: # ALERT
+                    lastModified = cfg.lastModifiedAlerts
+            if lastModified is not None:
+                lastModifiedStr = lastModified.strftime('%a, %d %b %Y %H:%M:%S %Z')
+                headers['If-Modified-Since'] = lastModifiedStr
+            log.info('%s: calling requests.Response with %r' % (forecast_type, headers))
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
             log.debug('response: %s' % response)
             if response.status_code == 404 or response.status_code == 503:
                 NWSPoller.log_404_and_503('request_forecast(%s)' % forecast_type, forecastUrl, response)
-                return None
+                return True, None
+            if response.status_code == 304: # 304 (Not Modified)
+                log.info('%s: Skipping since not modified since %s' % (forecast_type, lastModifiedStr))
+                return False, None
             response.raise_for_status()
             if response:
-                return response.json()
+                j = response.json()
+                last_mod = None
+                if 'Last-Modified' in response.headers:
+                    last_mod = parse(response.headers['Last-Modified'])
+                elif 'properties' in j and 'updateTime' in j['properties']:
+                    # Use updateTime for last-modified.
+                    last_mod = parse(j['properties']['updateTime'])
+                if last_mod is not None and last_mod <= datetime.datetime.now(datetime.timezone.utc):
+                    with cfg.lock:
+                        if forecast_type == ForecastType.ONE_HOUR:
+                            cfg.lastModifiedOneHour = last_mod
+                        elif forecast_type == ForecastType.TWELVE_HOUR:
+                            cfg.lastModifiedTwelveHour = last_mod
+                        else: # ALERT
+                            cfg.lastModifiedAlerts = last_mod
+                return True, j
             else:
                 log.debug('returning None')
                 return None
         except requests.exceptions.RequestException as e:
             log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
-            return None
+            return True, None
         except json.decoder.JSONDecodeError as e:
             log.error('request_forecast(%s): Could not convert response to json: %s, error: %s (%s).' % (forecast_type, response, e, type(e)))
-            return None
+            return True, None
         except Exception as e:
             # Unexpected exceptions need a stack track to diagnose.
             log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
             weeutil.logger.log_traceback(log.error, "    ****  ")
-            return None
+            return True, None
 
     @staticmethod
     def compose_alert_records(j, latitude: str, longitude: str):
@@ -1171,11 +1205,14 @@ if __name__ == '__main__':
             lock                  = threading.Lock(),
             alertsAllClear        = False,
             alerts                = [],
+            lastModifiedAlerts    = None,
             twelveHourForecasts   = [],
             twelveHourForecastsJson = '',
+            lastModifiedTwelveHour = None,
             oneHourForecasts      = [],
             oneHourForecastsJson  = '',
-            alertsUrl             = None,
+            lastModifiedOneHour   = None,
+            alertsUrl             = 'https://api.weather.gov/alerts/active?point=str(lat),str(long)',
             twelveHourForecastUrl = None,
             oneHourForecastUrl    = None,
             hardCodedTwelveHourForecastUrl = None,
@@ -1192,7 +1229,7 @@ if __name__ == '__main__':
             ssh_config            = None,
             )
 
-        j = NWSPoller.request_forecast(cfg, forecast_type)
+        _, j = NWSPoller.request_forecast(cfg, forecast_type)
         if j is not None:
             for forecast in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
                 pretty_print_forecast(forecast)
@@ -1237,11 +1274,14 @@ if __name__ == '__main__':
             engine = StdEngine(config)
             nws = NWS(engine, config)
 
-            if NWSPoller.populate_forecast(nws.cfg, ForecastType.TWELVE_HOUR):
+            _, rc = NWSPoller.populate_forecast(nws.cfg, ForecastType.TWELVE_HOUR)
+            if rc:
                 nws.saveForecastsToDB(ForecastType.TWELVE_HOUR)
-            if NWSPoller.populate_forecast(nws.cfg, ForecastType.ONE_HOUR):
+            _, rc = NWSPoller.populate_forecast(nws.cfg, ForecastType.ONE_HOUR)
+            if rc:
                 nws.saveForecastsToDB(ForecastType.ONE_HOUR)
-            if NWSPoller.populate_forecast(nws.cfg, ForecastType.ALERTS):
+            _, rc = NWSPoller.populate_forecast(nws.cfg, ForecastType.ALERTS)
+            if rc:
                 nws.saveForecastsToDB(ForecastType.ALERTS)
 
             for record in nws.select_forecasts(ForecastType.TWELVE_HOUR):

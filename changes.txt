@@ -1,6 +1,11 @@
 nws change history
 ------------------
 
+1.8 02/01/2022
+1. Hang on to Last-Modified header in response so it can be passed
+   as If-Modified-Since header in request.  In this way, the server
+   will return 304 (Not Mofified) if there isn't a new forecast.
+
 1.7 01/28/2022
 1. Revamped support for sharing forecasts between instances.
 
