@@ -754,7 +754,8 @@ class NWSPoller:
                     last_mod = parse(response.headers['Last-Modified'])
                 elif 'properties' in j and 'updateTime' in j['properties']:
                     # Use updateTime for last-modified.
-                    last_mod = parse(j['properties']['updateTime'])
+                    tzinfos = {'UTC': tz.gettz("UTC")}
+                    last_mod = parse(j['properties']['updateTime'], tzinfos=tzinfos)
                 if last_mod is not None and last_mod <= datetime.datetime.now(datetime.timezone.utc):
                     with cfg.lock:
                         if forecast_type == ForecastType.ONE_HOUR:
