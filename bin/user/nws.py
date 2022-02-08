@@ -750,12 +750,14 @@ class NWSPoller:
             if response:
                 j = response.json()
                 last_mod = None
+                tzinfos = {'UTC': tz.gettz("UTC")}
                 if 'Last-Modified' in response.headers:
-                    last_mod = parse(response.headers['Last-Modified'])
+                    last_mod = parse(response.headers['Last-Modified'], tzinfos=tzinfos)
+                    log.debug('%s: last_mod retrieved from Last-Modified header: %s' % (forecast_type, last_mod.strftime('%a, %d %b %Y %H:%M:%S %Z')))
                 elif 'properties' in j and 'updateTime' in j['properties']:
                     # Use updateTime for last-modified.
-                    tzinfos = {'UTC': tz.gettz("UTC")}
                     last_mod = parse(j['properties']['updateTime'], tzinfos=tzinfos)
+                    log.debug('%s: last_mod retrieved from updateTime: %s' % (forecast_type, last_mod.strftime('%a, %d %b %Y %H:%M:%S %Z')))
                 if last_mod is not None and last_mod <= datetime.datetime.now(datetime.timezone.utc):
                     with cfg.lock:
                         if forecast_type == ForecastType.ONE_HOUR:
