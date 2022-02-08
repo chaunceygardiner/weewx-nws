@@ -749,6 +749,7 @@ class NWSPoller:
             response.raise_for_status()
             if response:
                 j = response.json()
+                log.debug('request_forecast(%s): response.headers: %r' % (forecast_type, response.headers))
                 last_mod = None
                 tzinfos = {'UTC': tz.gettz("UTC")}
                 if 'Last-Modified' in response.headers:
