@@ -737,6 +737,8 @@ class NWSPoller:
             if lastModified is not None:
                 lastModifiedStr = lastModified.strftime('%a, %d %b %Y %H:%M:%S %Z')
                 headers['If-Modified-Since'] = lastModifiedStr
+            # Work around NWS caching issue.
+            headers['Feature-Flags'] =  '%f' % time.time()
             log.info('%s: calling requests.Response with %r' % (forecast_type, headers))
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
             log.debug('response: %s' % response)
