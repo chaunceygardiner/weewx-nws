@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+1.9 02/11/2022
+1. Fix errors if RsyncSpec section not specified in weewx.conf
+
 1.8 02/01/2022
 1. Hang on to Last-Modified header in response so it can be passed
    as If-Modified-Since header in request.  In this way, the server

@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.8"
+WEEWX_NWS_VERSION = "1.9"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -211,14 +211,14 @@ class NWS(StdService):
             days_to_keep                   = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             read_from_dir                  = self.nws_config_dict.get('read_from_dir', None),
             ssh_config                     = SshConfiguration(
-                enable                         = to_bool(rsync_spec_dict.get('enable')),
+                enable                         = to_bool(rsync_spec_dict.get('enable', False)),
                 remote_clients                 = rsync_spec_dict.get('remote_clients'),
                 remote_port                    = to_int(rsync_spec_dict.get('remote_port')) if rsync_spec_dict.get(
                                                  'remote_port') is not None else None,
                 remote_user                    = rsync_spec_dict.get('remote_user'),
                 remote_dir                     = rsync_spec_dict.get('remote_dir'),
-                compress                       = to_bool(rsync_spec_dict.get('compress')),
-                log_success                    = to_bool(rsync_spec_dict.get('log_success')),
+                compress                       = to_bool(rsync_spec_dict.get('compress', True)),
+                log_success                    = to_bool(rsync_spec_dict.get('log_success', False)),
                 ssh_options                    = rsync_spec_dict.get('ssh_options', '-o ConnectTimeout=1'),
                 timeout                        = to_int(rsync_spec_dict.get('timeout', 1)),
                 ),
