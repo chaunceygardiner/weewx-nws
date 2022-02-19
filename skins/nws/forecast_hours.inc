@@ -57,7 +57,7 @@
                   <tr>
                     <td style='width:34%;'>$hour.shortForecast</td>
                     <td style='width:33%;'>$hour.outTemp.format('%.0f')</td>
-                    <td style='width:33%;'>$hour.windSpeed $hour.windDir.ordinal_compass</td>
+                    <td style='width:33%;'>$hour.windSpeed.format('%.0f') $hour.windDir.ordinal_compass</td>
                   </tr>
                 </table>
               </td>

@@ -27,7 +27,7 @@
               <tr style='width:100%;'><td>Temp</td></tr>
               <tr style='width:100%;'><td>$twelve_hour.outTemp.format('%.0f') $twelve_hour.outTempTrend </td></tr>
               <tr style='width:100%;'><td>Wind</td></tr>
-              <tr style='width:100%;'><td>$twelve_hour.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
+              <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f') $twelve_hour.windDir.ordinal_compass</td></tr>
             </table>
           </td>
           <td style='width:54%;'>
