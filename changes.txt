@@ -1,6 +1,17 @@
 nws change history
 ------------------
 
+1.10 04/25/2022
+1. Emit error in log if returned NWS forecast is the wrong grid (due to a long standing NWS bug.
+   If you see a message in the log such as:
+   "WARNING user.nws: Lat/Long 37.431495/-122.110937 does not fall within bounds of forecast's polygon (due to NWS Bug)."
+   your grid is off by (1,1).  In this example, you'll see in the log that the grid being called is 92,88.
+       INFO user.nws: Downloading ForecastType.TWELVE_HOUR forecasts from https://api.weather.gov/gridpoints/MTR/91,87/forecast.
+       INFO user.nws: Downloading ForecastType.ONE_HOUR forecasts from https://api.weather.gov/gridpoints/MTR/92,88/forecast/hourly.
+   It should be 91,87.  As such, add the following lines to the NWS section of weewx.conf:
+       twelve_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast"
+       one_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast/hourly"
+
 1.9 02/11/2022
 1. Fix errors if RsyncSpec section not specified in weewx.conf
 

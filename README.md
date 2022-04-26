@@ -48,7 +48,15 @@ Copyright (C)2020-2021 by John A Kline (john@johnkline.com)
 
 1. If NWS is returning the wrong grid for your lat/long (as is the case for the author),
    the twelve hour and one hour forecast URLs can be hardcoded with the correct grid
-   with the `one_hour_forecast_url` and `twelve_hour_forecast_url` entries as follows:
+   with the `one_hour_forecast_url` and `twelve_hour_forecast_url`.
+   For example, using Lat/Long 37.431495/-122.110937, you'll see a message in the log:
+   "WARNING user.nws: Lat/Long 37.431495/-122.110937 does not fall within bounds of forecast's polygon (due to NWS Bug)."
+   Your grid is off by (1,1).  In this example, you'll see in the log that the grid being called is 92,88.
+   ```
+   INFO user.nws: Downloading ForecastType.TWELVE_HOUR forecasts from https://api.weather.gov/gridpoints/MTR/91,87/forecast.
+   INFO user.nws: Downloading ForecastType.ONE_HOUR forecasts from https://api.weather.gov/gridpoints/MTR/92,88/forecast/hourly.
+   ```
+   It should be 91,87.  As such, add the following lines to the NWS section of weewx.conf:
    ```
    [NWS]
        twelve_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast"

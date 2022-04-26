@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.9"
+WEEWX_NWS_VERSION = "1.10"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -149,6 +149,15 @@ class Configuration:
     days_to_keep                  : int                         # Immutable
     read_from_dir                 : Optional[str]               # Immutable
     ssh_config                    : Optional[SshConfiguration]  # Immutable
+
+@dataclass
+class Point:
+    lat : float
+    long: float
+
+@dataclass
+class Side:
+    point: List[Point]
 
 class NWS(StdService):
     """Fetch NWS Forecasts"""
@@ -454,6 +463,161 @@ class NWS(StdService):
             return 720
         # ALERTS
         return 0
+
+    @staticmethod
+    def vectors_intersect(vec1: Side, vec2: Side) -> bool:
+        d1: float;
+        d2: float;
+        a1: float;
+        a2: float;
+        b1: float;
+        b2: float;
+        c1: float;
+        c2: float;
+
+        # Convert vector 1 to a line (line 1) of infinite length.
+        # We want the line in linear equation standard form: A*x + B*y + C = 0
+        # See: http://en.wikipedia.org/wiki/Linear_equation
+
+        #v1x1 is vec1.point[0].lat
+        #v1x2 is vec1.point[1].lat
+        #v1y1 is vec1.point[0].long
+        #v1y2 is vec1.point[1].long
+        #v2x1 is vec2.point[0].lat
+        #v2x2 is vec2.point[1].lat
+        #v2y1 is vec2.point[0].long
+        #v2y2 is vec2.point[1].long
+
+
+        a1 = vec1.point[1].long - vec1.point[0].long
+        b1 = vec1.point[0].lat - vec1.point[1].lat
+        c1 = (vec1.point[1].lat * vec1.point[0].long) - (vec1.point[0].lat * vec1.point[1].long)
+
+        # Every point (x,y), that solves the equation above, is on the line,
+        # every point that does not solve it, is not. The equation will have a
+        # positive result if it is on one side of the line and a negative one
+        # if is on the other side of it. We insert (x1,y1) and (x2,y2) of vector
+        # 2 into the equation above.
+        d1 = (a1 * vec2.point[0].lat) + (b1 * vec2.point[0].long) + c1
+        d2 = (a1 * vec2.point[1].lat) + (b1 * vec2.point[1].long) + c1
+
+        # If d1 and d2 both have the same sign, they are both on the same side
+        # of our line 1 and in that case no intersection is possible. Careful,
+        # 0 is a special case, that's why we don't test ">=" and "<=",
+        # but "<" and ">".
+        if d1 > 0 and d2 > 0:
+            return False
+        if d1 < 0 and d2 < 0:
+            return False
+
+        # The fact that vector 2 intersected the infinite line 1 above doesn't
+        # mean it also intersects the vector 1. Vector 1 is only a subset of that
+        # infinite line 1, so it may have intersected that line before the vector
+        # started or after it ended. To know for sure, we have to repeat the
+        # the same test the other way round. We start by calculating the
+        # infinite line 2 in linear equation standard form.
+        a2 = vec2.point[1].long - vec2.point[0].long
+        b2 = vec2.point[0].lat - vec2.point[1].lat
+        c2 = (vec2.point[1].lat * vec2.point[0].long) - (vec2.point[0].lat * vec2.point[1].long)
+
+        # Calculate d1 and d2 again, this time using points of vector 1.
+        d1 = (a2 * vec1.point[0].lat) + (b2 * vec1.point[0].long) + c2
+        d2 = (a2 * vec1.point[1].lat) + (b2 * vec1.point[1].long) + c2
+
+        # Again, if both have the same sign (and neither one is 0),
+        # no intersection is possible.
+        if d1 > 0 and d2 > 0:
+            return False
+        if d1 < 0 and d2 < 0:
+            return False
+
+        # If we get here, only two possibilities are left. Either the two
+        # vectors intersect in exactly one point or they are collinear, which
+        # means they intersect in any number of points from zero to infinite.
+        if (a1 * b2) - (a2 * b1) == 0.0:
+            return False # Arbitrarily return False here
+
+        # If they are not collinear, they must intersect in exactly one point.
+        return True
+
+    @staticmethod
+    def point_in_polygon(point: Point, polygon: List[Side]) -> bool:
+        """ Determine if forecast returned is for the correct area (it could be off by (1,1) due to an NWS bug.
+            Pass lat, long of location as well as the polygon sides that form the bounds of the forecast area
+            Returns true if lat/long is within the polygon.
+            See: https://stackoverflow.com/questions/217578/how-can-i-determine-whether-a-2d-point-is-within-a-polygon
+        """
+        # Find min/max lat/long.
+        lat_min : Optional[float] = None
+        lat_max : Optional[float] = None
+        long_min: Optional[float] = None
+        long_max: Optional[float] = None
+        for side in polygon:
+            if lat_min is None or side.point[0].lat < lat_min:
+                lat_min = side.point[0].lat
+            if  side.point[1].lat < lat_min:
+                lat_min = side.point[1].lat
+            if long_min is None or side.point[0].long < long_min:
+                long_min = side.point[0].long
+            if  side.point[1].long < long_min:
+                long_min = side.point[1].long
+            if lat_max is None or side.point[0].lat > lat_max:
+                lat_max = side.point[0].lat
+            if  side.point[1].lat > lat_max:
+                lat_max = side.point[1].lat
+            if long_max is None or side.point[0].long > long_max:
+                long_max = side.point[0].long
+            if  side.point[1].long > long_max:
+                long_max = side.point[1].long
+        assert lat_min is not None
+        assert lat_max is not None
+        assert long_min is not None
+        assert long_max is not None
+
+        # Quick check to eliminate candidates
+
+        if point.lat < lat_min or point.lat > lat_max or point.long < long_min or point.long > long_max:
+            return False
+
+        # Specify a ray that includes point
+        ray: Side = Side([
+            Point(
+                lat  = lat_min - 1,
+                long = point.long),
+            Point(
+                lat  = point.lat,
+                long = point.long)])
+
+        # Test the ray against all sides
+        intersections: int = 0
+        for side in polygon:
+            # Test if current side intersects with ray.
+            if NWS.vectors_intersect(ray, side):
+                intersections += 1
+        return (intersections & 1) == 1
+
+    @staticmethod
+    def check_latlong_against_nws_polygon(latitude: float, longitude: float, coordinates: List[List[List[float]]]):
+        # Check if lat,long fall within the returned polygon.
+        # Coordinates is an array of lat/long (array) pairs.
+
+        point: Point = Point(latitude, longitude)
+
+        # Construct the sides.
+        sides: List[Side] = []
+        prev_coordinate: Optional[Point] = None
+        for coordinates_group in coordinates:
+            for coordinate in coordinates_group:
+                if prev_coordinate is None:
+                    # NWS uses long/lat order
+                    prev_coordinate = Point(coordinate[1], coordinate[0])
+                else:
+                    # NWS uses long/lat order
+                    sides.append(Side([prev_coordinate, Point(coordinate[1], coordinate[0])]))
+                    prev_coordinate = Point(coordinate[1], coordinate[0])
+
+        log.info('point: %r, sides: %r' % (point, sides))
+        return NWS.point_in_polygon(point, sides)
 
     def save_forecast(self, record):
         """save data to database"""
@@ -834,6 +998,9 @@ class NWSPoller:
             yield from NWSPoller.compose_alert_records(j, latitude, longitude)
             return
 
+        if not NWS.check_latlong_against_nws_polygon(float(latitude), float(longitude), j['geometry']['coordinates']):
+            log.warn("Lat/Long %s/%s does not fall within bounds of forecast's polygon (due to NWS Bug)." % (latitude, longitude))
+
         # 2020-05-18T22:02:26+00:00
         log.debug('compose_records(%s): updateTime: %s' % (forecast_type, j['properties']['updateTime']))
         tzinfos = {'UTC': tz.gettz("UTC")}
@@ -1062,6 +1229,8 @@ if __name__ == '__main__':
         parser.add_option('--binding', dest="binding", metavar="BINDING",
                           default='nws_binding',
                           help="The data binding to use. Default is 'nws_binding'.")
+        parser.add_option('--test-point-in-polygon', dest='testpointinpolygon', action='store_true',
+                          help='Test the point in polygon function.')
         parser.add_option('--test-requester', dest='testreq', action='store_true',
                           help='Test the forecast requester.  Requires specify --type, --latitude, --longitude.')
         parser.add_option('--type', dest='ty',
@@ -1102,6 +1271,9 @@ if __name__ == '__main__':
             if not options.lat or not options.long:
                 parser.error('--test-service requires --latitude and --longitude arguments')
             manually_insert_forecast(forecast_type, options.fname, options.db, options.lat, options.long, options.arcint)
+
+        if options.testpointinpolygon:
+            test_point_in_polygon()
 
         if options.testreq:
             forecast_type = decode_forecast_type(options.ty)
@@ -1242,6 +1414,82 @@ if __name__ == '__main__':
                 print('------------------------')
         else:
             print('request_forecast returned None.')
+
+    def test_point_in_polygon():
+        point = Point(
+            lat  = 37.4315,
+            long = -122.1109)
+
+        polygon_91_87: List[Side] = [
+            Side([
+                Point(
+                    lat = 37.441464000000003,
+                    long  = -122.13802870000001),
+                Point(
+                    lat = 37.419633300000001,
+                    long  = -122.13245160000001)]),
+
+            Side([
+                Point(
+                    lat = 37.419633300000001,
+                    long  = -122.13245160000001),
+                Point(
+                    lat = 37.42407,
+                    long  = -122.10489700000001)]),
+
+            Side([
+                Point(
+                    lat = 37.42407,
+                    long  = -122.10489700000001),
+                Point(
+                    lat = 37.4459011,
+                    long  = -122.11046870000001)]),
+
+            Side([
+                Point(
+                    lat = 37.4459011,
+                    long  = -122.11046870000001),
+                Point(
+                    lat = 37.441464000000003,
+                    long  = -122.13802870000001)])
+            ]
+
+        polygon_92_88: List[Side] = [
+            Side([
+                Point(
+                    lat = 37.467745899999997,
+                    long  = -122.1160977),
+                Point(
+                    lat = 37.4459011,
+                    long  = -122.1105197)]),
+
+            Side([
+                Point(
+                    lat = 37.4459011,
+                    long  = -122.1105197),
+                Point(
+                    lat = 37.450318099999997,
+                    long  = -122.0830553)]),
+
+            Side([
+                Point(
+                    lat = 37.450318099999997,
+                    long  = -122.0830553),
+                Point(
+                    lat = 37.472163299999998,
+                    long  = -122.088628)]),
+
+            Side([
+                Point(
+                    lat = 37.472163299999998,
+                    long  = -122.088628),
+                Point(
+                    lat = 37.467745899999997,
+                    long  = -122.1160977)])
+            ]
+
+        assert NWS.point_in_polygon(point, polygon_91_87) == True
+        assert NWS.point_in_polygon(point, polygon_92_88) == False
 
     def test_service(lat: float, long: float):
         from weewx.engine import StdEngine
