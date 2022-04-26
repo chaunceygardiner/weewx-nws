@@ -616,7 +616,6 @@ class NWS(StdService):
                     sides.append(Side([prev_coordinate, Point(coordinate[1], coordinate[0])]))
                     prev_coordinate = Point(coordinate[1], coordinate[0])
 
-        log.info('point: %r, sides: %r' % (point, sides))
         return NWS.point_in_polygon(point, sides)
 
     def save_forecast(self, record):
