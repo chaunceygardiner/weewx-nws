@@ -1,6 +1,18 @@
 nws change history
 ------------------
 
+1.11 ??/??/????
+1. Added a standalone utility to test if NWS will return the correct forecast grid and,
+   if it doesn't, figure out the correct grid and print the lines to add to the [NWS]
+   section of weewx.conf so that the correct grid is used.
+   Sample running of check_grid utility:
+   $ ./check_grid.py --latitude 37.431495 --longitude -122.110937
+   nws computed the incorrect grid(92, 88) for lat/long 37.431495/-122.110937
+
+    Add the following two lines to the [NWS] section in weewx.conf:
+        twelve_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast"
+        one_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast/hourly"
+
 1.10 04/25/2022
 1. Emit error in log if returned NWS forecast is the wrong grid (due to a long standing NWS bug.
    If you see a message in the log such as:

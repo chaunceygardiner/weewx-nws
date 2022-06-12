@@ -63,6 +63,19 @@ Copyright (C)2020-2021 by John A Kline (john@johnkline.com)
        one_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast/hourly"
    ```
 
+   There is now a utility included with the plugin that one can run to figure out if NWS returns the correct
+   grid; and, if not, it prints the lines to add to the NWS section in order to get the correct grid.
+   Following is a sample run of that utility.  Of course, you'll need to use the latitude and longitude
+   of your station, as specified in the weewx.conf file.
+   ```
+   $ ./check_grid.py --latitude 37.431495 --longitude -122.110937
+   nws computed the incorrect grid(92, 88) for lat/long 37.431495/-122.110937
+
+   Add the following two lines to the [NWS] section in weewx.conf:
+       twelve_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast"
+       one_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast/hourly"
+   ```
+
 1. By default, nws will keep 90 days of forecasts.  One can change this in weewx.conf.
    Set days_to_keep to zero to keep all forecasts.
    Note: Alerts are deleted when they expire.  As such, days_to_keep has no affect on alerts.
