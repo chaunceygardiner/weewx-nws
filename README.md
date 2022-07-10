@@ -66,7 +66,13 @@ Copyright (C)2020-2021 by John A Kline (john@johnkline.com)
    There is now a utility included with the plugin that one can run to figure out if NWS returns the correct
    grid; and, if not, it prints the lines to add to the NWS section in order to get the correct grid.
    Following is a sample run of that utility.  Of course, you'll need to use the latitude and longitude
-   of your station, as specified in the weewx.conf file.
+   of your station, as specified in the weewx.conf file.  Also, please note, you'll need to install
+   matplotlib to run this utility.  Matplotlib is NOT needed to run the extension.  On Debian systems,
+   matlotlib can be installed with:
+   ```
+   sudo apt install python3-matplotlib
+   ```
+   A sample sesion of the check_grid utility follows:
    ```
    $ ./check_grid.py --latitude 37.431495 --longitude -122.110937
    nws computed the incorrect grid(92, 88) for lat/long 37.431495/-122.110937
