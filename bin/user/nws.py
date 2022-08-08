@@ -966,28 +966,33 @@ class NWSPoller:
                 else:
                     # Sometimes alert['ends'] is None, use expires instead.
                     ends      = parse(alert['expires'], tzinfos=tzinfos).timestamp()
-                record = Forecast(
-                    interval         = NWS.get_interval(ForecastType.ALERTS),
-                    latitude         = latitude,
-                    longitude        = longitude,
-                    usUnits          = weewx.US,                # Dummy
-                    generatedTime    = int(effective),
-                    number           = alertCount,
-                    name             = alert['event'],
-                    startTime        = onset,
-                    endTime          = ends,
-                    isDaytime        = True,                    # Dummy
-                    outTemp          = 0.0,                     # Dummy
-                    outTempTrend     = '',                      # Dummy
-                    windSpeed        = 0.0,                     # Dummy
-                    windDir          = 0.0,                     # Dummy
-                    iconUrl          = '',                      # Dummy
-                    shortForecast    = alert['headline'],
-                    detailedForecast = alert['description'],
-                    )
-                alertCount += 1
-                log.debug('compose_alert_records: yielding record %s' % record)
-                yield record
+                # Check for expiredReferences in alert[parameters].
+                # If expiredReferences found, don't include alert.
+                if 'expiredReferences' in alert['parameters']:
+                    log.info('found expired alert (skipping): %s' % alert['id'])
+                else:
+                    record = Forecast(
+                        interval         = NWS.get_interval(ForecastType.ALERTS),
+                        latitude         = latitude,
+                        longitude        = longitude,
+                        usUnits          = weewx.US,                # Dummy
+                        generatedTime    = int(effective),
+                        number           = alertCount,
+                        name             = alert['event'],
+                        startTime        = onset,
+                        endTime          = ends,
+                        isDaytime        = True,                    # Dummy
+                        outTemp          = 0.0,                     # Dummy
+                        outTempTrend     = '',                      # Dummy
+                        windSpeed        = 0.0,                     # Dummy
+                        windDir          = 0.0,                     # Dummy
+                        iconUrl          = '',                      # Dummy
+                        shortForecast    = alert['headline'],
+                        detailedForecast = alert['description'],
+                        )
+                    alertCount += 1
+                    log.debug('compose_alert_records: yielding record %s' % record)
+                    yield record
             except Exception as e:
                 log.info('malformed alert (skipping): %s, %s' % (feature, e))
 
