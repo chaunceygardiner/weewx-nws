@@ -1,6 +1,10 @@
 nws change history
 ------------------
 
+1.12 08/31/2022
+1. Properly implement ignoring expired alerts (this is a workaround due to an nws issue.
+   The previous workaround was ignoring the new alert and keeping the expired alert!
+
 1.11 06/11/2022
 1. Added a standalone utility to test if NWS will return the correct forecast grid and,
    if it doesn't, figure out the correct grid and print the lines to add to the [NWS]
