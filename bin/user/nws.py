@@ -1626,7 +1626,7 @@ if __name__ == '__main__':
         print('latitude        : %s' % record['latitude'])
         print('longitude       : %s' % record['longitude'])
         print('usUnits         : %d' % record['usUnits'])
-        print('gneratedTime    : %s' % timestamp_to_string(record['generatedTime']))
+        print('generatedTime   : %s' % timestamp_to_string(record['generatedTime']))
         print('number          : %d' % record['number'])
         print('name            : %s' % record['name'])
         print('startTime       : %s' % timestamp_to_string(record['startTime']))
