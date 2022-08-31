@@ -952,6 +952,7 @@ class NWSPoller:
     def compose_alert_records(j, latitude: str, longitude: str):
         log.debug('compose_alert_records: len(j[features]): %d' % len(j['features']))
         alertCount = 0
+        expired_ids = set()
         for feature in j['features']:
             try:
                 alert = feature['properties']
@@ -966,9 +967,15 @@ class NWSPoller:
                 else:
                     # Sometimes alert['ends'] is None, use expires instead.
                     ends      = parse(alert['expires'], tzinfos=tzinfos).timestamp()
-                # Check for expiredReferences in alert[parameters].
-                # If expiredReferences found, don't include alert.
+                # Keep track of ids in expiredReferences in alert[parameters].
+                # Note: this relies on expired alerts coming after a newer alert that contains the expired ids.
                 if 'expiredReferences' in alert['parameters']:
+                    for expiredRef in alert['parameters']['expiredReferences']:
+                        split_text = expiredRef.split(',')
+                        for segment in split_text:
+                            if segment.startswith("urn:oid"):
+                                expired_ids.add(segment)
+                if alert['id'] in expired_ids:
                     log.info('found expired alert (skipping): %s' % alert['id'])
                 else:
                     record = Forecast(
