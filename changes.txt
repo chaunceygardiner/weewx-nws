@@ -3,6 +3,9 @@ nws change history
 
 1.14 09/03/2022
 1.  This time, hopefully, really fix Alerts.
+    ******* IMPORTANT, you must delete the existing nws database (nws.sdb) if        *******
+    ******* udating from v.1.13.1 or earlier.  Do this just before restaring weewx.  *******
+    ******* This is necessary because the schema has changed.                        *******
 
 1.13.1 09/02/2022
 1. Alerts bug fix.

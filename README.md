@@ -8,6 +8,8 @@ A WeeWX extension for NWS forecasts.
 Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
 
 **THIS PLUGIN REQUIRES PYTHON 3 AND WEEWX 4**
+**If you are updating from versions 1.13.1 or less, you MUST delete the nws database (nws.sdb) before
+  restarting weewx.  This is because the database schema has changed.***
 
 # Installation Instructions
 
@@ -102,6 +104,13 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
             [[[CheetahGenerator]]]
                 search_list_extensions = user.nws.NWSForecastVariables
    ```
+
+1. If you are moving from version 1.13.1 or earlier, YOU MUST DELETE the nws database.
+    ```
+    sudo rm /home/weewx/archive/nws.sdb
+    ```
+    Note: The above assumes a setup.py install, thus databases are in /home/weewx/archive.  Adjust
+          this path for your installation.
 
 1. Restart WeeWX.
 
