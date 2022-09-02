@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.13.1"
+WEEWX_NWS_VERSION = "1.14"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -70,6 +70,7 @@ table = [
     ('number',           'INTEGER NOT NULL'),
     ('name',             'STRING'),           # For alerts, holds event name (e.g., Heat Advisory)
     ('startTime',        'FLOAT NOT NULL'),   # For alerts, holds onset
+    ('expirationTime',   'FLOAT'),            # For alerts, null for others.
     ('endTime',          'FLOAT NOT NULL'),   # For alerts, holds ends
     ('isDaytime',        'INTEGER NOT NULL'),
     ('outTemp',          'FLOAT NOT NULL'),  # Needs to be converted
@@ -100,6 +101,7 @@ class Forecast:
     number          : int # For alerts, numbered from 0 as parsed from the XML
     name            : Optional[str] # For alerts, holds event name (e.g., Heat Advisory)
     startTime       : float  # For alerts, holds onset
+    expirationTime  : float  # Only for alerts, null for others.
     endTime         : float  # For alerts, holds ends
     isDaytime       : int
     outTemp         : float
@@ -292,8 +294,8 @@ class NWS(StdService):
         try:
             log.debug('saveForecastsToDB(%s): start' % forecast_type)
             if forecast_type == ForecastType.ALERTS:
-                # Clear existing alerts before inserting new alerts.
-                self.delete_all_alerts()
+                # Delete expired alerts.
+                self.delete_expired_alerts()
             with self.cfg.lock:
                 if forecast_type == ForecastType.TWELVE_HOUR:
                     bucket = self.cfg.twelveHourForecasts
@@ -350,20 +352,21 @@ class NWS(StdService):
             log.error('forecast_in_db(%s, %d) failed with %s (%s).' % (forecast_type, generatedTime, e, type(e)))
             weeutil.logger.log_traceback(log.error, "    ****  ")
 
-    def delete_all_alerts(self):
+    def delete_expired_alerts(self):
         try:
            dbmanager = self.engine.db_binder.get_manager(self.data_binding)
-           # Only delete if there are actually alerts in the table (to avoid confusing deletes in the log).
+           # Only delete if there are actually expired alerts in the table (to avoid confusing deletes in the log).
+           now = time.time()
            try:
-               select = 'SELECT COUNT(dateTime) FROM archive WHERE interval = %d' % NWS.get_interval(ForecastType.ALERTS)
-               log.debug('Checking if there are any alerts in the archive to delete: select: %s.' % select)
+               select = 'SELECT COUNT(dateTime) FROM archive WHERE interval = %d and expirationTime <= %f' % (NWS.get_interval(ForecastType.ALERTS), now)
+               log.info('Checking if there are any expired alerts in the archive to delete: select: %s.' % select)
                row = dbmanager.getSql(select)
            except Exception as e:
                log.error('delete_all_alerts: %s failed with %s (%s).' % (select, e, type(e)))
                weeutil.logger.log_traceback(log.error, "    ****  ")
                return
            if row[0] != 0:
-               delete = "DELETE FROM archive WHERE interval = %d" % NWS.get_interval(ForecastType.ALERTS)
+               delete = 'DELETE FROM archive WHERE interval = %d and expirationTime <= %f' % (NWS.get_interval(ForecastType.ALERTS), now)
                log.info('Pruning ForecastType.ALERTS')
                dbmanager.getSql(delete)
         except Exception as e:
@@ -439,6 +442,7 @@ class NWS(StdService):
         j['number']           = record.number
         j['name']             = record.name
         j['startTime']        = record.startTime
+        j['expirationTime']   = record.expirationTime
         j['endTime']          = record.endTime
         j['isDaytime']        = record.isDaytime
         j['outTemp']          = record.outTemp
@@ -893,7 +897,7 @@ class NWSPoller:
                     lastModified = cfg.lastModifiedAlerts
             if lastModified is not None:
                 lastModifiedStr = lastModified.strftime('%a, %d %b %Y %H:%M:%S %Z')
-                # headers['If-Modified-Since'] = lastModifiedStr
+                headers['If-Modified-Since'] = lastModifiedStr
             # Work around NWS caching issue.
             headers['Feature-Flags'] =  '%f' % time.time()
             log.info('%s: calling requests.Response with %r' % (forecast_type, headers))
@@ -991,6 +995,7 @@ class NWSPoller:
                         number           = alertCount,
                         name             = alert['event'],
                         startTime        = onset,
+                        expirationTime   = expires,
                         endTime          = ends,
                         isDaytime        = True,                    # Dummy
                         outTemp          = 0.0,                     # Dummy
@@ -1042,6 +1047,7 @@ class NWSPoller:
                 number           = period['number'],
                 name             = period['name'],
                 startTime        = datetime.datetime.fromisoformat(period['startTime']).timestamp(),
+                expirationTime   = None,
                 endTime          = datetime.datetime.fromisoformat(period['endTime']).timestamp(),
                 isDaytime        = period['isDaytime'],
                 outTemp          = to_float(period['temperature']),
@@ -1124,6 +1130,7 @@ class NWSForecastVariables(SearchList):
             row['longitude']   = raw_row['longitude']
             row['effective']   = weewx.units.ValueHelper((raw_row['generatedTime'], time_units, time_group))
             row['onset']       = weewx.units.ValueHelper((raw_row['startTime'], time_units, time_group))
+            row['expiration']  = weewx.units.ValueHelper((raw_row['expirationTime'], time_units, time_group))
             row['ends']        = weewx.units.ValueHelper((raw_row['endTime'], time_units, time_group))
             row['event']       = raw_row['name']
             row['headline']    = raw_row['shortForecast']
@@ -1153,6 +1160,8 @@ class NWSForecastVariables(SearchList):
             row['dateTime'] = weewx.units.ValueHelper((row['dateTime'], time_units, time_group))
             row['generatedTime'] = weewx.units.ValueHelper((row['generatedTime'], time_units, time_group))
             row['startTime'] = weewx.units.ValueHelper((row['startTime'], time_units, time_group))
+            if row['expirationTime'] is not None:
+                row['expirationTime'] = weewx.units.ValueHelper((row['expirationTime'], time_units, time_group))
             row['endTime'] = weewx.units.ValueHelper((row['endTime'], time_units, time_group))
             row['outTemp'] = weewx.units.ValueHelper((row['outTemp'], temp_units, temp_group))
             row['windSpeed'] = weewx.units.ValueHelper((row['windSpeed'], wind_speed_units, wind_speed_group))
@@ -1200,11 +1209,11 @@ class NWSForecastVariables(SearchList):
             time_select_phrase = "dateTime = (SELECT MAX(dateTime)"
         else:
             time_select_phrase = "generatedTime = (SELECT MAX(generatedTime)"
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
-            END_TIME = 9
+            END_TIME = 10
             # Only include if record hasn't expired (row[END_TIME] is endTime) and max_forecasts hasn't been exceeded.
             if time.time() < row[END_TIME] and (max_forecasts is None or forecast_count < max_forecasts):
                 forecast_count += 1
@@ -1219,15 +1228,16 @@ class NWSForecastVariables(SearchList):
                 record['number'] = row[6]
                 record['name'] = row[7]
                 record['startTime'] = row[8]
-                record['endTime'] = row[9]
-                record['isDaytime'] = row[10]
-                record['outTemp'] = row[11]
-                record['outTempTrend'] = row[12]
-                record['windSpeed'] = row[13]
-                record['windDir'] = row[14]
-                record['iconUrl'] = row[15]
-                record['shortForecast'] = row[16]
-                record['detailedForecast'] = row[17]
+                record['expirationTime'] = row[9]
+                record['endTime'] = row[10]
+                record['isDaytime'] = row[11]
+                record['outTemp'] = row[12]
+                record['outTempTrend'] = row[13]
+                record['windSpeed'] = row[14]
+                record['windDir'] = row[15]
+                record['iconUrl'] = row[16]
+                record['shortForecast'] = row[17]
+                record['detailedForecast'] = row[18]
 
                 records.append(record)
         return records
@@ -1576,9 +1586,9 @@ if __name__ == '__main__':
 
     def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion):
         if criterion == Criterion.ALL:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
         elif criterion == Criterion.LATEST:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
 
         for row in conn.execute(select):
             record = {}
@@ -1591,15 +1601,16 @@ if __name__ == '__main__':
             record['number'] = row[6]
             record['name'] = row[7]
             record['startTime'] = row[8]
-            record['endTime'] = row[9]
-            record['isDaytime'] = row[10]
-            record['outTemp'] = row[11]
-            record['outTempTrend'] = row[12]
-            record['windSpeed'] = row[13]
-            record['windDir'] = row[14]
-            record['iconUrl'] = row[15]
-            record['shortForecast'] = row[16]
-            record['detailedForecast'] = row[17]
+            record['expirationTime'] = row[9]
+            record['endTime'] = row[10]
+            record['isDaytime'] = row[11]
+            record['outTemp'] = row[12]
+            record['outTempTrend'] = row[13]
+            record['windSpeed'] = row[14]
+            record['windDir'] = row[15]
+            record['iconUrl'] = row[16]
+            record['shortForecast'] = row[17]
+            record['detailedForecast'] = row[18]
             pretty_print_record(record)
             print('------------------------')
 
@@ -1620,6 +1631,8 @@ if __name__ == '__main__':
         print('number          : %d' % forecast.number)
         print('name            : %s' % forecast.name)
         print('startTime       : %s' % timestamp_to_string(forecast.startTime))
+        if forecast.expirationTime is not None:
+            print('expirationTime  : %s' % timestamp_to_string(forecast.expirationTime))
         print('endTime         : %s' % timestamp_to_string(forecast.endTime))
         print('isDaytime       : %d' % forecast.isDaytime)
         print('outTemp         : %f' % forecast.outTemp)
@@ -1640,6 +1653,8 @@ if __name__ == '__main__':
         print('number          : %d' % record['number'])
         print('name            : %s' % record['name'])
         print('startTime       : %s' % timestamp_to_string(record['startTime']))
+        if forecast.expirationTime is not None:
+            print('expirationTime  : %s' % timestamp_to_string(record['expirationTime']))
         print('endTime         : %s' % timestamp_to_string(record['endTime']))
         print('isDaytime       : %d' % record['isDaytime'])
         print('outTemp         : %f' % record['outTemp'])

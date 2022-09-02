@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+1.14 09/03/2022
+1.  This time, hopefully, really fix Alerts.
+
 1.13.1 09/02/2022
 1. Alerts bug fix.
 
