@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.13"
+WEEWX_NWS_VERSION = "1.13.1"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -893,7 +893,7 @@ class NWSPoller:
                     lastModified = cfg.lastModifiedAlerts
             if lastModified is not None:
                 lastModifiedStr = lastModified.strftime('%a, %d %b %Y %H:%M:%S %Z')
-                headers['If-Modified-Since'] = lastModifiedStr
+                # headers['If-Modified-Since'] = lastModifiedStr
             # Work around NWS caching issue.
             headers['Feature-Flags'] =  '%f' % time.time()
             log.info('%s: calling requests.Response with %r' % (forecast_type, headers))

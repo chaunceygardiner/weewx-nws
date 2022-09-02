@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+1.13.1 09/02/2022
+1. Alerts bug fix.
+
 1.13 09/02/2022
 1. Don't show alerts past their expiration time (this is in addition to not showing
    superseded alerts--which was fixed in v1.12).
