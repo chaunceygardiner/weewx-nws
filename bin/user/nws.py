@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "1.12"
+WEEWX_NWS_VERSION = "1.13"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -125,7 +125,6 @@ class SshConfiguration:
 @dataclass
 class Configuration:
     lock                          : threading.Lock
-    alertsAllClear                : bool                        # Controlled by lock
     alerts                        : List[Forecast]              # Controlled by lock
     lastModifiedAlerts            : Optional[datetime.datetime] # Controlled by lock
     twelveHourForecasts           : List[Forecast]              # Controlled by lock
@@ -196,7 +195,6 @@ class NWS(StdService):
 
         self.cfg = Configuration(
             lock                           = threading.Lock(),
-            alertsAllClear                 = False,
             alerts                         = [],
             lastModifiedAlerts             = None,
             twelveHourForecasts            = [],
@@ -293,6 +291,9 @@ class NWS(StdService):
     def saveForecastsToDB(self, forecast_type: ForecastType):
         try:
             log.debug('saveForecastsToDB(%s): start' % forecast_type)
+            if forecast_type == ForecastType.ALERTS:
+                # Clear existing alerts before inserting new alerts.
+                self.delete_all_alerts()
             with self.cfg.lock:
                 if forecast_type == ForecastType.TWELVE_HOUR:
                     bucket = self.cfg.twelveHourForecasts
@@ -332,11 +333,6 @@ class NWS(StdService):
                     else:
                         log.debug('Forecast %s, generated %s, already exists in the database.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
                     bucket.clear()
-                elif forecast_type == ForecastType.ALERTS and self.cfg.alertsAllClear:
-                    # No alert records and all clear has been signaled (no alerts returned).
-                    # delete all alerts and reset all clear
-                    self.cfg.alertsAllClear = False
-                    self.delete_all_alerts()
         except Exception as e:
             # Include a stack traceback in the log:
             # but eat this exception as we don't want to bring down weewx
@@ -376,7 +372,7 @@ class NWS(StdService):
 
     def delete_old_forecasts(self, forecast_type: ForecastType):
         if forecast_type == ForecastType.ALERTS:
-            return    # Alerts are not deleted here; rather they are deleted on cfg.alertsAllClear
+            return    # Alerts are not deleted here; rather they are deleted each time [possibly 0] alerts are saved to the db.
         if self.cfg.days_to_keep == 0:
             log.info('days_to_keep set to zero, the database will not be pruned.')
         else:
@@ -722,7 +718,6 @@ class NWSPoller:
                     cfg.twelveHourForecastsJson = j
                 else:
                     cfg.alerts.clear()
-                    cfg.alertsAllClear = True    # Will be set to False below if there are any alerts present
                 try:
                     record_count: int = 0
                     generatedTime: Optional[int] = None
@@ -736,7 +731,6 @@ class NWSPoller:
                             cfg.twelveHourForecasts.append(record)
                         else: # Alerts
                             cfg.alerts.append(record)
-                            cfg.alertsAllClear = False    # Alerts will not be deleted from db since there is an active alert.
                 except KeyError as e:
                     log.error("populate_forecast(%s): Could not compose forecast record.  Key: '%s' missing in returned forecast." % (forecast_type, e))
                     return True, False  # retry since unsuccessful
@@ -976,6 +970,7 @@ class NWSPoller:
                     log.info('malformed alert (skipping): %s' % alert)
                     continue
                 effective = parse(alert['effective'], tzinfos=tzinfos).timestamp()
+                expires   = parse(alert['expires'], tzinfos=tzinfos).timestamp()
                 onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp()
                 if alert['ends'] is not None:
                     ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
@@ -984,6 +979,8 @@ class NWSPoller:
                     ends      = parse(alert['expires'], tzinfos=tzinfos).timestamp()
                 if alert['id'] in expired_ids:
                     log.info('found expired alert (skipping): %s' % alert['id'])
+                elif expires <= time.time():
+                    log.info('alert is past expiration time of %s (skipping): %s' % (timestamp_to_string(expires), alert['id']))
                 else:
                     record = Forecast(
                         interval         = NWS.get_interval(ForecastType.ALERTS),
@@ -1399,7 +1396,6 @@ if __name__ == '__main__':
     def test_requester(forecast_type: ForecastType, lat: float, long: float) -> None:
         cfg = Configuration(
             lock                  = threading.Lock(),
-            alertsAllClear        = False,
             alerts                = [],
             lastModifiedAlerts    = None,
             twelveHourForecasts   = [],

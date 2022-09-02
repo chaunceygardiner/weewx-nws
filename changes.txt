@@ -1,6 +1,10 @@
 nws change history
 ------------------
 
+1.13 09/02/2022
+1. Don't show alerts past their expiration time (this is in addition to not showing
+   superseded alerts--which was fixed in v1.12).
+
 1.12 08/31/2022
 1. Properly implement ignoring expired alerts (this is a workaround due to an nws issue.
    The previous workaround was ignoring the new alert and keeping the expired alert!

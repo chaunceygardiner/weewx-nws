@@ -5,7 +5,7 @@
 
 A WeeWX extension for NWS forecasts.
 
-Copyright (C)2020-2021 by John A Kline (john@johnkline.com)
+Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
 
 **THIS PLUGIN REQUIRES PYTHON 3 AND WEEWX 4**
 
@@ -17,11 +17,12 @@ Copyright (C)2020-2021 by John A Kline (john@johnkline.com)
    sudo apt install python3-dateutil
    ```
 
-1. Download weewx-nws-1.12.zip from the [github](https://github.com/chaunceygardiner/weewx-nws).
+1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
+   Click on releases and pick the latest release (Release v1.13).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-1.12.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-1.13.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
