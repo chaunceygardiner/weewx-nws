@@ -359,7 +359,7 @@ class NWS(StdService):
            now = time.time()
            try:
                select = 'SELECT COUNT(dateTime) FROM archive WHERE interval = %d and expirationTime <= %f' % (NWS.get_interval(ForecastType.ALERTS), now)
-               log.info('Checking if there are any expired alerts in the archive to delete: select: %s.' % select)
+               log.debug('Checking if there are any expired alerts in the archive to delete: select: %s.' % select)
                row = dbmanager.getSql(select)
            except Exception as e:
                log.error('delete_all_alerts: %s failed with %s (%s).' % (select, e, type(e)))
