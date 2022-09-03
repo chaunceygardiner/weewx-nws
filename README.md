@@ -259,6 +259,7 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
     ```
     #for $alert in $nwsforecast.alerts()
          $alert.effective   # Time issued
+         $alert.expires     # Time this alert expires
          $alert.onset       # Time it will begin
          $alert.ends        # Time it will end
          $alert.event       # Name of event (e.g., Heat Advisory)
@@ -271,8 +272,9 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
     Sample values for the above variables follow:
     ```
     effective  : 2020-06-11 09:12:00 PDT (1591891920)
-    onset      : 2020-06-11 09:12:00 PDT (1591891920)
-    ends       : 2020-06-11 10:12:00 PDT (1591895520)
+    expires    : 2020-06-11 19:00:00 PDT (1591891920)
+    onset      : 2020-06-12 05:00:00 PDT (1591891920)
+    ends       : 2020-06-13 20:00:00 PDT (1591895520)
     event      : Tsunami Warning
     headline   : TEST Tsunami Warning issued June 11 at 9:12AM PDT until June 11 at 10:12AM PDT by NWS National Tsunami Warning Center
     description: PZZ530...THIS_MESSAGE_IS_FOR_TEST_PURPOSES_ONLY...THIS IS A TEST TO DETERMINE TRANSMISSION TIMES INVOLVED IN THE...
@@ -287,6 +289,7 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
        #set alert_count += 1
        <tr><td style='text-align:left;border-top:1pt solid LightGray;'><br/>Event: $alert.event</td></tr>
        <tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
+       <tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
        <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
        <tr><td style='text-align:left;border-bottom:1pt solid LightGray'>Ends: $alert.ends<br/><br/></td></tr>
        <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$alert.headline</td></tr>
