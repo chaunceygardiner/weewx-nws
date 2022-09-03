@@ -970,7 +970,7 @@ class NWSPoller:
             try:
                 alert = feature['properties']
                 tzinfos = {'UTC': tz.gettz("UTC")}
-                if alert is None or 'effective' not in alert or 'onset' not in alert or 'ends' not in alert:
+                if alert is None or 'effective' not in alert or 'expires' not in alert or 'onset' not in alert or 'ends' not in alert:
                     log.info('malformed alert (skipping): %s' % alert)
                     continue
                 effective = parse(alert['effective'], tzinfos=tzinfos).timestamp()
@@ -1130,7 +1130,7 @@ class NWSForecastVariables(SearchList):
             row['longitude']   = raw_row['longitude']
             row['effective']   = weewx.units.ValueHelper((raw_row['generatedTime'], time_units, time_group))
             row['onset']       = weewx.units.ValueHelper((raw_row['startTime'], time_units, time_group))
-            row['expiration']  = weewx.units.ValueHelper((raw_row['expirationTime'], time_units, time_group))
+            row['expires']     = weewx.units.ValueHelper((raw_row['expirationTime'], time_units, time_group))
             row['ends']        = weewx.units.ValueHelper((raw_row['endTime'], time_units, time_group))
             row['event']       = raw_row['name']
             row['headline']    = raw_row['shortForecast']
