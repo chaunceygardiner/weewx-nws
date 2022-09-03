@@ -8,8 +8,12 @@ A WeeWX extension for NWS forecasts.
 Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
 
 **THIS PLUGIN REQUIRES PYTHON 3 AND WEEWX 4**
+
 **If you are updating from versions 1.13.1 or less, you MUST delete the nws database (nws.sdb) before
-  restarting weewx.  This is because the database schema has changed.***
+  restarting weewx.  This is because the database schema has changed.  If you don't do this, nws
+  won't work and the following statement will be in the weewx log:
+  ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
+  Note: there will also be other nws errors in the log. ***
 
 # Installation Instructions
 
@@ -255,9 +259,10 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
 
     ![NWS One-Hour Forecasts screenshot](one_hour_forecasts.jpg)
 
-1.  To all alerts for the station's location:
+1.  To get all alerts for the station's location:
     ```
     #for $alert in $nwsforecast.alerts()
+         $alert.id          # Identifier (ID) of alert
          $alert.effective   # Time issued
          $alert.expires     # Time this alert expires
          $alert.onset       # Time it will begin
@@ -267,19 +272,38 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
          $alert.description # Long description
          $alert.latitude    # Latitude of point for which alerts were requested
          $alert.longitude   # Longitude of point for which alerts were requested
+         $alert.sent        # Time alert was sent.
+         $alert.status      # Status of alert (e.g., Actual)
+         $alert.messageType # Message type (e.g., Update)
+         $alert.category    # Category (e.g., Met)
+         $alert.severity    # Severity (e.g, Moderate)
+         $alert.certainty   # Certainty (e.g, Likely)
+         $alert.urgency     # Urgency (e.g, Expected)
+         $alert.sender      # Sender (e.g, w-nws.webmaster@noaa.gov)
+         $alert.senderName  # Name of Sender (e.g, NWS San Francisco CA)
     #end for
     ```
     Sample values for the above variables follow:
     ```
-    effective  : 2020-06-11 09:12:00 PDT (1591891920)
-    expires    : 2020-06-11 19:00:00 PDT (1591891920)
-    onset      : 2020-06-12 05:00:00 PDT (1591891920)
-    ends       : 2020-06-13 20:00:00 PDT (1591895520)
-    event      : Tsunami Warning
-    headline   : TEST Tsunami Warning issued June 11 at 9:12AM PDT until June 11 at 10:12AM PDT by NWS National Tsunami Warning Center
-    description: PZZ530...THIS_MESSAGE_IS_FOR_TEST_PURPOSES_ONLY...THIS IS A TEST TO DETERMINE TRANSMISSION TIMES INVOLVED IN THE...
-    latitude   : 37.431495
-    longitude  : -122.110937
+    id          : urn:oid:2.49.0.1.840.0.196e527647de415857d1e754a00bd7214fbe8828.002.1
+    effective   : 2020-06-11 09:12:00 PDT (1591891920)
+    expires     : 2020-06-11 19:00:00 PDT (1591891920)
+    onset       : 2020-06-12 05:00:00 PDT (1591891920)
+    ends        : 2020-06-13 20:00:00 PDT (1591895520)
+    event       : Tsunami Warning
+    headline    : TEST Tsunami Warning issued June 11 at 9:12AM PDT until June 11 at 10:12AM PDT by NWS National Tsunami Warning Center
+    description : PZZ530...THIS_MESSAGE_IS_FOR_TEST_PURPOSES_ONLY...THIS IS A TEST TO DETERMINE TRANSMISSION TIMES INVOLVED IN THE...
+    latitude    : 37.431495
+    longitude   : -122.110937
+    sent        : 2020-06-11 09:12:00 PDT (1591891920)
+    status      : Actual
+    messageType : Update
+    category    : Met
+    severity    : Moderate
+    certainty   : Likely
+    urgency     : Expected
+    sender      : w-nws.webmaster@noaa.gov
+    senderName  : NWS San Francisco CA
     ```
     Alerts can be seen in action on the **Alerts** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
@@ -288,9 +312,19 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
        #for alert in $nwsforecast.alerts()
        #set alert_count += 1
        <tr><td style='text-align:left;border-top:1pt solid LightGray;'><br/>Event: $alert.event</td></tr>
+       <tr><td style='text-align:left;'>ID: $alert.id</td></tr>
        <tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
        <tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
        <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
+       <tr><td style='text-align:left;'>Sent: $alert.sent</td></tr>
+       <tr><td style='text-align:left;'>Status: $alert.status</td></tr>
+       <tr><td style='text-align:left;'>Message Type: $alert.messageType</td></tr>
+       <tr><td style='text-align:left;'>Category: $alert.category</td></tr>
+       <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
+       <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
+       <tr><td style='text-align:left;'>Urgency: $alert.urgency</td></tr>
+       <tr><td style='text-align:left;'>Sender: $alert.sender</td></tr>
+       <tr><td style='text-align:left;'>Sender Name: $alert.senderName</td></tr>
        <tr><td style='text-align:left;border-bottom:1pt solid LightGray'>Ends: $alert.ends<br/><br/></td></tr>
        <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$alert.headline</td></tr>
        #set desc = $alert.description.replace('\n', '<br/>')

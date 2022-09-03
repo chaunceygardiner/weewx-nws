@@ -2,10 +2,29 @@ nws change history
 ------------------
 
 1.14 09/03/2022
-1.  This time, hopefully, really fix Alerts.
+1.  Better NWS alerts.
+
+    Added the following new fields for alerts:
+    id              : urn:oid:2.49.0.1.840.0.ba84e467a918f2f79303ebc47a234e87d285ab2f.003.1
+    expires         : 2022-09-03 15:00:00 PDT (1662242400)
+    sent            : 2022-09-03 05:37:00 PDT (1662208620)
+    status          : Actual
+    messageType     : Update
+    category        : Met
+    severity        : Moderate
+    certainty       : Likely
+    urgency         : Expected
+    sender          : w-nws.webmaster@noaa.gov
+    senderName      : NWS San Francisco CA
+
     ******* IMPORTANT, you must delete the existing nws database (nws.sdb) if        *******
     ******* udating from v.1.13.1 or earlier.  Do this just before restaring weewx.  *******
     ******* This is necessary because the schema has changed.                        *******
+
+    If you have nws v.13.1 or earlier, and you don't delete the existing nws database, nws
+    will not work and the following will be in the log:
+    ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
+    Note: there will also be other nws errors in the log.
 
 1.13.1 09/02/2022
 1. Alerts bug fix.
