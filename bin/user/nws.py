@@ -378,9 +378,9 @@ class NWS(StdService):
         try:
            dbmanager = self.engine.db_binder.get_manager(self.data_binding)
            # Only delete if there are actually expired alerts in the table (to avoid confusing deletes in the log).
-           now = time.time()
+           now_minus_one_day = time.time() - 24.0 * 60.0 * 60.0
            try:
-               select = 'SELECT COUNT(dateTime) FROM archive WHERE interval = %d and expirationTime <= %f' % (NWS.get_interval(ForecastType.ALERTS), now)
+               select = 'SELECT COUNT(dateTime) FROM archive WHERE interval = %d and expirationTime <= %f' % (NWS.get_interval(ForecastType.ALERTS), now_minus_one_day)
                log.debug('Checking if there are any expired alerts in the archive to delete: select: %s.' % select)
                row = dbmanager.getSql(select)
            except Exception as e:
@@ -388,7 +388,7 @@ class NWS(StdService):
                weeutil.logger.log_traceback(log.error, "    ****  ")
                return
            if row[0] != 0:
-               delete = 'DELETE FROM archive WHERE interval = %d and expirationTime <= %f' % (NWS.get_interval(ForecastType.ALERTS), now)
+               delete = 'DELETE FROM archive WHERE interval = %d and expirationTime <= %f' % (NWS.get_interval(ForecastType.ALERTS), now_minus_one_day)
                log.info('Pruning ForecastType.ALERTS')
                dbmanager.getSql(delete)
         except Exception as e:
@@ -1016,7 +1016,7 @@ class NWSPoller:
                     ends      = parse(alert['expires'], tzinfos=tzinfos).timestamp()
                 if id in expired_ids:
                     log.info('found expired alert (skipping): %s' % id)
-                elif expires <= time.time():
+                elif expires <= (time.time() - 24.0 * 60.0 * 60.0):  # Don't be so quick to stop showing expired alerts.  NWS doesn't reissue them quickly enough.
                     log.info('alert is past expiration time of %s (skipping): %s' % (timestamp_to_string(expires), alert['id']))
                 else:
                     record = Forecast(
@@ -1281,7 +1281,8 @@ class NWSForecastVariables(SearchList):
             EXP_TIME = 9
             END_TIME = 11
             # Only include if record hasn't expired (row[END_TIME] is endTime) and, for alerts, expiration_time has not been hit) and max_forecasts hasn't been exceeded.
-            if time.time() < row[END_TIME] and (row[EXP_TIME] is None or row[EXP_TIME] > time.time()) and (max_forecasts is None or forecast_count < max_forecasts):
+            # Don't be so strict with expiration time.  NWS likes to have alerts expire without issuing new ones in time.
+            if time.time() < row[END_TIME] and (row[EXP_TIME] is None or row[EXP_TIME] > (time.time() - 24.0 * 60.0 * 60.0)) and (max_forecasts is None or forecast_count < max_forecasts):
                 forecast_count += 1
                 record = {}
 
