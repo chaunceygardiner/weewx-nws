@@ -10,6 +10,8 @@
       #for $alert in $nwsforecast.alerts()
       #set $alert_count += 1
       <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$alert.headline</td></tr>
+      <tr><td style='text-align:left;'><br/>Severity: $alert.severity</td></tr>
+      <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
       #set $desc = $alert.description.replace('\n', '<br/>')
       <tr>
         <td style='text-align:left;'>
@@ -29,8 +31,6 @@
       <tr><td style='text-align:left;'>Status: $alert.status</td></tr>
       <tr><td style='text-align:left;'>Message Type: $alert.messageType</td></tr>
       <tr><td style='text-align:left;'>Category: $alert.category</td></tr>
-      <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
-      <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
       <tr><td style='text-align:left;'>Urgency: $alert.urgency</td></tr>
       <tr><td style='text-align:left;'>Sender: $alert.sender</td></tr>
       <tr><td style='text-align:left;'>Sender Name: $alert.senderName</td></tr>
