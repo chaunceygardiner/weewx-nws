@@ -66,7 +66,7 @@ table = [
     ('latitude',         'STRING NOT NULL'),   # The latitude used to request the forecast
     ('longitude',        'STRING NOT NULL'),   # The longitude used to request the forecast
     ('usUnits',          'INTEGER NOT NULL'),
-    ('generatedTime',    'INTEGER NOT NULL'), # When forecast was generated., For alerts, holds effective
+    ('generatedTime',    'INTEGER NOT NULL'), # When forecast was generated., For alerts, holds effective (issued)
     ('number',           'INTEGER NOT NULL'),
     ('name',             'STRING'),           # For alerts, holds event name (e.g., Heat Advisory)
     ('startTime',        'FLOAT NOT NULL'),   # For alerts, holds onset
@@ -1274,13 +1274,17 @@ class NWSForecastVariables(SearchList):
         # in effect, only the effective alert with the latest generated time will be shown.  As such:
         # for forecasts:
         #     select where generatedTime = MAX(generatedTime)
+        #     order by start time
         # for alerts:
         #     select where dateTime = MAX(dateTime)
+        #     order by issued date (generatedTime in db, effective to the user)
         if forecast_type == ForecastType.ALERTS:
             time_select_phrase = "dateTime = (SELECT MAX(dateTime)"
+            order_by_clause = "ORDER BY generatedTime desc"
         else:
             time_select_phrase = "generatedTime = (SELECT MAX(generatedTime)"
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
+            order_by_clause = "ORDER BY startTime"
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s %s" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude, order_by_clause)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
