@@ -287,17 +287,17 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
     Sample values for the above variables follow:
     ```
     id          : urn:oid:2.49.0.1.840.0.196e527647de415857d1e754a00bd7214fbe8828.002.1
-    effective   : 2020-06-11 09:12:00 PDT (1591891920)
-    expires     : 2020-06-11 19:00:00 PDT (1591891920)
-    onset       : 2020-06-12 05:00:00 PDT (1591891920)
-    ends        : 2020-06-13 20:00:00 PDT (1591895520)
-    event       : Tsunami Warning
-    headline    : TEST Tsunami Warning issued June 11 at 9:12AM PDT until June 11 at 10:12AM PDT by NWS National Tsunami Warning Center
-    description : PZZ530...THIS_MESSAGE_IS_FOR_TEST_PURPOSES_ONLY...THIS IS A TEST TO DETERMINE TRANSMISSION TIMES INVOLVED IN THE...
-    instructions: Drink plenty of fluids, stay in an air-conditioned room, stay...
+    effective   : 04-Sep-2022 04:11
+    expires     : 04-Sep-2022 15:00
+    onset       : 04-Sep-2022 11:00
+    ends        : 06-Sep-2022 20:00
+    event       : Heat Advisory
+    headline    : Heat Advisory issued September 4 at 4:11AM PDT until September 6 at 8:00PM PDT by NWS San Francisco CA
+    description : * WHAT...Temperatures up to 98 expected.<br/>* WHERE...Marin Coastal Range...
+    instructions: Drink plenty of fluids, stay in an air-conditioned room, stay out of the sun...
     latitude    : 37.431495
     longitude   : -122.110937
-    sent        : 2020-06-11 09:12:00 PDT (1591891920)
+    sent        : 04-Sep-2022 04:11
     status      : Actual
     messageType : Update
     category    : Met
@@ -310,39 +310,56 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
     Alerts can be seen in action on the **Alerts** tab at [www.paloaltoweather.com/forecast.html](https://www.paloaltoweather.com/forecast.html).
     The code for this page (at the time of this writing) is:
     ```
-       #set alert_count = 0
-       #for alert in $nwsforecast.alerts()
-       #set alert_count += 1
-       <tr><td style='text-align:left;border-top:1pt solid LightGray;'><br/>Event: $alert.event</td></tr>
-       <tr><td style='text-align:left;'>ID: $alert.id</td></tr>
-       <tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
-       <tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
-       <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
-       <tr><td style='text-align:left;'>Sent: $alert.sent</td></tr>
-       <tr><td style='text-align:left;'>Status: $alert.status</td></tr>
-       <tr><td style='text-align:left;'>Message Type: $alert.messageType</td></tr>
-       <tr><td style='text-align:left;'>Category: $alert.category</td></tr>
-       <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
-       <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
-       <tr><td style='text-align:left;'>Urgency: $alert.urgency</td></tr>
-       <tr><td style='text-align:left;'>Sender: $alert.sender</td></tr>
-       <tr><td style='text-align:left;'>Sender Name: $alert.senderName</td></tr>
-       <tr><td style='text-align:left;border-bottom:1pt solid LightGray'>Ends: $alert.ends<br/><br/></td></tr>
-       <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$alert.headline</td></tr>
-       #set desc = $alert.description.replace('\n', '<br/>')
-       <tr>
-         <td style='text-align:left;'>
-           <br/>
-           $desc
-         </td>
-       </tr>
-       <tr>
-         <td style='text-align:left;'>
-           <br/>
-           Instructions: $alert.instructions
-         </td>
-       </tr>
-       #end for
+    <table style='border-style:solid;padding:30px;border:1pt solid #aaaaaa;'>
+      #if $target_display == 'desktop'
+        #set $title_font_size = 'large'
+      #else
+        #set $title_font_size = '46px'
+      #end if
+      #set $alert_count = 0
+      #for $alert in $nwsforecast.alerts()
+      #set $alert_count += 1
+      <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:2pt solid Black;'>$alert.headline</td></tr>
+      <tr><td style='text-align:left;'><br/>Status: $alert.status</td></tr>
+      <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
+      <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
+      #try
+        #set $desc = $alert.description.replace('\n\n', '<br/>')
+        #set $desc = $desc.replace('\n', ' ')
+      #except
+        ## Calling replace has failed because of malformed alerts.
+        ## alert.description is probably None
+        #set $desc = $alert.description
+      #end try
+      <tr>
+        <td style='text-align:left;'>
+          <br/>
+          $desc
+        </td>
+      </tr>
+      <tr>
+        <td style='text-align:left;'>
+          <br/>
+          Instructions: $alert.instructions
+        </td>
+      </tr>
+      <tr><td style='text-align:left;'><br/>ID: $alert.id</td></tr>
+      <tr><td style='text-align:left;'>Event: $alert.event</td></tr>
+      <tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
+      <tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
+      <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
+      <tr><td style='text-align:left;'>Ends: $alert.ends</td></tr>
+      <tr><td style='text-align:left;'>Sent: $alert.sent</td></tr>
+      <tr><td style='text-align:left;'>Message Type: $alert.messageType</td></tr>
+      <tr><td style='text-align:left;'>Category: $alert.category</td></tr>
+      <tr><td style='text-align:left;'>Urgency: $alert.urgency</td></tr>
+      <tr><td style='text-align:left;'>Sender: $alert.sender</td></tr>
+      <tr><td style='text-align:left;'>Sender Name: $alert.senderName<br/><br/></td></tr>
+      #end for
+      #if $alert_count == 0
+        <tr><td style='text-align:center;font-weight:bold;font-style:italic'>No active National Weather Service alerts for this location.</td></tr>
+      #end if
+    </table>
     ```
     A screenshot follows:
 
