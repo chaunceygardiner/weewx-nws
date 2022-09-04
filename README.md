@@ -24,11 +24,11 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
    ```
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v1.14).
+   Click on releases and pick the latest release (Release v2.0).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-1.14.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-2.0.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
@@ -109,12 +109,17 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
                 search_list_extensions = user.nws.NWSForecastVariables
    ```
 
-1. If you are moving from version 1.13.1 or earlier, YOU MUST DELETE the nws database.
+1. If you are moving from a version prior to 2.0, YOU MUST DELETE the nws database.
+    ```
+    sudo rm /var/lib/weewx/nws.sdb
+    ```
+    or
     ```
     sudo rm /home/weewx/archive/nws.sdb
     ```
-    Note: The above assumes a setup.py install, thus databases are in /home/weewx/archive.  Adjust
-          this path for your installation.
+    Note: The first example above is the most likely location of nws.sdb.
+          The second example is if you installed weewx via the setup.py method.
+          Of course, the nws.sdb database could be elsewhere.
 
 1. Restart WeeWX.
 

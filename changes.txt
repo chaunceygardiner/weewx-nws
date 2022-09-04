@@ -1,7 +1,7 @@
 nws change history
 ------------------
 
-1.14 09/03/2022
+2.0 09/04/2022
 1.  Better NWS alerts.
 
     Added the following new fields for alerts:
@@ -19,11 +19,12 @@ nws change history
     senderName      : NWS San Francisco CA
 
     ******* IMPORTANT, you must delete the existing nws database (nws.sdb) if        *******
-    ******* udating from v.1.13.1 or earlier.  Do this just before restaring weewx.  *******
-    ******* This is necessary because the schema has changed.                        *******
+    ******* udating versions earlier than 2.0.  Delete nws.sdb after installing the  *******
+    ******* update and just before restaring weewx.  This is necessary because the   *******
+    ******* database schema has changed.                                             *******
 
-    If you have nws v.13.1 or earlier, and you don't delete the existing nws database, nws
-    will not work and the following will be in the log:
+    If you currently have a version of nws prior to 2.0, and you don't delete the existing nws
+    database, nws will not work and the following will be in the log:
     ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
     Note: there will also be other nws errors in the log.
 
