@@ -1053,7 +1053,6 @@ class NWSPoller:
                         sender           = alert['sender'],
                         senderName       = alert['senderName'],
                         )
-                    log.info('JK: instruction: %s' % alert['instruction'])
                     alertCount += 1
                     log.debug('compose_alert_records: yielding record %s' % record)
                     yield record
