@@ -18,6 +18,12 @@
         <td style='text-align:left;'>
           <br/>
           $desc
+        </td>
+      </tr>
+      <tr>
+        <td style='text-align:left;'>
+          <br/>
+          Instructions: $alert.instructions
           <br/>
           <br/>
         </td>

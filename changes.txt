@@ -8,6 +8,7 @@ nws change history
     id              : urn:oid:2.49.0.1.840.0.ba84e467a918f2f79303ebc47a234e87d285ab2f.003.1
     expires         : 2022-09-03 15:00:00 PDT (1662242400)
     sent            : 2022-09-03 05:37:00 PDT (1662208620)
+    instructions    : Drink plenty of fluids, stay in an air-conditioned room, stay...
     status          : Actual
     messageType     : Update
     category        : Met

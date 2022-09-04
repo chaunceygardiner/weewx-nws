@@ -262,25 +262,26 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
 1.  To get all alerts for the station's location:
     ```
     #for $alert in $nwsforecast.alerts()
-         $alert.id          # Identifier (ID) of alert
-         $alert.effective   # Time issued
-         $alert.expires     # Time this alert expires
-         $alert.onset       # Time it will begin
-         $alert.ends        # Time it will end
-         $alert.event       # Name of event (e.g., Heat Advisory)
-         $alert.headline    # Headline
-         $alert.description # Long description
-         $alert.latitude    # Latitude of point for which alerts were requested
-         $alert.longitude   # Longitude of point for which alerts were requested
-         $alert.sent        # Time alert was sent.
-         $alert.status      # Status of alert (e.g., Actual)
-         $alert.messageType # Message type (e.g., Update)
-         $alert.category    # Category (e.g., Met)
-         $alert.severity    # Severity (e.g, Moderate)
-         $alert.certainty   # Certainty (e.g, Likely)
-         $alert.urgency     # Urgency (e.g, Expected)
-         $alert.sender      # Sender (e.g, w-nws.webmaster@noaa.gov)
-         $alert.senderName  # Name of Sender (e.g, NWS San Francisco CA)
+         $alert.id           # Identifier (ID) of alert
+         $alert.effective    # Time issued
+         $alert.expires      # Time this alert expires
+         $alert.onset        # Time it will begin
+         $alert.ends         # Time it will end
+         $alert.event        # Name of event (e.g., Heat Advisory)
+         $alert.headline     # Headline
+         $alert.description  # Long description
+         $alert.instructions # Instructions on what to do
+         $alert.latitude     # Latitude of point for which alerts were requested
+         $alert.longitude    # Longitude of point for which alerts were requested
+         $alert.sent         # Time alert was sent.
+         $alert.status       # Status of alert (e.g., Actual)
+         $alert.messageType  # Message type (e.g., Update)
+         $alert.category     # Category (e.g., Met)
+         $alert.severity     # Severity (e.g, Moderate)
+         $alert.certainty    # Certainty (e.g, Likely)
+         $alert.urgency      # Urgency (e.g, Expected)
+         $alert.sender       # Sender (e.g, w-nws.webmaster@noaa.gov)
+         $alert.senderName   # Name of Sender (e.g, NWS San Francisco CA)
     #end for
     ```
     Sample values for the above variables follow:
@@ -293,6 +294,7 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
     event       : Tsunami Warning
     headline    : TEST Tsunami Warning issued June 11 at 9:12AM PDT until June 11 at 10:12AM PDT by NWS National Tsunami Warning Center
     description : PZZ530...THIS_MESSAGE_IS_FOR_TEST_PURPOSES_ONLY...THIS IS A TEST TO DETERMINE TRANSMISSION TIMES INVOLVED IN THE...
+    instructions: Drink plenty of fluids, stay in an air-conditioned room, stay...
     latitude    : 37.431495
     longitude   : -122.110937
     sent        : 2020-06-11 09:12:00 PDT (1591891920)
@@ -332,6 +334,12 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
          <td style='text-align:left;'>
            <br/>
            $desc
+         </td>
+       </tr>
+       <tr>
+         <td style='text-align:left;'>
+           <br/>
+           Instructions: $alert.instructions
          </td>
        </tr>
        #end for

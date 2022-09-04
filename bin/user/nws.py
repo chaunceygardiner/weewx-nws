@@ -81,6 +81,7 @@ table = [
     ('iconUrl',          'STRING NOT NULL'),
     ('shortForecast',    'STRING NOT NULL'), # For alrerts, holds the headline
     ('detailedForecast', 'STRING'),          # For alerts, holds the description
+    ('instruction',      'STRING'),          # For alerts only, holds instructions, null for others
     ('sent',             'FLOAT'),           # For alerts, holds the sent date, null for others.
     ('status',           'STRING'),          # For alerts, holds the status of the alert, null for others
     ('messageType',      'STRING'),          # For alerts, holds the category of the alert, null for others
@@ -122,6 +123,7 @@ class Forecast:
     iconUrl         : str
     shortForecast   : str    # For alerts, holds the headline
     detailedForecast: Optional[str] # For alerts,hold the description
+    instruction     : Optional[str] # For alerts only
     sent            : Optional[float] # For alerts only
     status          : Optional[str] # For alerts only
     messageType     : Optional[str] # For alerts only
@@ -475,6 +477,7 @@ class NWS(StdService):
         j['iconUrl']          = record.iconUrl
         j['shortForecast']    = record.shortForecast
         j['detailedForecast'] = record.detailedForecast
+        j['instruction']     = record.instruction
         j['sent']             = record.sent
         j['status']           = record.status
         j['messageType']      = record.messageType
@@ -1039,6 +1042,7 @@ class NWSPoller:
                         iconUrl          = '',                      # Dummy
                         shortForecast    = alert['headline'],
                         detailedForecast = alert['description'],
+                        instruction      = alert['instruction'],
                         sent             = parse(alert['sent'], tzinfos=tzinfos).timestamp(),
                         status           = alert['status'],
                         messageType      = alert['messageType'],
@@ -1049,6 +1053,7 @@ class NWSPoller:
                         sender           = alert['sender'],
                         senderName       = alert['senderName'],
                         )
+                    log.info('JK: instruction: %s' % alert['instruction'])
                     alertCount += 1
                     log.debug('compose_alert_records: yielding record %s' % record)
                     yield record
@@ -1101,6 +1106,7 @@ class NWSPoller:
                 iconUrl          = period['icon'],
                 shortForecast    = period['shortForecast'],
                 detailedForecast = period['detailedForecast'],
+                instruction      = None,
                 sent             = None,
                 status           = None,
                 messageType      = None,
@@ -1189,6 +1195,7 @@ class NWSForecastVariables(SearchList):
             row['event']       = raw_row['name']
             row['headline']    = raw_row['shortForecast']
             row['description'] = raw_row['detailedForecast']
+            row['instructions'] = raw_row['instruction']
             row['sent']        = weewx.units.ValueHelper((raw_row['sent'], time_units, time_group))
             row['status']      = raw_row['status']
             row['messageType'] = raw_row['messageType']
@@ -1274,7 +1281,7 @@ class NWSForecastVariables(SearchList):
             time_select_phrase = "dateTime = (SELECT MAX(dateTime)"
         else:
             time_select_phrase = "generatedTime = (SELECT MAX(generatedTime)"
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s ORDER BY startTime" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
@@ -1306,15 +1313,16 @@ class NWSForecastVariables(SearchList):
                 record['iconUrl'] = row[17]
                 record['shortForecast'] = row[18]
                 record['detailedForecast'] = row[19]
-                record['sent'] = row[20]
-                record['status'] = row[21]
-                record['messageType'] = row[22]
-                record['category'] = row[23]
-                record['severity'] = row[24]
-                record['certainty'] = row[25]
-                record['urgency'] = row[26]
-                record['sender'] = row[27]
-                record['senderName'] = row[28]
+                record['instruction'] = row[20]
+                record['sent'] = row[21]
+                record['status'] = row[22]
+                record['messageType'] = row[23]
+                record['category'] = row[24]
+                record['severity'] = row[25]
+                record['certainty'] = row[26]
+                record['urgency'] = row[27]
+                record['sender'] = row[28]
+                record['senderName'] = row[29]
 
                 records.append(record)
         return records
@@ -1663,9 +1671,9 @@ if __name__ == '__main__':
 
     def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion):
         if criterion == Criterion.ALL:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
         elif criterion == Criterion.LATEST:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
 
         for row in conn.execute(select):
             record = {}
@@ -1689,15 +1697,16 @@ if __name__ == '__main__':
             record['iconUrl'] = row[17]
             record['shortForecast'] = row[18]
             record['detailedForecast'] = row[19]
-            record['sent'] = row[20]
-            record['status'] = row[21]
-            record['messageType'] = row[22]
-            record['category'] = row[23]
-            record['severity'] = row[24]
-            record['certainty'] = row[25]
-            record['urgency'] = row[26]
-            record['sender'] = row[27]
-            record['senderName'] = row[28]
+            record['instruction'] = row[20]
+            record['sent'] = row[21]
+            record['status'] = row[22]
+            record['messageType'] = row[23]
+            record['category'] = row[24]
+            record['severity'] = row[25]
+            record['certainty'] = row[26]
+            record['urgency'] = row[27]
+            record['sender'] = row[28]
+            record['senderName'] = row[29]
             pretty_print_record(record)
             print('------------------------')
 
@@ -1731,6 +1740,8 @@ if __name__ == '__main__':
         print('iconUrl         : %s' % forecast.iconUrl)
         print('shortForecast   : %s' % forecast.shortForecast)
         print('detailedForecast: %s' % forecast.detailedForecast)
+        if forecast.instruction is not None:
+            print('instruction     : %s' % forecast.instruction)
         if forecast.sent is not None:
             print('sent            : %s' % timestamp_to_string(forecast.sent))
         if forecast.status is not None:
@@ -1773,6 +1784,8 @@ if __name__ == '__main__':
         print('iconUrl         : %s' % record['iconUrl'])
         print('shortForecast   : %s' % record['shortForecast'])
         print('detailedForecast: %s' % record['detailedForecast'])
+        if record['instruction'] is not None:
+            print('instruction     : %s' % record['instruction'])
         if record['sent'] is not None:
             print('sent            : %s' % timestamp_to_string(record['sent']))
         if record['status'] is not None:
