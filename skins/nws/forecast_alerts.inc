@@ -13,6 +13,8 @@
       <tr><td style='text-align:left;'><br/>Status: $alert.status</td></tr>
       <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
       <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
+      <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
+      <tr><td style='text-align:left;'>Ends: $alert.ends</td></tr>
       #set $desc = $alert.description.replace('\n\n', '<br/>')
       #set $desc = $desc.replace('\n', ' ')
       <tr>
@@ -33,8 +35,6 @@
       <tr><td style='text-align:left;'>Event: $alert.event</td></tr>
       <tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
       <tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
-      <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
-      <tr><td style='text-align:left;'>Ends: $alert.ends</td></tr>
       <tr><td style='text-align:left;'>Sent: $alert.sent</td></tr>
       <tr><td style='text-align:left;'>Message Type: $alert.messageType</td></tr>
       <tr><td style='text-align:left;'>Category: $alert.category</td></tr>
