@@ -1021,6 +1021,8 @@ class NWSPoller:
                     log.info('found expired alert (skipping): %s' % id)
                 elif expires <= (time.time() - 24.0 * 60.0 * 60.0):  # Don't be so quick to stop showing expired alerts.  NWS doesn't reissue them quickly enough.
                     log.info('alert is past expiration time of %s (skipping): %s' % (timestamp_to_string(expires), alert['id']))
+                elif alert['status'] == 'Test':
+                    log.info("Skipping alert with status of 'Test': ID: %s, Headline: %s" % (alert['id'], alert['headline']))
                 else:
                     record = Forecast(
                         interval         = NWS.get_interval(ForecastType.ALERTS),
@@ -1651,13 +1653,13 @@ if __name__ == '__main__':
                 nws.saveForecastsToDB(ForecastType.ALERTS)
 
             for record in nws.select_forecasts(ForecastType.TWELVE_HOUR):
-                pretty_print_record(record)
+                pretty_print_record(record, ForecastType.TWELVE_HOUR)
                 print('------------------------')
             for record in nws.select_forecasts(ForecastType.ONE_HOUR):
-                pretty_print_record(record)
+                pretty_print_record(record, ForecastType.ONE_HOUR)
                 print('------------------------')
             for record in nws.select_forecasts(ForecastType.ALERTS):
-                pretty_print_record(record)
+                pretty_print_record(record, ForecastType.ALERTS)
                 print('------------------------')
 
     def view_sqlite_database(dbfile: str, forecast_type: ForecastType, criterion: Criterion):
@@ -1710,7 +1712,7 @@ if __name__ == '__main__':
             record['urgency'] = row[27]
             record['sender'] = row[28]
             record['senderName'] = row[29]
-            pretty_print_record(record)
+            pretty_print_record(record, forecast_type)
             print('------------------------')
 
     def print_sqlite_summary(conn, dbfile: str, forecast_type: ForecastType):
@@ -1764,48 +1766,81 @@ if __name__ == '__main__':
         if forecast.senderName is not None:
             print('senderName      : %s' % forecast.senderName)
 
-    def pretty_print_record(record):
-        print('dateTime        : %s' % timestamp_to_string(record['dateTime']))
-        print('interval        : %d' % record['interval'])
-        print('latitude        : %s' % record['latitude'])
-        print('longitude       : %s' % record['longitude'])
-        print('usUnits         : %d' % record['usUnits'])
-        print('generatedTime   : %s' % timestamp_to_string(record['generatedTime']))
-        print('number          : %d' % record['number'])
-        print('name            : %s' % record['name'])
-        print('startTime       : %s' % timestamp_to_string(record['startTime']))
-        if record['expirationTime'] is not None:
-            print('expirationTime  : %s' % timestamp_to_string(record['expirationTime']))
-        if record['id'] is not None:
-            print('id              : %s' % record['id'])
-        print('endTime         : %s' % timestamp_to_string(record['endTime']))
-        print('isDaytime       : %d' % record['isDaytime'])
-        print('outTemp         : %f' % record['outTemp'])
-        print('outTempTrend    : %s' % record['outTempTrend'])
-        print('windSpeed       : %f' % record['windSpeed'])
-        print('windDir         : %f' % record['windDir'])
-        print('iconUrl         : %s' % record['iconUrl'])
-        print('shortForecast   : %s' % record['shortForecast'])
-        print('detailedForecast: %s' % record['detailedForecast'])
-        if record['instruction'] is not None:
-            print('instruction     : %s' % record['instruction'])
-        if record['sent'] is not None:
-            print('sent            : %s' % timestamp_to_string(record['sent']))
-        if record['status'] is not None:
-            print('status          : %s' % record['status'])
-        if record['messageType'] is not None:
-            print('messageType     : %s' % record['messageType'])
-        if record['category'] is not None:
-            print('category        : %s' % record['category'])
-        if record['severity'] is not None:
-            print('severity        : %s' % record['severity'])
-        if record['certainty'] is not None:
-            print('certainty       : %s' % record['certainty'])
-        if record['urgency'] is not None:
-            print('urgency         : %s' % record['urgency'])
-        if record['sender'] is not None:
-            print('sender          : %s' % record['sender'])
-        if record['senderName'] is not None:
-            print('senderName      : %s' % record['senderName'])
+    def pretty_print_record(record, forecast_type):
+        if forecast_type == ForecastType.ONE_HOUR or forecast_type == ForecastType.TWELVE_HOUR:
+            print('dateTime        : %s' % timestamp_to_string(record['dateTime']))
+            print('interval        : %d' % record['interval'])
+            print('latitude        : %s' % record['latitude'])
+            print('longitude       : %s' % record['longitude'])
+            print('usUnits         : %d' % record['usUnits'])
+            print('generatedTime   : %s' % timestamp_to_string(record['generatedTime']))
+            print('number          : %d' % record['number'])
+            print('name            : %s' % record['name'])
+            print('startTime       : %s' % timestamp_to_string(record['startTime']))
+            if record['expirationTime'] is not None:
+                print('expirationTime  : %s' % timestamp_to_string(record['expirationTime']))
+            if record['id'] is not None:
+                print('id              : %s' % record['id'])
+            print('endTime         : %s' % timestamp_to_string(record['endTime']))
+            print('isDaytime       : %d' % record['isDaytime'])
+            print('outTemp         : %f' % record['outTemp'])
+            print('outTempTrend    : %s' % record['outTempTrend'])
+            print('windSpeed       : %f' % record['windSpeed'])
+            print('windDir         : %f' % record['windDir'])
+            print('iconUrl         : %s' % record['iconUrl'])
+            print('shortForecast   : %s' % record['shortForecast'])
+            print('detailedForecast: %s' % record['detailedForecast'])
+            if record['instruction'] is not None:
+                print('instruction     : %s' % record['instruction'])
+            if record['sent'] is not None:
+                print('sent            : %s' % timestamp_to_string(record['sent']))
+            if record['status'] is not None:
+                print('status          : %s' % record['status'])
+            if record['messageType'] is not None:
+                print('messageType     : %s' % record['messageType'])
+            if record['category'] is not None:
+                print('category        : %s' % record['category'])
+            if record['severity'] is not None:
+                print('severity        : %s' % record['severity'])
+            if record['certainty'] is not None:
+                print('certainty       : %s' % record['certainty'])
+            if record['urgency'] is not None:
+                print('urgency         : %s' % record['urgency'])
+            if record['sender'] is not None:
+                print('sender          : %s' % record['sender'])
+            if record['senderName'] is not None:
+                print('senderName      : %s' % record['senderName'])
+        else: # ForecastType.ALERTS
+            print('dateTime        : %s' % timestamp_to_string(record['dateTime']))
+            print('Headline        : %s' % record['shortForecast'])
+            print('Issued          : %s' % timestamp_to_string(record['generatedTime']))
+            print('Onset           : %s' % timestamp_to_string(record['startTime']))
+            print('Ends            : %s' % timestamp_to_string(record['endTime']))
+            if record['status'] is not None:
+                print('Status          : %s' % record['status'])
+            if record['severity'] is not None:
+                print('Severity        : %s' % record['severity'])
+            if record['certainty'] is not None:
+                print('certainty       : %s' % record['certainty'])
+            print('Description     : %s' % record['detailedForecast'])
+            if record['instruction'] is not None:
+                print('Instructions    : %s' % record['instruction'])
+            if record['id'] is not None:
+                print('ID              : %s' % record['id'])
+            print('Event           : %s' % record['name'])
+            if record['expirationTime'] is not None:
+                print('Expires         : %s' % timestamp_to_string(record['expirationTime']))
+            if record['sent'] is not None:
+                print('Sent            : %s' % timestamp_to_string(record['sent']))
+            if record['messageType'] is not None:
+                print('Message         : %s' % record['messageType'])
+            if record['category'] is not None:
+                print('Category        : %s' % record['category'])
+            if record['urgency'] is not None:
+                print('Urgency         : %s' % record['urgency'])
+            if record['sender'] is not None:
+                print('Sender          : %s' % record['sender'])
+            if record['senderName'] is not None:
+                print('Sender Name     : %s' % record['senderName'])
 
     main()
