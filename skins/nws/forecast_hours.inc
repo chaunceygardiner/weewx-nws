@@ -12,13 +12,13 @@
             <span style='border-bottom:1pt solid LightGray;'>$hour.startTime.format('%l %p')</span>
           </td>
         #end for
-      <tr/>
+      </tr>
       <tr>
         #for $hour in $nwsforecast.one_hour_forecasts(7)
           <td style='width:14.2857%;$at_a_glance_padding'>
             #set $icon = $hour.iconUrl
             #set icon = $icon.replace('?size=small', '?size=medium')
-            <img src='$icon'/>
+            <img src='$icon' alt='$icon'/>
           </td>
         #end for
       </tr>
@@ -47,7 +47,7 @@
       <tr class='forecast_hours'>
         #set icon = $hour.iconUrl
         #set icon = $icon.replace('?size=small', '?size=medium')
-        <td style='width:20%;'><img src='$icon'/></td>
+        <td style='width:20%;'><img src='$icon' alt='$icon'></td>
         <td style='width:80%;'>
           <table style='width:100%;border-bottom:none;padding:0px;'>
             <tr><td style='font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$hour.startTime.format('%a %l %p')</td></tr>

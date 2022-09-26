@@ -20,22 +20,24 @@
         ## |       |               |                       |
         ## -------------------------------------------------
         <table style='width:100%;border-bottom:1pt solid LightGray;padding:15px;'>
-          #set $icon = $twelve_hour.iconUrl
-          <td style='width:16%;'><img src='$icon'/></td>
-          <td style='width:30%;'>
-            <table style='width:100%;text-align:center;'>
-              <tr style='width:100%;'><td>Temp</td></tr>
-              <tr style='width:100%;'><td>$twelve_hour.outTemp.format('%.0f') $twelve_hour.outTempTrend </td></tr>
-              <tr style='width:100%;'><td>Wind</td></tr>
-              <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f') $twelve_hour.windDir.ordinal_compass</td></tr>
-            </table>
-          </td>
-          <td style='width:54%;'>
-            <table style='width:100%;text-align:center;'>
-              <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$twelve_hour.name</td></tr>
-              <tr style='width:100%;'><td>$twelve_hour.detailedForecast</td></tr>
-            </table>
-          </td>
+          <tr>
+            #set $icon = $twelve_hour.iconUrl
+            <td style='width:16%;'><img src='$icon' alt='$icon'/></td>
+            <td style='width:30%;'>
+              <table style='width:100%;text-align:center;'>
+                <tr style='width:100%;'><td>Temp</td></tr>
+                <tr style='width:100%;'><td>$twelve_hour.outTemp.format('%.0f') $twelve_hour.outTempTrend </td></tr>
+                <tr style='width:100%;'><td>Wind</td></tr>
+                <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f') $twelve_hour.windDir.ordinal_compass</td></tr>
+              </table>
+            </td>
+            <td style='width:54%;'>
+              <table style='width:100%;text-align:center;'>
+                <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$twelve_hour.name</td></tr>
+                <tr style='width:100%;'><td>$twelve_hour.detailedForecast</td></tr>
+              </table>
+            </td>
+          </tr>
         </table>
       </td>
     </tr>
