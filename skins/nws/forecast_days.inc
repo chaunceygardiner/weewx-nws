@@ -22,7 +22,7 @@
         <table style='width:100%;border-bottom:1pt solid LightGray;padding:15px;'>
           <tr>
             #set $icon = $twelve_hour.iconUrl
-            <td style='width:16%;'><img src='$icon' alt='$icon'/></td>
+            <td style='width:16%;'><img src='$icon' alt='$icon'></td>
             <td style='width:30%;'>
               <table style='width:100%;text-align:center;'>
                 <tr style='width:100%;'><td>Temp</td></tr>

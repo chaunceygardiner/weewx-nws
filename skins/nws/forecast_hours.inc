@@ -18,21 +18,21 @@
           <td style='width:14.2857%;$at_a_glance_padding'>
             #set $icon = $hour.iconUrl
             #set icon = $icon.replace('?size=small', '?size=medium')
-            <img src='$icon' alt='$icon'/>
+            <img src='$icon' alt='$icon'>
           </td>
         #end for
       </tr>
       <tr>
         #for $hour in $nwsforecast.one_hour_forecasts(7)
           <td style='width:14.2857%;vertical-align:top;$at_a_glance_padding'>
-            $hour.outTemp.format('%.0f') $hour.outTempTrend<br/>
+            $hour.outTemp.format('%.0f') $hour.outTempTrend<br>
             $hour.shortForecast
           </td>
         #end for
       </tr>
     </table>
   </div>
-  <br/>
+  <br>
   <div style='width:100%;'>
     <table style='width:97%;text-align:center;border-style:solid;padding:30px;border:1pt solid LightGray;'>
       ## --------------------------------------------------
