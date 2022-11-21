@@ -1751,7 +1751,7 @@ if __name__ == '__main__':
             print('sent            : %s' % timestamp_to_string(forecast.sent))
         if forecast.status is not None:
             print('status          : %s' % forecast.status)
-        if forecast.messasgeType is not None:
+        if forecast.messageType is not None:
             print('messasgeType    : %s' % forecast.messasgeType)
         if forecast.category is not None:
             print('category        : %s' % forecast.category)
