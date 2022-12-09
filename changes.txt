@@ -1,6 +1,10 @@
 nws change history
 ------------------
 
+2.0.1 12/08/2022
+- In sample report, separate, by a blank line, the
+  What, Where, When, Impacts and Additional Details sections.
+
 2.0 09/04/2022
 1.  Better NWS alerts.
 
