@@ -16,7 +16,7 @@
       <tr><td style='text-align:left;'>Status: $alert.status</td></tr>
       <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
       <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
-      #set $desc = $alert.description.replace('\n\n', '<br>')
+      #set $desc = $alert.description.replace('\n\n', '<br><br>')
       #set $desc = $desc.replace('\n', ' ')
       <tr>
         <td style='text-align:left;'>
