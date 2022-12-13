@@ -9,7 +9,32 @@
       #set $alert_count = 0
       #for $alert in $nwsforecast.alerts()
       #set $alert_count += 1
-      <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$alert.headline</td></tr>
+      #set headline_length = len($alert.headline)
+      #if $headline_length > 80
+        #set words = $alert.headline.split()
+        #set line1 = ""
+        #set line2 = ""
+        #set char_count = 0
+        #for word in $words
+          #if $char_count < $headline_length / 2
+              #if $line1 != ""
+                #set line1 += " "
+                #set char_count += 1
+              #end if
+              #set line1 += $word
+              #set char_count += len($word)
+          #else
+              #if $line2 != ""
+                #set line2 += " "
+              #end if
+              #set line2 += $word
+          #end if
+        #end for
+        #set headline = $line1 + '<br>' + $line2
+      #else
+        #set headline = $alert.headline
+      #end if
+      <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$headline</td></tr>
       <tr><td style='text-align:left;'><br>Issued: $alert.effective</td></tr>
       <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
       <tr><td style='text-align:left;'>Ends: $alert.ends</td></tr>
