@@ -2,6 +2,7 @@
 ## See LICENSE.txt for your rights
 #errorCatcher Echo
 #encoding UTF-8
+#import math
 <div id='forecast_alerts'>
   <div>
     <table style='border-style:solid;padding:30px;border:1pt solid LightGray;'>
@@ -9,28 +10,37 @@
       #set $alert_count = 0
       #for $alert in $nwsforecast.alerts()
       #set $alert_count += 1
+      #set max_title_line = 80
       #set headline_length = len($alert.headline)
-      #if $headline_length > 80
+      #if $headline_length > $max_title_line
+        ## Figure out how many lines.
+        #set line_count = math.ceil($headline_length / float($max_title_line))
+        #set max_title_line = math.ceil($headline_length / $line_count)
         #set words = $alert.headline.split()
-        #set line1 = ""
-        #set line2 = ""
+        #set lines = []
         #set char_count = 0
+        #set idx = 0
+        $lines.append("")
         #for word in $words
-          #if $char_count < $headline_length / 2
-              #if $line1 != ""
-                #set line1 += " "
-                #set char_count += 1
-              #end if
-              #set line1 += $word
-              #set char_count += len($word)
-          #else
-              #if $line2 != ""
-                #set line2 += " "
-              #end if
-              #set line2 += $word
+          #if $char_count >= $max_title_line
+            #set idx += 1
+            $lines.append("")
+            #set char_count = 0
           #end if
+          #if $lines[$idx] != ""
+            #set lines[$idx] += " "
+            #set char_count += 1
+          #end if
+          #set lines[$idx] += $word
+          #set char_count += len($word)
         #end for
-        #set headline = $line1 + '<br>' + $line2
+        #set headline = ""
+        #for line in $lines
+          #if $headline != ""
+            #set headline += '<br>'
+          #end if
+          #set headline += $line
+        #end for
       #else
         #set headline = $alert.headline
       #end if
