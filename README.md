@@ -24,11 +24,11 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
    ```
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v2.0.1).
+   Click on releases and pick the latest release (Release v2.1).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-2.0.1.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-2.1.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.

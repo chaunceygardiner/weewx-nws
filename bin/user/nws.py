@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "2.0.1"
+WEEWX_NWS_VERSION = "2.1"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -240,7 +240,7 @@ class NWS(StdService):
             archive_interval               = to_int(config_dict['StdArchive']['archive_interval']),
             user_agent                     = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
             poll_secs                      = to_int(self.nws_config_dict.get('poll_secs', 1800)),
-            retry_wait_secs                = to_int(self.nws_config_dict.get('retry_wait_secs', 600)),
+            retry_wait_secs                = to_int(self.nws_config_dict.get('retry_wait_secs', 300)),
             days_to_keep                   = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             read_from_dir                  = self.nws_config_dict.get('read_from_dir', None),
             ssh_config                     = SshConfiguration(
@@ -669,6 +669,7 @@ class NWSPoller:
 
     def poll_nws(self) -> None:
         on_retry          : bool = False
+        on_retry_count    : int  = 0
         twelve_hour_failed: bool = False
         one_hour_failed   : bool = False
         alerts_failed     : bool = False
@@ -720,11 +721,19 @@ class NWSPoller:
                         log.error('Retrying ForecastType.ONE_HOUR request in %d s.' % self.cfg.retry_wait_secs)
                     if alerts_failed:
                         log.error('Retrying ForecastType.ALERTS request in %d s.' % self.cfg.retry_wait_secs)
-                    on_retry = True
-                    # TODO: Perhaps back off on retries.
-                    time.sleep(self.cfg.retry_wait_secs)
+                    if on_retry_count < 3:
+                        on_retry_count += 1
+                        on_retry = True
+                        # TODO: Perhaps back off on retries.
+                        time.sleep(self.cfg.retry_wait_secs)
+                    else:
+                        # We've retried enough, wait until next poll period.
+                        on_retry = False
+                        on_retry_count = 0
+                        sleep_time = NWSPoller.time_to_next_poll(self.cfg.poll_secs)
                 else:
                     on_retry = False
+                    on_retry_count = 0
                     sleep_time = NWSPoller.time_to_next_poll(self.cfg.poll_secs)
                     log.debug('poll_nws: Sleeping for %f seconds.' % sleep_time)
                     time.sleep(sleep_time)
