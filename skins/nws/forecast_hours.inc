@@ -18,6 +18,7 @@
           <td style='width:14.2857%;$at_a_glance_padding'>
             #set $icon = $hour.iconUrl
             #set icon = $icon.replace('?size=small', '?size=medium')
+            #set icon = $icon.replace(',0', '')
             <img src='$icon' alt='$icon'>
           </td>
         #end for
@@ -47,6 +48,7 @@
       <tr class='forecast_hours'>
         #set icon = $hour.iconUrl
         #set icon = $icon.replace('?size=small', '?size=medium')
+        #set icon = $icon.replace(',0', '')
         <td style='width:20%;'><img src='$icon' alt='$icon'></td>
         <td style='width:80%;'>
           <table style='width:100%;border-bottom:none;padding:0px;'>
