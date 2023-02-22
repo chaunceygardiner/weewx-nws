@@ -748,7 +748,7 @@ class NWSPoller:
             #        log.info('Could not refresh URLs, will continue to use cached URLs (unlikely to be an issue).')
 
     @staticmethod
-    def populate_forecast(cfg, forecast_type: ForecastType) -> Tuple[bool, bool]:
+    def populate_forecast(cfg, forecast_type: ForecastType) -> Tuple[bool, bool]: # returns retry, success booleans
         log.debug('populate_forecast(%s): start' % forecast_type)
         start_time = time.time()
         retry, j = NWSPoller.request_forecast(cfg, forecast_type)
@@ -885,7 +885,7 @@ class NWSPoller:
             return False
 
     @staticmethod
-    def request_forecast(cfg, forecast_type: ForecastType):
+    def request_forecast(cfg, forecast_type: ForecastType)->Tuple[bool, Optional[Dict[str, Any]]]: # retry, json
         log.debug('request_forecast(%s): start' % forecast_type)
         with cfg.lock:
             if forecast_type == ForecastType.ONE_HOUR:
@@ -977,7 +977,7 @@ class NWSPoller:
                 return True, j
             else:
                 log.debug('returning None')
-                return None
+                return True, None
         except requests.exceptions.RequestException as e:
             log.error('request_forecast(%s): Attempt to fetch from: %s failed: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
             return True, None
