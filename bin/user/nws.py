@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "2.2"
+WEEWX_NWS_VERSION = "2.3"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -150,6 +150,7 @@ class SshConfiguration:
 class Configuration:
     lock                          : threading.Lock
     alerts                        : List[Forecast]              # Controlled by lock
+    signalDeleteAlerts            : bool                        # Controlled by lock
     lastModifiedAlerts            : Optional[datetime.datetime] # Controlled by lock
     twelveHourForecasts           : List[Forecast]              # Controlled by lock
     twelveHourForecastsJson       : str                         # Controlled by lock
@@ -168,7 +169,9 @@ class Configuration:
     archive_interval              : int                         # Immutable
     user_agent                    : str                         # Immutable
     poll_secs                     : int                         # Immutable
+    alert_poll_secs               : int                         # Immutable
     retry_wait_secs               : int                         # Immutable
+    alert_retry_wait_secs         : int                         # Immutable
     days_to_keep                  : int                         # Immutable
     read_from_dir                 : Optional[str]               # Immutable
     ssh_config                    : Optional[SshConfiguration]  # Immutable
@@ -222,6 +225,7 @@ class NWS(StdService):
         self.cfg = Configuration(
             lock                           = threading.Lock(),
             alerts                         = [],
+            signalDeleteAlerts             = False,
             lastModifiedAlerts             = None,
             twelveHourForecasts            = [],
             twelveHourForecastsJson        = '',
@@ -240,7 +244,9 @@ class NWS(StdService):
             archive_interval               = to_int(config_dict['StdArchive']['archive_interval']),
             user_agent                     = self.nws_config_dict.get('User-Agent', '(<weather-site>, <contact>)'),
             poll_secs                      = to_int(self.nws_config_dict.get('poll_secs', 1800)),
+            alert_poll_secs                = to_int(self.nws_config_dict.get('alert_poll_secs', 600)),
             retry_wait_secs                = to_int(self.nws_config_dict.get('retry_wait_secs', 300)),
+            alert_retry_wait_secs          = to_int(self.nws_config_dict.get('alert_retry_wait_secs', 30)),
             days_to_keep                   = to_int(self.nws_config_dict.get('days_to_keep', 90)),
             read_from_dir                  = self.nws_config_dict.get('read_from_dir', None),
             ssh_config                     = SshConfiguration(
@@ -267,7 +273,9 @@ class NWS(StdService):
         log.info('archive_interval              : %d' % self.cfg.archive_interval)
         log.info('user_agent                    : %s' % self.cfg.user_agent)
         log.info('poll_secs                     : %d' % self.cfg.poll_secs)
+        log.info('alert_poll_secs               : %d' % self.cfg.alert_poll_secs)
         log.info('retry_wait_secs               : %d' % self.cfg.retry_wait_secs)
+        log.info('alert_retry_wait_secs         : %d' % self.cfg.alert_retry_wait_secs)
         log.info('days_to_keep                  : %d' % self.cfg.days_to_keep)
         log.info('read_from_dir                 : %s' % self.cfg.read_from_dir)
         if self.cfg.ssh_config is None:
@@ -298,12 +306,26 @@ class NWS(StdService):
                     if i < 2:
                         time.sleep(5)
 
-        # Start a thread to query NWS for forecasts
-        nws_poller: NWSPoller = NWSPoller(self.cfg)
-        t: threading.Thread = threading.Thread(target=nws_poller.poll_nws)
-        t.setName('NWS')
-        t.setDaemon(True)
-        t.start()
+        # Start a thread to query NWS for 1H forecasts
+        nws_1h_poller: NWSPoller = NWSPoller(self.cfg, ForecastType.ONE_HOUR)
+        t_1h_forecasts: threading.Thread = threading.Thread(target=nws_1h_poller.poll_nws)
+        t_1h_forecasts.setName('NWS_1h_Forecasts')
+        t_1h_forecasts.setDaemon(True)
+        t_1h_forecasts.start()
+
+        # Start a thread to query NWS for 12H forecasts
+        nws_12h_poller: NWSPoller = NWSPoller(self.cfg, ForecastType.TWELVE_HOUR)
+        t_12h_forecasts: threading.Thread = threading.Thread(target=nws_12h_poller.poll_nws)
+        t_12h_forecasts.setName('NWS_12h_Forecasts')
+        t_12h_forecasts.setDaemon(True)
+        t_12h_forecasts.start()
+
+        # Start a thread to query NWS for alerts
+        nws_alerts_poller: NWSPoller = NWSPoller(self.cfg, ForecastType.ALERTS)
+        t_alerts: threading.Thread = threading.Thread(target=nws_alerts_poller.poll_nws)
+        t_alerts.setName('NWS_Alerts')
+        t_alerts.setDaemon(True)
+        t_alerts.start()
 
         self.bind(weewx.END_ARCHIVE_PERIOD, self.end_archive_period)
 
@@ -335,6 +357,10 @@ class NWS(StdService):
                     log.info('Forecast %s, generated %s, ignored because the generated time is in the future.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
                     return
                 log.debug('saveForecastsToDB(%s): bucket: %s' % (forecast_type, bucket))
+                # If we successfully downloaded zero alerts, clear alerts from database before continuing.
+                if forecast_type == ForecastType.ALERTS and self.cfg.signalDeleteAlerts:
+                    self.delete_all_alerts()
+                    self.cfg.signalDeleteAlerts = False
                 if len(bucket) != 0:
                     ts = NWS.get_archive_interval_timestamp(self.cfg.archive_interval)
                     log.debug('saveForecastsToDB(%s): bucket[0].generatedTime: %s' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
@@ -396,6 +422,26 @@ class NWS(StdService):
                dbmanager.getSql(delete)
         except Exception as e:
            log.error('delete_expired_alerts: %s failed with %s (%s).' % (delete, e, type(e)))
+           weeutil.logger.log_traceback(log.error, "    ****  ")
+
+    def delete_all_alerts(self) -> None:
+        try:
+           dbmanager = self.engine.db_binder.get_manager(self.data_binding)
+           try:
+               select = 'SELECT COUNT(dateTime) FROM archive WHERE interval = %d' % NWS.get_interval(ForecastType.ALERTS)
+               log.debug('Getting count of alerts: %s.' % select)
+               row = dbmanager.getSql(select)
+           except Exception as e:
+               log.error('delete_all_alerts: %s failed with %s (%s).' % (select, e, type(e)))
+               weeutil.logger.log_traceback(log.error, "    ****  ")
+               return
+           # If there are alerts, delete them.
+           if row[0] != 0:
+               delete = 'DELETE FROM archive WHERE interval = %d' % NWS.get_interval(ForecastType.ALERTS)
+               log.info('Deleted %d ForecastType.ALERTS' % row[0])
+               dbmanager.getSql(delete)
+        except Exception as e:
+           log.error('delete_all_alerts: %s failed with %s (%s).' % (delete, e, type(e)))
            weeutil.logger.log_traceback(log.error, "    ****  ")
 
     def delete_old_forecasts(self, forecast_type: ForecastType) -> None:
@@ -665,88 +711,55 @@ class NWS(StdService):
         return NWSForecastVariables.fetch_records(dbmanager, forecast_type, self.cfg.latitude, self.cfg.longitude, max_forecasts)
 
 class NWSPoller:
-    def __init__(self, cfg: Configuration):
-        self.cfg = cfg
+    def __init__(self, cfg: Configuration, forecast_type: ForecastType):
+        self.cfg             = cfg
+        self.forecast_type   = forecast_type
+        self.poll_secs       = cfg.alert_poll_secs if forecast_type == ForecastType.ALERTS else cfg.poll_secs
+        self.retry_wait_secs = cfg.alert_retry_wait_secs if forecast_type == ForecastType.ALERTS else cfg.retry_wait_secs
 
     def poll_nws(self) -> None:
-        on_retry          : bool = False
-        on_retry_count    : int  = 0
-        twelve_hour_failed: bool = False
-        one_hour_failed   : bool = False
-        alerts_failed     : bool = False
+        on_retry      : bool = False
+        on_retry_count: int  = 0
+        failed        : bool = False
         while True:
             try:
-                if not on_retry or twelve_hour_failed:
+                if not on_retry or failed:
                     for i in range(4):
-                        retry, success = NWSPoller.populate_forecast(self.cfg, ForecastType.TWELVE_HOUR)
+                        retry, success = NWSPoller.populate_forecast(self.cfg, self.forecast_type)
                         if success or not retry:
                             break
                         else:
                             if i < 3:
-                                log.info('Retrying ForecastType.TWELVE_HOUR request in 5s.')
+                                log.info('Retrying %s request in 5s.' % self.forecast_type)
                                 time.sleep(5)
                     if success or not retry:
-                        twelve_hour_failed = False
+                        failed = False
                     else:
-                        twelve_hour_failed = True
-                if not on_retry or one_hour_failed:
-                    for i in range(4):
-                        retry, success = NWSPoller.populate_forecast(self.cfg, ForecastType.ONE_HOUR)
-                        if success or not retry:
-                            break
-                        else:
-                            if i < 3:
-                                log.info('Retrying ForecastType.ONE_HOUR request in 5s.')
-                                time.sleep(5)
-                    if success or not retry:
-                        one_hour_failed = False
-                    else:
-                        one_hour_failed = True
-                if not on_retry or alerts_failed:
-                    for i in range(4):
-                        retry, success = NWSPoller.populate_forecast(self.cfg, ForecastType.ALERTS)
-                        if success or not retry:
-                            break
-                        else:
-                            if i < 3:
-                                log.info('Retrying ForecastType.ALERTS request in 5s.')
-                                time.sleep(5)
-                    if success or not retry:
-                        alerts_failed = False
-                    else:
-                        alerts_failed = True
-                if twelve_hour_failed or one_hour_failed or alerts_failed:
-                    if twelve_hour_failed:
-                        log.error('Retrying ForecastType.TWELVE_HOUR request in %d s.' % self.cfg.retry_wait_secs)
-                    if one_hour_failed:
-                        log.error('Retrying ForecastType.ONE_HOUR request in %d s.' % self.cfg.retry_wait_secs)
-                    if alerts_failed:
-                        log.error('Retrying ForecastType.ALERTS request in %d s.' % self.cfg.retry_wait_secs)
+                        failed = True
+                if failed:
+                    log.error('Retrying %s request in %d s.' % (self.forecast_type, self.retry_wait_secs))
                     if on_retry_count < 3:
                         on_retry_count += 1
                         on_retry = True
                         # TODO: Perhaps back off on retries.
-                        time.sleep(self.cfg.retry_wait_secs)
+                        time.sleep(self.retry_wait_secs)
                     else:
                         # We've retried enough, wait until next poll period.
                         on_retry = False
                         on_retry_count = 0
-                        sleep_time = NWSPoller.time_to_next_poll(self.cfg.poll_secs)
+                        sleep_time = NWSPoller.time_to_next_poll(self.poll_secs)
+                        log.debug('poll_nws: Sleeping for %f seconds.' % sleep_time)
+                        time.sleep(sleep_time)
                 else:
                     on_retry = False
                     on_retry_count = 0
-                    sleep_time = NWSPoller.time_to_next_poll(self.cfg.poll_secs)
+                    sleep_time = NWSPoller.time_to_next_poll(self.poll_secs)
                     log.debug('poll_nws: Sleeping for %f seconds.' % sleep_time)
                     time.sleep(sleep_time)
             except Exception as e:
-                log.error('poll_nws: Encountered exception. Retrying in %d seconds. exception: %s (%s)' % (self.cfg.retry_wait_secs, e, type(e)))
+                log.error('poll_nws(%s): Encountered exception. Retrying in %d seconds. exception: %s (%s)' % (self.forecast_type, self.retry_wait_secs, e, type(e)))
                 weeutil.logger.log_traceback(log.error, "    ****  ")
                 time.sleep(self.cfg.retry_wait_secs)
-            # For now, don't refresh URLs.  Perhaps we could refresh URLs once a day.
-            # After the sleep, get new URLs (there is a slim chance they could have changed.
-            #if self.cfg.read_from_dir is None or self.cfg.read_from_dir == '':
-            #    if not NWSPoller.request_urls(self.cfg):
-            #        log.info('Could not refresh URLs, will continue to use cached URLs (unlikely to be an issue).')
 
     @staticmethod
     def populate_forecast(cfg, forecast_type: ForecastType) -> Tuple[bool, bool]: # returns retry, success booleans
@@ -783,6 +796,12 @@ class NWSPoller:
                 except KeyError as e:
                     log.error("populate_forecast(%s): Could not compose forecast record.  Key: '%s' missing in returned forecast." % (forecast_type, e))
                     return True, False  # retry since unsuccessful
+                # Signal to delete all alerts if 0 alerts were downloaded
+                if forecast_type == ForecastType.ALERTS:
+                    if record_count == 0:
+                        cfg.signalDeleteAlerts = True
+                    else:
+                        cfg.signalDeleteAlerts = False
             if record_count == 0:
                 log.info('Downloaded 0 %s records.' % forecast_type)
             else:
@@ -1507,6 +1526,7 @@ if __name__ == '__main__':
         cfg = Configuration(
             lock                  = threading.Lock(),
             alerts                = [],
+            signalDeleteAlerts    = False,
             lastModifiedAlerts    = None,
             twelveHourForecasts   = [],
             twelveHourForecastsJson = '',
@@ -1524,8 +1544,10 @@ if __name__ == '__main__':
             timeout_secs          = 5,
             archive_interval      = 300,
             user_agent            = '(weewx-nws test run, weewx-nws-developer)',
-            poll_secs             = 3600,
-            retry_wait_secs       = 30,
+            poll_secs             = 1800,
+            alert_poll_secs       = 600,
+            retry_wait_secs       = 300,
+            alert_retry_wait_secs = 30,
             days_to_keep          = 90,
             read_from_dir         = None,
             ssh_config            = None,

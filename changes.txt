@@ -1,7 +1,14 @@
 nws change history
 ------------------
 
-2.2 03/01/2023
+2.3 03/01/2023
+- Separate 1H, 12H and Alerts into separate threads.  Poll seconds and retry seconds
+  for alerts are now configured separately from forecasts (because alerts need to
+  be polled more often (600s polls and 30s retries are recommended for alerts).
+- If zero alerts are downloaded (meaning no outstanding alerts), delete
+  the existing alerts in the database.
+
+2.2 02/27/2023
 - Add more type information (especially return types) and fix up some minor errors.
 
 2.1 12/28/2022

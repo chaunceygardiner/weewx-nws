@@ -22,7 +22,7 @@ def loader():
 class NWSInstaller(ExtensionInstaller):
     def __init__(self):
         super(NWSInstaller, self).__init__(
-            version="2.2",
+            version="2.3",
             name='nws',
             description='Fetch NWS Hourly Forecast.',
             author="John A Kline",
@@ -30,12 +30,14 @@ class NWSInstaller(ExtensionInstaller):
             data_services='user.nws.NWS',
             config={
                 'NWS': {
-                    'data_binding'   : 'nws_binding',
-                    'days_to_keep'   : 90,
-                    'poll_secs'      : 1800,
-                    'retry_wait_secs': 300,
-                    'timeout_secs'   : 10,
-                    'User-Agent'     : '(my-weather-site.com, me@my-weather-site.com)',
+                    'data_binding'         : 'nws_binding',
+                    'days_to_keep'         : 90,
+                    'poll_secs'            : 1800,
+                    'alert_poll_secs'      : 600,
+                    'retry_wait_secs'      : 300,
+                    'alert_retry_wait_secs': 30,
+                    'timeout_secs'         : 10,
+                    'User-Agent'           : '(my-weather-site.com, me@my-weather-site.com)',
                 },
                 'DataBindings': {
                     'nws_binding': {
