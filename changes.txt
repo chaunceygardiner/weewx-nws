@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+2.2 03/01/2023
+- Add more type information (especially return types) and fix up some minor errors.
+
 2.1 12/28/2022
 - Bug fix.  When NWS 12H and 1H forecasts are down for hours and hours (as happens),
   ALERTS aren't checked.  v2.1 fixes this oversight.

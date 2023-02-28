@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Copyright 2020 by John A Kline <john@johnkline.com>
+# Copyright 2020-2023 by John A Kline <john@johnkline.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -34,7 +34,7 @@ from dateutil.parser import parse
 
 from enum import Enum
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import weewx
 import weewx.units
@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "2.1"
+WEEWX_NWS_VERSION = "2.2"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -314,7 +314,7 @@ class NWS(StdService):
         self.saveForecastsToDB(ForecastType.ONE_HOUR)
         self.saveForecastsToDB(ForecastType.ALERTS)
 
-    def saveForecastsToDB(self, forecast_type: ForecastType):
+    def saveForecastsToDB(self, forecast_type: ForecastType) -> None:
         try:
             log.debug('saveForecastsToDB(%s): start' % forecast_type)
             if forecast_type == ForecastType.ALERTS:
@@ -365,7 +365,7 @@ class NWS(StdService):
             log.error('saveForedcastsToDB(%s): %s (%s)' % (forecast_type, e, type(e)))
             weeutil.logger.log_traceback(log.error, "    ****  ")
 
-    def forecast_in_db(self, forecast_type: ForecastType, generatedTime: int):
+    def forecast_in_db(self, forecast_type: ForecastType, generatedTime: int) -> bool:
         try:
             dbmanager = self.engine.db_binder.get_manager(self.data_binding)
             select = "SELECT generatedTime FROM archive WHERE interval = %d AND generatedTime = %d LIMIT 1" % (
@@ -375,8 +375,9 @@ class NWS(StdService):
         except Exception as e:
             log.error('forecast_in_db(%s, %d) failed with %s (%s).' % (forecast_type, generatedTime, e, type(e)))
             weeutil.logger.log_traceback(log.error, "    ****  ")
+            raise Exception('forecast_in_db(%s, %d) failed with %s (%s).' % (forecast_type, generatedTime, e, type(e)))
 
-    def delete_expired_alerts(self):
+    def delete_expired_alerts(self) -> None:
         try:
            dbmanager = self.engine.db_binder.get_manager(self.data_binding)
            # Only delete if there are actually expired alerts in the table (to avoid confusing deletes in the log).
@@ -386,7 +387,7 @@ class NWS(StdService):
                log.debug('Checking if there are any expired alerts in the archive to delete: select: %s.' % select)
                row = dbmanager.getSql(select)
            except Exception as e:
-               log.error('delete_all_alerts: %s failed with %s (%s).' % (select, e, type(e)))
+               log.error('delete_expired_alerts: %s failed with %s (%s).' % (select, e, type(e)))
                weeutil.logger.log_traceback(log.error, "    ****  ")
                return
            if row[0] != 0:
@@ -394,10 +395,10 @@ class NWS(StdService):
                log.info('Pruning ForecastType.ALERTS')
                dbmanager.getSql(delete)
         except Exception as e:
-           log.error('delete_all_alerts: %s failed with %s (%s).' % (delete, e, type(e)))
+           log.error('delete_expired_alerts: %s failed with %s (%s).' % (delete, e, type(e)))
            weeutil.logger.log_traceback(log.error, "    ****  ")
 
-    def delete_old_forecasts(self, forecast_type: ForecastType):
+    def delete_old_forecasts(self, forecast_type: ForecastType) -> None:
         if forecast_type == ForecastType.ALERTS:
             return    # Alerts are not deleted here; rather they are deleted each time [possibly 0] alerts are saved to the db.
         if self.cfg.days_to_keep == 0:
@@ -454,7 +455,7 @@ class NWS(StdService):
             log.error("rsync_forecast: Caught exception %s: %s" % (cl, e))
 
     @staticmethod
-    def convert_to_json(record, ts):
+    def convert_to_json(record, ts) -> Dict[str, Any]:
         log.debug('convert_to_json: start')
         j = {}
         j['dateTime']         = ts
@@ -632,7 +633,7 @@ class NWS(StdService):
         return (intersections & 1) == 1
 
     @staticmethod
-    def check_latlong_against_nws_polygon(latitude: float, longitude: float, coordinates: List[List[List[float]]]):
+    def check_latlong_against_nws_polygon(latitude: float, longitude: float, coordinates: List[List[List[float]]]) -> bool:
         # Check if lat,long fall within the returned polygon.
         # Coordinates is an array of lat/long (array) pairs.
 
@@ -653,7 +654,7 @@ class NWS(StdService):
 
         return NWS.point_in_polygon(point, sides)
 
-    def save_forecast(self, record):
+    def save_forecast(self, record) -> None:
         """save data to database"""
         dbmanager = self.engine.db_binder.get_manager(self.data_binding)
         dbmanager.addRecord(record)
@@ -801,7 +802,7 @@ class NWSPoller:
             return False, True # no-need to retry as successful
 
     @staticmethod
-    def time_to_next_poll(poll_secs: int):
+    def time_to_next_poll(poll_secs: int) -> float:
         time_of_next_poll = int(time.time() / poll_secs) * poll_secs + poll_secs
         return time_of_next_poll - time.time()
 
@@ -991,7 +992,7 @@ class NWSPoller:
             return True, None
 
     @staticmethod
-    def compose_alert_records(j, latitude: str, longitude: str):
+    def compose_alert_records(j, latitude: str, longitude: str) -> Iterator[Forecast]:
         log.debug('compose_alert_records: len(j[features]): %d' % len(j['features']))
         alertCount = 0
         # Collect expired ids up front so that these alerts can be discarded, rather than yielded
@@ -1071,7 +1072,7 @@ class NWSPoller:
                 log.info('malformed alert (skipping): %s, %s' % (feature, e))
 
     @staticmethod
-    def compose_records(j, forecast_type: ForecastType, latitude: str, longitude: str):
+    def compose_records(j, forecast_type: ForecastType, latitude: str, longitude: str) -> Iterator[Forecast]:
         if forecast_type == ForecastType.ALERTS:
             yield from NWSPoller.compose_alert_records(j, latitude, longitude)
             return
@@ -1129,7 +1130,7 @@ class NWSPoller:
             yield record
 
     @staticmethod
-    def translate_wind_dir(wdir_str):
+    def translate_wind_dir(wdir_str) -> Optional[float]:
         if wdir_str == 'N':
             return 0.0
         elif wdir_str == 'NNE':
@@ -1177,16 +1178,16 @@ class NWSForecastVariables(SearchList):
 
         self.latitude, self.longitude = NWS.get_lat_long(generator.config_dict)
 
-    def get_extension_list(self, timespan, db_lookup):
+    def get_extension_list(self, timespan, db_lookup) -> List[Dict[str, 'NWSForecastVariables']]:
         return [{'nwsforecast': self}]
 
-    def one_hour_forecasts(self, max_forecasts:Optional[int]=None):
+    def one_hour_forecasts(self, max_forecasts:Optional[int]=None) -> List[Dict[str, Any]]:
         return self.forecasts(ForecastType.ONE_HOUR, max_forecasts)
 
-    def twelve_hour_forecasts(self, max_forecasts:Optional[int]=None):
+    def twelve_hour_forecasts(self, max_forecasts:Optional[int]=None) -> List[Dict[str, Any]]:
         return self.forecasts(ForecastType.TWELVE_HOUR, max_forecasts)
 
-    def alerts(self):
+    def alerts(self) -> List[Dict[str, Any]]:
         """Returns the latest alert records."""
         raw_rows = self.getLatestForecastRows(ForecastType.ALERTS)
 
@@ -1221,7 +1222,7 @@ class NWSForecastVariables(SearchList):
     def alert_count(self) -> int:
         return len(self.getLatestForecastRows(ForecastType.ALERTS))
 
-    def forecasts(self, forecast_type: ForecastType, max_forecasts:Optional[int]=None):
+    def forecasts(self, forecast_type: ForecastType, max_forecasts:Optional[int]=None) -> List[Dict[str, Any]]:
         """Returns the latest forecast records of the given type."""
         rows = self.getLatestForecastRows(forecast_type, max_forecasts)
         for row in rows:
@@ -1538,7 +1539,7 @@ if __name__ == '__main__':
         else:
             print('request_forecast returned None.')
 
-    def test_point_in_polygon():
+    def test_point_in_polygon() -> None:
         point = Point(
             lat  = 37.4315,
             long = -122.1109)
@@ -1614,7 +1615,7 @@ if __name__ == '__main__':
         assert NWS.point_in_polygon(point, polygon_91_87) == True
         assert NWS.point_in_polygon(point, polygon_92_88) == False
 
-    def test_service(lat: float, long: float):
+    def test_service(lat: float, long: float) -> None:
         from weewx.engine import StdEngine
         from tempfile import NamedTemporaryFile
 
@@ -1671,7 +1672,7 @@ if __name__ == '__main__':
                 pretty_print_record(record, ForecastType.ALERTS)
                 print('------------------------')
 
-    def view_sqlite_database(dbfile: str, forecast_type: ForecastType, criterion: Criterion):
+    def view_sqlite_database(dbfile: str, forecast_type: ForecastType, criterion: Criterion) -> None:
         try:
             import sqlite3
         except:
@@ -1683,7 +1684,7 @@ if __name__ == '__main__':
         else:   # SUMMMARY
             print_sqlite_summary(conn, dbfile, forecast_type)
 
-    def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion):
+    def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion) -> None:
         if criterion == Criterion.ALL:
             select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
         elif criterion == Criterion.LATEST:
@@ -1724,7 +1725,7 @@ if __name__ == '__main__':
             pretty_print_record(record, forecast_type)
             print('------------------------')
 
-    def print_sqlite_summary(conn, dbfile: str, forecast_type: ForecastType):
+    def print_sqlite_summary(conn, dbfile: str, forecast_type: ForecastType) -> None:
         select = "SELECT dateTime, MAX(generatedTime), MIN(startTime), MAX(endTime) FROM archive WHERE interval = %d GROUP BY dateTime ORDER BY generatedTime" % NWS.get_interval(forecast_type)
 
         # 2020-05-28 14:00:00 PDT (1590699600)
@@ -1732,7 +1733,7 @@ if __name__ == '__main__':
         for row in conn.execute(select):
             print('%s %s %s %s' % (timestamp_to_string(row[0]), timestamp_to_string(row[1]), timestamp_to_string(row[2]), timestamp_to_string(row[3])))
 
-    def pretty_print_forecast(forecast):
+    def pretty_print_forecast(forecast) -> None:
         print('interval        : %d' % forecast.interval)
         print('latitude        : %s' % forecast.latitude)
         print('longitude       : %s' % forecast.longitude)
@@ -1775,7 +1776,7 @@ if __name__ == '__main__':
         if forecast.senderName is not None:
             print('senderName      : %s' % forecast.senderName)
 
-    def pretty_print_record(record, forecast_type):
+    def pretty_print_record(record, forecast_type) -> None:
         if forecast_type == ForecastType.ONE_HOUR or forecast_type == ForecastType.TWELVE_HOUR:
             print('dateTime        : %s' % timestamp_to_string(record['dateTime']))
             print('interval        : %d' % record['interval'])
