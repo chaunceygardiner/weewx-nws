@@ -26,7 +26,7 @@
       <tr>
         #for $hour in $nwsforecast.one_hour_forecasts(7)
           <td style='width:14.2857%;vertical-align:top;$at_a_glance_padding'>
-            $hour.outTemp.format('%.0f') $hour.outTempTrend<br>
+            $hour.outTemp.format('%.0f')$unit.label.outTemp $hour.outTempTrend<br>
             $hour.shortForecast
           </td>
         #end for
@@ -58,8 +58,8 @@
                 <table style='width:100%;border-bottom:none;padding:0px;'>
                   <tr>
                     <td style='width:34%;'>$hour.shortForecast</td>
-                    <td style='width:33%;'>$hour.outTemp.format('%.0f')</td>
-                    <td style='width:33%;'>$hour.windSpeed.format('%.0f') $hour.windDir.ordinal_compass</td>
+                    <td style='width:33%;'>$hour.outTemp.format('%.0f')$unit.label.outTemp</td>
+                    <td style='width:33%;'>$hour.windSpeed.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
                   </tr>
                 </table>
               </td>
