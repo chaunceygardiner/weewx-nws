@@ -81,6 +81,7 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
    of your station, as specified in the weewx.conf file.  Also, please note, you'll need to install
    matplotlib to run this utility.  Matplotlib is NOT needed to run the extension.  On Debian systems,
    matlotlib can be installed with:
+   **Note: As of 15 March 2023, the following example reports no issue as NWS has rolled out a fix (at least for this location).**
    ```
    sudo apt install python3-matplotlib
    ```
