@@ -53,7 +53,12 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
        longitude = -122.333  # Best practice is not to set longitude here.
    ```
 
-1. If NWS is returning the wrong grid for your lat/long (as is the case for the author),
+1. **As of 15 March 2023, this NWS bug is fixed (at least for the author's location).
+   If you have hardcoded your URLs and are now getting the error listed below, it is because
+   NWS has fixed the problem for you area.  Simply remove the hardcoded URLs in the NWS
+   section of weewx.conf.**
+
+   If NWS is returning the wrong grid for your lat/long (as is the case for the author),
    the twelve hour and one hour forecast URLs can be hardcoded with the correct grid
    with the `one_hour_forecast_url` and `twelve_hour_forecast_url`.
    For example, using Lat/Long 37.431495/-122.110937, you'll see a message in the log:
