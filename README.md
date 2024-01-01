@@ -9,13 +9,11 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
 
 **THIS PLUGIN REQUIRES PYTHON 3 AND WEEWX 4**
 
-**NOTE: NWS's grid forecast is down as of December 22, 2023 and will remain so until January 1, 2024.  This is an unplanned outage.  As this plugin is based on NWS's grid forecast, it will not be downloading new forecasts until the new year.  See the [Central Operations Message](https://www.nco.ncep.noaa.gov/status/messages/) dated '1837Z FRI DEC 22 2023**
-
 **If you are updating from versions 1.13.1 or less, you MUST delete the nws database (nws.sdb) before
   restarting weewx.  This is because the database schema has changed.  If you don't do this, nws
   won't work and the following statement will be in the weewx log:
   ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
-  Note: there will also be other nws errors in the log.**
+  Note: there will also be other nws errors in the log. **
 
 # Installation Instructions
 
