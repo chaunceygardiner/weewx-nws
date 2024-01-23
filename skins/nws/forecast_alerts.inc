@@ -51,8 +51,14 @@
       <tr><td style='text-align:left;'>Status: $alert.status</td></tr>
       <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
       <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
-      #set $desc = $alert.description.replace('\n\n', '<br><br>')
-      #set $desc = $desc.replace('\n', ' ')
+      #try
+          #set $desc = $alert.description.replace('\n\n', '<br><br>')
+          #set $desc = $desc.replace('\n', ' ')
+      #except
+        ## Calling replace has failed because of malformed alerts.
+        ## alert.description is probably None
+        #set $desc = $alert.description
+      #end try
       <tr>
         <td style='text-align:left;'>
           <br>
