@@ -5,9 +5,9 @@
 
 A WeeWX extension for NWS forecasts.
 
-Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
+Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
 
-**THIS PLUGIN REQUIRES PYTHON 3 AND WEEWX 4**
+**This plugin requires Python 3.7, WeeWX 4 or 5**
 
 **If you are updating from versions 1.13.1 or less, you MUST delete the nws database (nws.sdb) before
   restarting weewx.  This is because the database schema has changed.  If you don't do this, nws
@@ -17,18 +17,46 @@ Copyright (C)2020-2022 by John A Kline (john@johnkline.com)
 
 # Installation Instructions
 
+## WeeWX 5 Installation Instructions
+
+1. Activate the virtual environment (actual syntax varies by type of WeeWX install):
+   `/home/weewx/weewx-venv/bin/activate`
+
+1. Install the dateutil package.
+
+   `pip install python-dateutil`
+
+1. Install the requests package.
+
+   `pip install requests`
+
+1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
+   Click on releases and pick the latest release (Release v2.3).
+
+1. Install the nws extension.
+
+   `weectl extension install weewx-nws-2.3.zip`
+
+## WeeWX 4 Installation Instructions
+
 1. Install dateutil for python3 (it is required by the nws extension).
    On debian, this can be accomplished with:
    ```
    sudo apt install python3-dateutil
    ```
 
+1. Install python3's requests package.
+   On debian, this can be accomplished with:
+   ```
+   apt install python3-requests
+   ```
+
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v2.1).
+   Click on releases and pick the latest release (Release v2.3).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-2.1.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-2.3.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
