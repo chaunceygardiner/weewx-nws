@@ -171,6 +171,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
          $twelve_hour.outTemp
          $twelve_hour.outTempTrend
          $twelve_hour.windSpeed
+         $twelve_hour.windSpeed2 (may be None)
          $twelve_hour.windDir
          $twelve_hour.iconUrl
          $twelve_hour.shortForecast
@@ -190,6 +191,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
     $twelve_hour.outTemp         : 58.000000
     $twelve_hour.outTempTrend    : None
     $twelve_hour.windSpeed       : 2.000000
+    $twelve_hour.windSpeed2      : 9.000000
     $twelve_hour.windDir         : 292.500000
     $twelve_hour.iconUrl         : https://api.weather.gov/icons/land/night/few?size=medium
     $twelve_hour.shortForecast   : Mostly Clear
@@ -215,7 +217,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
                  <tr style='width:100%;'><td>Temp</td></tr>
                  <tr style='width:100%;'><td>$twelve_hour.outTemp $twelve_hour.outTempTrend </td></tr>
                  <tr style='width:100%;'><td>Wind</td></tr>
-                 <tr style='width:100%;'><td>$twelve_hour.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
+                 #if $twelve_hour.windSpeed2 is None
+                   <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
+                 #else
+                   <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f') to $twelve_hour.windSpeed2.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
+                 #end if
                </table>
              </td>
              <td style='width:54%;'>
@@ -245,6 +251,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
          $hour.outTemp
          $hour.outTempTrend
          $hour.windSpeed
+         $hour.windSpeed2 (currently always None)
          $hour.windDir
          $hour.iconUrl
          $hour.shortForecast
@@ -269,6 +276,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
     $hour.outTemp         : 81.000000
     $hour.outTempTrend    : None
     $hour.windSpeed       : 10.000000
+    $hour.windSpeed2      : None
     $hour.windDir         : 292.500000
     $hour.iconUrl         : https://api.weather.gov/icons/land/day/few?size=small
     $hour.shortForecast   : Sunny
