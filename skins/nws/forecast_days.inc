@@ -1,4 +1,4 @@
-## Copyright John A Kline
+## forecast days - Copyright 2020-2024 John A Kline
 ## See LICENSE.txt for your rights
 #errorCatcher Echo
 #encoding UTF-8
@@ -28,7 +28,11 @@
                 <tr style='width:100%;'><td>Temp</td></tr>
                 <tr style='width:100%;'><td>$twelve_hour.outTemp.format('%.0f')$unit.label.outTemp $twelve_hour.outTempTrend </td></tr>
                 <tr style='width:100%;'><td>Wind</td></tr>
+#if $twelve_hour.windSpeed2 is None
                 <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
+#else
+                <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f') to $twelve_hour.windSpeed2.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
+#end if
               </table>
             </td>
             <td style='width:54%;'>

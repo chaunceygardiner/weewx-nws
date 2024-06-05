@@ -1,4 +1,4 @@
-## forecast days - Copyright 2020 John A Kline
+## forecast alerts - Copyright 2020-2024 John A Kline
 ## See LICENSE.txt for your rights
 #errorCatcher Echo
 #encoding UTF-8

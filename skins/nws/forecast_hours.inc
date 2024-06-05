@@ -1,4 +1,4 @@
-## forecast hours - Copyright 2020 John A Kline
+## forecast hours - Copyright 2020-2024 John A Kline
 ## See LICENSE.txt for your rights
 #errorCatcher Echo
 #encoding UTF-8
@@ -59,7 +59,11 @@
                   <tr>
                     <td style='width:34%;'>$hour.shortForecast</td>
                     <td style='width:33%;'>$hour.outTemp.format('%.0f')$unit.label.outTemp</td>
+#if $hour.windSpeed2 is None
                     <td style='width:33%;'>$hour.windSpeed.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
+#else
+                    <td style='width:33%;'>$hour.windSpeed.format('%.0f') to hour.windSpeed2.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
+#end if
                   </tr>
                 </table>
               </td>

@@ -1,6 +1,13 @@
 nws change history
 ------------------
 
+3.0 06/04/2024
+- Report range of windspeed for 12-hour forecasts.
+    ******* IMPORTANT, you must delete the existing nws database (nws.sdb) if        *******
+    ******* udating versions earlier than 3.0.  Delete nws.sdb after installing the  *******
+    ******* update and just before restaring weewx.  This is necessary because the   *******
+    ******* database schema has changed.                                             *******
+
 2.3 03/01/2023
 - Separate 1H, 12H and Alerts into separate threads.  Poll seconds and retry seconds
   for alerts are now configured separately from forecasts (because alerts need to

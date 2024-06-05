@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Copyright 2020-2023 by John A Kline <john@johnkline.com>
+# Copyright 2020-2024 by John A Kline <john@johnkline.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "2.3"
+WEEWX_NWS_VERSION = "3.0"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -77,9 +77,10 @@ table = [
     ('outTemp',          'FLOAT NOT NULL'),  # Needs to be converted
     ('outTempTrend',     'STRING'),
     ('windSpeed',        'FLOAT NOT NULL'),
+    ('windSpeed2',       'FLOAT'),
     ('windDir',          'FLOAT'),
     ('iconUrl',          'STRING NOT NULL'),
-    ('shortForecast',    'STRING NOT NULL'), # For alrerts, holds the headline
+    ('shortForecast',    'STRING NOT NULL'), # For alerts, holds the headline
     ('detailedForecast', 'STRING'),          # For alerts, holds the description
     ('instruction',      'STRING'),          # For alerts only, holds instructions, null for others
     ('sent',             'FLOAT'),           # For alerts, holds the sent date, null for others.
@@ -119,6 +120,7 @@ class Forecast:
     outTemp         : float
     outTempTrend    : Optional[str]
     windSpeed       : float
+    windSpeed2      : Optional[float]
     windDir         : Optional[float]
     iconUrl         : str
     shortForecast   : str    # For alerts, holds the headline
@@ -520,6 +522,7 @@ class NWS(StdService):
         j['outTemp']          = record.outTemp
         j['outTempTrend']     = record.outTempTrend
         j['windSpeed']        = record.windSpeed
+        j['windSpeed2']       = record.windSpeed2
         j['windDir']          = record.windDir
         j['iconUrl']          = record.iconUrl
         j['shortForecast']    = record.shortForecast
@@ -1069,7 +1072,8 @@ class NWSPoller:
                         outTemp          = 0.0,                     # Dummy
                         outTempTrend     = '',                      # Dummy
                         windSpeed        = 0.0,                     # Dummy
-                        windDir          = 0.0,                     # Dummy
+                        windSpeed2       = None,                    # Dummy
+                        windDir          = None,                    # Dummy
                         iconUrl          = '',                      # Dummy
                         shortForecast    = alert['headline'],
                         detailedForecast = alert['description'],
@@ -1115,7 +1119,14 @@ class NWSPoller:
             windSpeedStr = period['windSpeed']
             windSpeedArray = windSpeedStr.split()
             windSpeed = to_int(windSpeedArray[0])
-            #windSpeedUnit = windSpeedArray[1]
+            if len(windSpeedArray) == 2:
+                windSpeed2 = None
+                windSpeedUnit = windSpeedArray[1]
+            else:
+                windSpeed2 = to_int(windSpeedArray[2])
+                windSpeedUnit = windSpeedArray[3]
+            if windSpeedUnit != "mph":
+                log.info('compose_records(%s): expecting windspeed to be in MPH but found %s, please file an issue on github.' % (forecast_type, windSpeedUnit))
             record = Forecast(
                 interval         = NWS.get_interval(forecast_type),
                 latitude         = latitude,
@@ -1132,6 +1143,7 @@ class NWSPoller:
                 outTemp          = to_float(period['temperature']),
                 outTempTrend     = period['temperatureTrend'],
                 windSpeed        = windSpeed,
+                windSpeed2       = windSpeed2,
                 windDir          = NWSPoller.translate_wind_dir(period['windDirection']),
                 iconUrl          = period['icon'],
                 shortForecast    = period['shortForecast'],
@@ -1265,6 +1277,8 @@ class NWSForecastVariables(SearchList):
             row['endTime'] = weewx.units.ValueHelper((row['endTime'], time_units, time_group))
             row['outTemp'] = weewx.units.ValueHelper((row['outTemp'], temp_units, temp_group))
             row['windSpeed'] = weewx.units.ValueHelper((row['windSpeed'], wind_speed_units, wind_speed_group))
+            if row['windSpeed2'] is not None:
+                row['windSpeed2'] = weewx.units.ValueHelper((row['windSpeed2'], wind_speed_units, wind_speed_group))
             row['windDir'] = weewx.units.ValueHelper((row['windDir'], wind_dir_units, wind_dir_group))
             if row['sent'] is not None:
                 row['sent'] = weewx.units.ValueHelper((row['sent'], time_units, time_group))
@@ -1315,7 +1329,7 @@ class NWSForecastVariables(SearchList):
         else:
             time_select_phrase = "generatedTime = (SELECT MAX(generatedTime)"
             order_by_clause = "ORDER BY startTime"
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s %s" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude, order_by_clause)
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s %s" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude, order_by_clause)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
@@ -1343,20 +1357,21 @@ class NWSForecastVariables(SearchList):
                 record['outTemp'] = row[13]
                 record['outTempTrend'] = row[14]
                 record['windSpeed'] = row[15]
-                record['windDir'] = row[16]
-                record['iconUrl'] = row[17]
-                record['shortForecast'] = row[18]
-                record['detailedForecast'] = row[19]
-                record['instruction'] = row[20]
-                record['sent'] = row[21]
-                record['status'] = row[22]
-                record['messageType'] = row[23]
-                record['category'] = row[24]
-                record['severity'] = row[25]
-                record['certainty'] = row[26]
-                record['urgency'] = row[27]
-                record['sender'] = row[28]
-                record['senderName'] = row[29]
+                record['windSpeed2'] = row[16]
+                record['windDir'] = row[17]
+                record['iconUrl'] = row[18]
+                record['shortForecast'] = row[19]
+                record['detailedForecast'] = row[20]
+                record['instruction'] = row[21]
+                record['sent'] = row[22]
+                record['status'] = row[23]
+                record['messageType'] = row[24]
+                record['category'] = row[25]
+                record['severity'] = row[26]
+                record['certainty'] = row[27]
+                record['urgency'] = row[28]
+                record['sender'] = row[29]
+                record['senderName'] = row[30]
 
                 records.append(record)
         return records
@@ -1708,9 +1723,9 @@ if __name__ == '__main__':
 
     def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion) -> None:
         if criterion == Criterion.ALL:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
         elif criterion == Criterion.LATEST:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
 
         for row in conn.execute(select):
             record = {}
@@ -1730,20 +1745,21 @@ if __name__ == '__main__':
             record['outTemp'] = row[13]
             record['outTempTrend'] = row[14]
             record['windSpeed'] = row[15]
-            record['windDir'] = row[16]
-            record['iconUrl'] = row[17]
-            record['shortForecast'] = row[18]
-            record['detailedForecast'] = row[19]
-            record['instruction'] = row[20]
-            record['sent'] = row[21]
-            record['status'] = row[22]
-            record['messageType'] = row[23]
-            record['category'] = row[24]
-            record['severity'] = row[25]
-            record['certainty'] = row[26]
-            record['urgency'] = row[27]
-            record['sender'] = row[28]
-            record['senderName'] = row[29]
+            record['windSpeed2'] = row[16]
+            record['windDir'] = row[17]
+            record['iconUrl'] = row[18]
+            record['shortForecast'] = row[19]
+            record['detailedForecast'] = row[20]
+            record['instruction'] = row[21]
+            record['sent'] = row[22]
+            record['status'] = row[23]
+            record['messageType'] = row[24]
+            record['category'] = row[25]
+            record['severity'] = row[26]
+            record['certainty'] = row[27]
+            record['urgency'] = row[28]
+            record['sender'] = row[29]
+            record['senderName'] = row[30]
             pretty_print_record(record, forecast_type)
             print('------------------------')
 
@@ -1773,6 +1789,7 @@ if __name__ == '__main__':
         print('outTemp         : %f' % forecast.outTemp)
         print('outTempTrend    : %s' % forecast.outTempTrend)
         print('windSpeed       : %f' % forecast.windSpeed)
+        print('windSpeed2      : %f' % forecast.windSpeed2)
         print('windDir         : %f' % forecast.windDir)
         print('iconUrl         : %s' % forecast.iconUrl)
         print('shortForecast   : %s' % forecast.shortForecast)
@@ -1818,6 +1835,7 @@ if __name__ == '__main__':
             print('outTemp         : %f' % record['outTemp'])
             print('outTempTrend    : %s' % record['outTempTrend'])
             print('windSpeed       : %f' % record['windSpeed'])
+            print('windSpeed2      : %f' % record['windSpeed2'])
             print('windDir         : %f' % record['windDir'])
             print('iconUrl         : %s' % record['iconUrl'])
             print('shortForecast   : %s' % record['shortForecast'])

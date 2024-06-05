@@ -9,7 +9,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
 
 **This plugin requires Python 3.7, WeeWX 4 or 5**
 
-**If you are updating from versions 1.13.1 or less, you MUST delete the nws database (nws.sdb) before
+**If you are updating from versions 2.3 or less, you MUST delete the nws database (nws.sdb) before
   restarting weewx.  This is because the database schema has changed.  If you don't do this, nws
   won't work and the following statement will be in the weewx log:
   ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
@@ -31,11 +31,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    `pip install requests`
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v2.3).
+   Click on releases and pick the latest release (Release v3.0).
 
 1. Install the nws extension.
 
-   `weectl extension install weewx-nws-2.3.zip`
+   `weectl extension install weewx-nws-3.0.zip`
 
 ## WeeWX 4 Installation Instructions
 
@@ -52,11 +52,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    ```
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v2.3).
+   Click on releases and pick the latest release (Release v3.0).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-2.3.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-3.0.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
