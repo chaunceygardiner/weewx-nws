@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "3.0"
+WEEWX_NWS_VERSION = "3.1"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -249,7 +249,7 @@ class NWS(StdService):
             alert_poll_secs                = to_int(self.nws_config_dict.get('alert_poll_secs', 600)),
             retry_wait_secs                = to_int(self.nws_config_dict.get('retry_wait_secs', 300)),
             alert_retry_wait_secs          = to_int(self.nws_config_dict.get('alert_retry_wait_secs', 30)),
-            days_to_keep                   = to_int(self.nws_config_dict.get('days_to_keep', 90)),
+            days_to_keep                   = to_int(self.nws_config_dict.get('days_to_keep', 9)),
             read_from_dir                  = self.nws_config_dict.get('read_from_dir', None),
             ssh_config                     = SshConfiguration(
                 enable                         = to_bool(rsync_spec_dict.get('enable', False)),

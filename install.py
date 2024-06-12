@@ -31,7 +31,7 @@ class NWSInstaller(ExtensionInstaller):
             config={
                 'NWS': {
                     'data_binding'         : 'nws_binding',
-                    'days_to_keep'         : 90,
+                    'days_to_keep'         : 9,
                     'poll_secs'            : 1800,
                     'alert_poll_secs'      : 600,
                     'retry_wait_secs'      : 300,

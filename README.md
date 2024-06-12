@@ -31,11 +31,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    `pip install requests`
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v3.0).
+   Click on releases and pick the latest release (Release v3.1).
 
 1. Install the nws extension.
 
-   `weectl extension install weewx-nws-3.0.zip`
+   `weectl extension install weewx-nws-3.1.zip`
 
 ## WeeWX 4 Installation Instructions
 
@@ -52,11 +52,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    ```
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v3.0).
+   Click on releases and pick the latest release (Release v3.1).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-3.0.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-3.1.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
@@ -123,12 +123,13 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
        one_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast/hourly"
    ```
 
-1. By default, nws will keep 90 days of forecasts.  One can change this in weewx.conf.
-   Set days_to_keep to zero to keep all forecasts.
+1. By default, nws will keep 9 days of forecasts.  One can change this in weewx.conf.
+   Set days_to_keep to zero to keep all forecasts.  Although this is configurable, keeping
+   a large number of days will slow things down.
    Note: Alerts are deleted when they expire.  As such, days_to_keep has no affect on alerts.
    ```
    [NWS]
-    days_to_keep = 90  # Set to zero to never delete any forecasts and alerts.
+    days_to_keep = 9  # Set to zero to never delete any forecasts and alerts.
    ```
 
 1. Add NWSForecastVariables to each report that you want to have access to forecasts and alerts.

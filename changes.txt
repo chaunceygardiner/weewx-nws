@@ -1,8 +1,17 @@
 nws change history
 ------------------
 
+3.1 06/12/2024
+- Reduce default days of forecasts to keep to 9.  Add documenation that keeping a large
+  numbr of days will slow down report generation.
+- Note: This won't affect existing installations, but one can change days_to_keep to
+  9 in the NWS section of weewx.conf.
+
 3.0 06/04/2024
 - Report range of windspeed for 12-hour forecasts.
+  if NWS reports a range of windspeed, windSpeed2 will provide the upper range
+  (i.e., windSpeed to windSpeed2).  If one wind speed is given, windSpeed2 will
+  be None.  For 1-hour forecasts, windSpeed2 is always None.
     ******* IMPORTANT, you must delete the existing nws database (nws.sdb) if        *******
     ******* udating versions earlier than 3.0.  Delete nws.sdb after installing the  *******
     ******* update and just before restaring weewx.  This is necessary because the   *******
