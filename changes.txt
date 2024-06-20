@@ -1,6 +1,10 @@
 nws change history
 ------------------
 
+3.2 06/20/2024
+- Emergency fix for NWS screwup.  icon URLs are no longer full URLs.  NWS says they will
+  patch.  This fix *should* work both ways as it checks first before prepending server.
+
 3.1 06/12/2024
 - Reduce default days of forecasts to keep to 9.  Add documenation that keeping a large
   numbr of days will slow down report generation.

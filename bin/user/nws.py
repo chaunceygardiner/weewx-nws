@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "3.1"
+WEEWX_NWS_VERSION = "3.2"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -1158,6 +1158,9 @@ class NWSPoller:
                 urgency          = None,
                 sender           = None,
                 senderName       = None)
+            # Work around NWS breakage.  Until NWS patches the problem, iconUrl might not be a full URL.
+            if not record.iconUrl.startswith('http'):
+                record.iconUrl = 'https://api.weather.gov/' + record.iconUrl
             yield record
 
     @staticmethod
