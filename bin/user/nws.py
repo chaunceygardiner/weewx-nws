@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "3.2"
+WEEWX_NWS_VERSION = "4.0"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -63,10 +63,11 @@ if weewx.__version__ < "4":
 table = [
     ('dateTime',         'INTEGER NOT NULL'), # When forecast/alert was inserted.
     ('interval',         'INTEGER NOT NULL'), # Always 60 for one-hour,  720 for twelve-hour, 0 for alerts
-    ('latitude',         'STRING NOT NULL'),   # The latitude used to request the forecast
-    ('longitude',        'STRING NOT NULL'),   # The longitude used to request the forecast
+    ('latitude',         'STRING NOT NULL'),  # The latitude used to request the forecast
+    ('longitude',        'STRING NOT NULL'),  # The longitude used to request the forecast
     ('usUnits',          'INTEGER NOT NULL'),
-    ('generatedTime',    'INTEGER NOT NULL'), # When forecast was generated., For alerts, holds effective (issued)
+    ('generatedTime',    'INTEGER NOT NULL'), # When forecast was generated (NWS updateTime)
+                                              # For alerts, holds effective (issued)
     ('number',           'INTEGER NOT NULL'),
     ('name',             'STRING'),           # For alerts, holds event name (e.g., Heat Advisory)
     ('startTime',        'FLOAT NOT NULL'),   # For alerts, holds onset
@@ -74,24 +75,28 @@ table = [
     ('id',               'STRING'),           # For alerts, holds the id of the alert, null for others
     ('endTime',          'FLOAT NOT NULL'),   # For alerts, holds ends
     ('isDaytime',        'INTEGER NOT NULL'),
-    ('outTemp',          'FLOAT NOT NULL'),  # Needs to be converted
-    ('outTempTrend',     'STRING'),
-    ('windSpeed',        'FLOAT NOT NULL'),
-    ('windSpeed2',       'FLOAT'),
-    ('windDir',          'FLOAT'),
-    ('iconUrl',          'STRING NOT NULL'),
-    ('shortForecast',    'STRING NOT NULL'), # For alerts, holds the headline
-    ('detailedForecast', 'STRING'),          # For alerts, holds the description
-    ('instruction',      'STRING'),          # For alerts only, holds instructions, null for others
-    ('sent',             'FLOAT'),           # For alerts, holds the sent date, null for others.
-    ('status',           'STRING'),          # For alerts, holds the status of the alert, null for others
-    ('messageType',      'STRING'),          # For alerts, holds the category of the alert, null for others
-    ('category',         'STRING'),          # For alerts, holds the severity of the alert, null for others
-    ('severity',         'STRING'),          # For alerts, holds the messageType of the alert, null for others
-    ('certainty',        'STRING'),          # For alerts, holds the certainty of the alert, null for others
-    ('urgency',          'STRING'),          # For alerts, holds the urgency of the alert, null for others
-    ('sender',           'STRING'),          # For alerts, holds the sender of the alert, null for others
-    ('senderName',      'STRING'),           # For alerts, holds the senderName of the alert, null for others
+    ('outTemp',          'FLOAT NOT NULL'),   # Needs to be converted.  NWS temperature
+    # missing NWS temperatureUnit, which is always "F"
+    ('outTempTrend',     'STRING'),           # NWS temperatureTrend
+    ('pop',              'INTEGER'),          # probabilityOfPercipitation, percent, always? null for 12-hour, alerts
+    ('dewpoint',         'FLOAT'),            # In celsius from NWS, converted to F, null for 12-hour, alerts
+    ('outHumidity',      'INTEGER'),          # percent, null for 12-hour, alerts
+    ('windSpeed',        'FLOAT NOT NULL'),   # NWS windSpeed "2 to 9 mph" or "9 mph"
+    ('windSpeed2',       'FLOAT'),            # 2nd speed if NWS windSpeed of "2 to 9 mph" form.
+    ('windDir',          'FLOAT'),            # NWS windDirection
+    ('iconUrl',          'STRING NOT NULL'),  # NWS icon
+    ('shortForecast',    'STRING NOT NULL'),  # For alerts, holds the headline
+    ('detailedForecast', 'STRING'),           # For alerts, holds the description
+    ('instruction',      'STRING'),           # For alerts only, holds instructions, null for others
+    ('sent',             'FLOAT'),            # For alerts, holds the sent date, null for others.
+    ('status',           'STRING'),           # For alerts, holds the status of the alert, null for others
+    ('messageType',      'STRING'),           # For alerts, holds the category of the alert, null for others
+    ('category',         'STRING'),           # For alerts, holds the severity of the alert, null for others
+    ('severity',         'STRING'),           # For alerts, holds the messageType of the alert, null for others
+    ('certainty',        'STRING'),           # For alerts, holds the certainty of the alert, null for others
+    ('urgency',          'STRING'),           # For alerts, holds the urgency of the alert, null for others
+    ('sender',           'STRING'),           # For alerts, holds the sender of the alert, null for others
+    ('senderName',      'STRING'),            # For alerts, holds the senderName of the alert, null for others
     ]
 
 schema = {
@@ -119,6 +124,9 @@ class Forecast:
     isDaytime       : int
     outTemp         : float
     outTempTrend    : Optional[str]
+    pop             : Optional[int]
+    dewpoint        : Optional[float]
+    outHumidity     : Optional[int]
     windSpeed       : float
     windSpeed2      : Optional[float]
     windDir         : Optional[float]
@@ -521,6 +529,9 @@ class NWS(StdService):
         j['isDaytime']        = record.isDaytime
         j['outTemp']          = record.outTemp
         j['outTempTrend']     = record.outTempTrend
+        j['pop']              = record.pop
+        j['dewpoint']         = record.dewpoint
+        j['outHumidity']      = record.outHumidity
         j['windSpeed']        = record.windSpeed
         j['windSpeed2']       = record.windSpeed2
         j['windDir']          = record.windDir
@@ -1071,6 +1082,9 @@ class NWSPoller:
                         isDaytime        = True,                    # Dummy
                         outTemp          = 0.0,                     # Dummy
                         outTempTrend     = '',                      # Dummy
+                        pop              = None,                    # Dummy
+                        dewpoint         = None,                    # Dummy
+                        outHumidity      = None,                    # Dummy
                         windSpeed        = 0.0,                     # Dummy
                         windSpeed2       = None,                    # Dummy
                         windDir          = None,                    # Dummy
@@ -1142,6 +1156,9 @@ class NWSPoller:
                 isDaytime        = period['isDaytime'],
                 outTemp          = to_float(period['temperature']),
                 outTempTrend     = period['temperatureTrend'],
+                pop              = period['probabilityOfPrecipitation']['value'],
+                dewpoint         = round(period['dewpoint']['value'] * 9.0 / 5.0 + 32.0) if forecast_type == ForecastType.ONE_HOUR else None,
+                outHumidity      = period['relativeHumidity']['value'] if forecast_type == ForecastType.ONE_HOUR else None,
                 windSpeed        = windSpeed,
                 windSpeed2       = windSpeed2,
                 windDir          = NWSPoller.translate_wind_dir(period['windDirection']),
@@ -1266,6 +1283,15 @@ class NWSForecastVariables(SearchList):
             temp_group = weewx.units.obs_group_dict['outTemp']
             temp_units = weewx.units.USUnits[temp_group]
 
+            pop_group = weewx.units.obs_group_dict['pop']
+            pop_units = weewx.units.USUnits[pop_group]
+
+            dewpoint_group = weewx.units.obs_group_dict['dewpoint']
+            dewpoint_units = weewx.units.USUnits[dewpoint_group]
+
+            outHumidity_group = weewx.units.obs_group_dict['outHumidity']
+            outHumidity_units = weewx.units.USUnits[outHumidity_group]
+
             wind_speed_group = weewx.units.obs_group_dict['windSpeed']
             wind_speed_units = weewx.units.USUnits[wind_speed_group]
 
@@ -1279,6 +1305,9 @@ class NWSForecastVariables(SearchList):
                 row['expirationTime'] = weewx.units.ValueHelper((row['expirationTime'], time_units, time_group))
             row['endTime'] = weewx.units.ValueHelper((row['endTime'], time_units, time_group))
             row['outTemp'] = weewx.units.ValueHelper((row['outTemp'], temp_units, temp_group))
+            row['pop'] = weewx.units.ValueHelper((row['pop'], pop_units, pop_group))
+            row['dewpoint'] = weewx.units.ValueHelper((row['dewpoint'], dewpoint_units, dewpoint_group))
+            row['outHumidity'] = weewx.units.ValueHelper((row['outHumidity'], outHumidity_units, outHumidity_group))
             row['windSpeed'] = weewx.units.ValueHelper((row['windSpeed'], wind_speed_units, wind_speed_group))
             if row['windSpeed2'] is not None:
                 row['windSpeed2'] = weewx.units.ValueHelper((row['windSpeed2'], wind_speed_units, wind_speed_group))
@@ -1332,7 +1361,7 @@ class NWSForecastVariables(SearchList):
         else:
             time_select_phrase = "generatedTime = (SELECT MAX(generatedTime)"
             order_by_clause = "ORDER BY startTime"
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s %s" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude, order_by_clause)
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s %s" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude, order_by_clause)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
@@ -1359,22 +1388,25 @@ class NWSForecastVariables(SearchList):
                 record['isDaytime'] = row[12]
                 record['outTemp'] = row[13]
                 record['outTempTrend'] = row[14]
-                record['windSpeed'] = row[15]
-                record['windSpeed2'] = row[16]
-                record['windDir'] = row[17]
-                record['iconUrl'] = row[18]
-                record['shortForecast'] = row[19]
-                record['detailedForecast'] = row[20]
-                record['instruction'] = row[21]
-                record['sent'] = row[22]
-                record['status'] = row[23]
-                record['messageType'] = row[24]
-                record['category'] = row[25]
-                record['severity'] = row[26]
-                record['certainty'] = row[27]
-                record['urgency'] = row[28]
-                record['sender'] = row[29]
-                record['senderName'] = row[30]
+                record['pop'] = row[15]
+                record['dewpoint'] = row[16]
+                record['outHumidity'] = row[17]
+                record['windSpeed'] = row[18]
+                record['windSpeed2'] = row[19]
+                record['windDir'] = row[20]
+                record['iconUrl'] = row[21]
+                record['shortForecast'] = row[22]
+                record['detailedForecast'] = row[23]
+                record['instruction'] = row[24]
+                record['sent'] = row[25]
+                record['status'] = row[26]
+                record['messageType'] = row[27]
+                record['category'] = row[28]
+                record['severity'] = row[29]
+                record['certainty'] = row[30]
+                record['urgency'] = row[31]
+                record['sender'] = row[32]
+                record['senderName'] = row[33]
 
                 records.append(record)
         return records
@@ -1726,9 +1758,9 @@ if __name__ == '__main__':
 
     def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion) -> None:
         if criterion == Criterion.ALL:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
         elif criterion == Criterion.LATEST:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
 
         for row in conn.execute(select):
             record = {}
@@ -1747,22 +1779,25 @@ if __name__ == '__main__':
             record['isDaytime'] = row[12]
             record['outTemp'] = row[13]
             record['outTempTrend'] = row[14]
-            record['windSpeed'] = row[15]
-            record['windSpeed2'] = row[16]
-            record['windDir'] = row[17]
-            record['iconUrl'] = row[18]
-            record['shortForecast'] = row[19]
-            record['detailedForecast'] = row[20]
-            record['instruction'] = row[21]
-            record['sent'] = row[22]
-            record['status'] = row[23]
-            record['messageType'] = row[24]
-            record['category'] = row[25]
-            record['severity'] = row[26]
-            record['certainty'] = row[27]
-            record['urgency'] = row[28]
-            record['sender'] = row[29]
-            record['senderName'] = row[30]
+            record['pop'] = row[15]
+            record['dewpoint'] = row[16]
+            record['outHumidity'] = row[17]
+            record['windSpeed'] = row[18]
+            record['windSpeed2'] = row[19]
+            record['windDir'] = row[20]
+            record['iconUrl'] = row[21]
+            record['shortForecast'] = row[22]
+            record['detailedForecast'] = row[23]
+            record['instruction'] = row[24]
+            record['sent'] = row[25]
+            record['status'] = row[26]
+            record['messageType'] = row[27]
+            record['category'] = row[28]
+            record['severity'] = row[29]
+            record['certainty'] = row[30]
+            record['urgency'] = row[31]
+            record['sender'] = row[32]
+            record['senderName'] = row[33]
             pretty_print_record(record, forecast_type)
             print('------------------------')
 
@@ -1791,6 +1826,9 @@ if __name__ == '__main__':
         print('isDaytime       : %d' % forecast.isDaytime)
         print('outTemp         : %f' % forecast.outTemp)
         print('outTempTrend    : %s' % forecast.outTempTrend)
+        print('pop             : %d' % forecast.pop)
+        print('dewpoint        : %d' % forecast.dewpoint)
+        print('outHumidity     : %d' % forecast.outHumidity)
         print('windSpeed       : %f' % forecast.windSpeed)
         print('windSpeed2      : %s' % (forecast.windSpeed2 if forecast.windSpeed2 is not None else 'None'))
         print('windDir         : %f' % forecast.windDir)
@@ -1837,6 +1875,9 @@ if __name__ == '__main__':
             print('isDaytime       : %d' % record['isDaytime'])
             print('outTemp         : %f' % record['outTemp'])
             print('outTempTrend    : %s' % record['outTempTrend'])
+            print('pop             : %s' % (record['pop'] if record['pop'] is not None else 'None'))
+            print('dewpoint        : %s' % (record['dewpoint'] if record['dewpoint'] is not None else 'None'))
+            print('outHumidity     : %s' % (record['outHumidity'] if record['outHumidity'] is not None else 'None'))
             print('windSpeed       : %f' % record['windSpeed'])
             print('windSpeed2      : %s' % (record['windSpeed2'] if record['windSpeed2'] is not None else 'None'))
             print('windDir         : %f' % record['windDir'])

@@ -57,13 +57,19 @@
               <td style='border-bottom:none;'>
                 <table style='width:100%;border-bottom:none;padding:0px;'>
                   <tr>
-                    <td style='width:34%;'>$hour.shortForecast</td>
-                    <td style='width:33%;'>$hour.outTemp.format('%.0f')$unit.label.outTemp</td>
+                    <td style='width:34%;'>Forecast<br>$hour.shortForecast</td>
+                    <td style='width:33%;'>Temperature<br>$hour.outTemp.format('%.0f')$unit.label.outTemp<br>
+                    </td>
 #if $hour.windSpeed2 is None
-                    <td style='width:33%;'>$hour.windSpeed.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
+                    <td style='width:33%;'>Wind<br>$hour.windSpeed.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
 #else
-                    <td style='width:33%;'>$hour.windSpeed.format('%.0f') to hour.windSpeed2.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
+                    <td style='width:33%;'>Wind<br>$hour.windSpeed.format('%.0f') to hour.windSpeed2.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
 #end if
+                  </tr>
+                  <tr>
+                    <td style='width:34%;'>Prob. of Precip.<br>$hour.pop.format('%.0f')$unit.label.pop</td>
+                    <td style='width:33%;'>Dewpoint<br>$hour.dewpoint.format('%.0f')$unit.label.dewpoint</td>
+                    <td style='width:33%;'>Rel. Humidity<br>$hour.outHumidity.format('%.0f')$unit.label.outHumidity</td>
                   </tr>
                 </table>
               </td>

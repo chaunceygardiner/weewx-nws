@@ -9,11 +9,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
 
 **This plugin requires Python 3.7, WeeWX 4 or 5**
 
-**If you are updating from versions 2.3 or less, you MUST delete the nws database (nws.sdb) before
+**If you are updating from versions less than 4.0, you MUST delete the nws database (nws.sdb) before
   restarting weewx.  This is because the database schema has changed.  If you don't do this, nws
   won't work and the following statement will be in the weewx log:
   ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
-  Note: there will also be other nws errors in the log. **
+  Note: There will also be other nws errors in the log. **
 
 # Installation Instructions
 
@@ -31,11 +31,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    `pip install requests`
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v3.2).
+   Click on releases and pick the latest release (Release v4.0).
 
 1. Install the nws extension.
 
-   `weectl extension install weewx-nws-3.2.zip`
+   `weectl extension install weewx-nws-4.0.zip`
 
 ## WeeWX 4 Installation Instructions
 
@@ -52,11 +52,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    ```
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v3.2).
+   Click on releases and pick the latest release (Release v4.0).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-3.2.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-4.0.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
@@ -170,7 +170,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
          $twelve_hour.endTime
          $twelve_hour.isDaytime
          $twelve_hour.outTemp
-         $twelve_hour.outTempTrend
+         $twelve_hour.outTempTrend (bay be none)
          $twelve_hour.windSpeed
          $twelve_hour.windSpeed2 (may be None)
          $twelve_hour.windDir
@@ -250,7 +250,10 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
          $hour.endTime
          $hour.isDaytime
          $hour.outTemp
-         $hour.outTempTrend
+         $hour.outTempTrend (may be None)
+         $hour.pop
+         $hour.dewpoint
+         $hour.outHumidity
          $hour.windSpeed
          $hour.windSpeed2 (currently always None)
          $hour.windDir
@@ -276,6 +279,9 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
     $hour.isDaytime       : 1
     $hour.outTemp         : 81.000000
     $hour.outTempTrend    : None
+    $hour.pop             : 0
+    $hour.dewpoint        : 51.0
+    $hour.outHumidity     : 79
     $hour.windSpeed       : 10.000000
     $hour.windSpeed2      : None
     $hour.windDir         : 292.500000

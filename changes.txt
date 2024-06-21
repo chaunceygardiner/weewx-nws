@@ -1,6 +1,16 @@
 nws change history
 ------------------
 
+4.0 06/21/2024
+- Add the following fields for one hour forecasts:
+  pop (probabiliby of percipitation)
+  dewpoint
+  outHumidity (relative humidity)
+    ******* IMPORTANT, you must delete the existing nws database (nws.sdb) if        *******
+    ******* udating versions earlier than 4.0.  Delete nws.sdb after installing the  *******
+    ******* update and just before restaring weewx.  This is necessary because the   *******
+    ******* database schema has changed.                                             *******
+
 3.2 06/20/2024
 - Emergency fix for NWS screwup.  icon URLs are no longer full URLs.  NWS says they will
   patch.  This fix *should* work both ways as it checks first before prepending server.
