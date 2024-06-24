@@ -27,7 +27,8 @@
         #for $hour in $nwsforecast.one_hour_forecasts(7)
           <td style='width:14.2857%;vertical-align:top;$at_a_glance_padding'>
             $hour.outTemp.format('%.0f')$unit.label.outTemp $hour.outTempTrend<br>
-            $hour.shortForecast
+            $hour.shortForecast<br>
+            PoP: $hour.pop.format('%.0f')$unit.label.pop
           </td>
         #end for
       </tr>
