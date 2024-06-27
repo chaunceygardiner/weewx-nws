@@ -9,7 +9,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
 
 **This plugin requires Python 3.7, WeeWX 4 or 5**
 
-**If you are updating from versions less than 4.0, you MUST delete the nws database (nws.sdb) before
+**If you are updating from versions less than 4.1, you MUST delete the nws database (nws.sdb) before
   restarting weewx.  This is because the database schema has changed.  If you don't do this, nws
   won't work and the following statement will be in the weewx log:
   ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
@@ -31,11 +31,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    `pip install requests`
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v4.0).
+   Click on releases and pick the latest release (Release v4.1).
 
 1. Install the nws extension.
 
-   `weectl extension install weewx-nws-4.0.zip`
+   `weectl extension install weewx-nws-4.1.zip`
 
 ## WeeWX 4 Installation Instructions
 
@@ -52,11 +52,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    ```
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v4.0).
+   Click on releases and pick the latest release (Release v4.1).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-4.0.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-4.1.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
@@ -323,6 +323,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
          $alert.ends         # Time it will end
          $alert.event        # Name of event (e.g., Heat Advisory)
          $alert.headline     # Headline
+         $alert.nwsHeadline  # NWSheadline
          $alert.description  # Long description
          $alert.instructions # Instructions on what to do
          $alert.latitude     # Latitude of point for which alerts were requested
@@ -347,6 +348,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
     ends        : 06-Sep-2022 20:00
     event       : Heat Advisory
     headline    : Heat Advisory issued September 4 at 4:11AM PDT until September 6 at 8:00PM PDT by NWS San Francisco CA
+    nwsHeadline : HEAT ADVISORY IN EFFECT FROM 4 AM SUNDAY TO 8 PM PDT TUESDAY
     description : * WHAT...Temperatures up to 98 expected.<br/>* WHERE...Marin Coastal Range...
     instructions: Drink plenty of fluids, stay in an air-conditioned room, stay out of the sun...
     latitude    : 37.431495
@@ -373,7 +375,7 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
       #set $alert_count = 0
       #for $alert in $nwsforecast.alerts()
       #set $alert_count += 1
-      <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:2pt solid Black;'>$alert.headline</td></tr>
+      <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:2pt solid Black;'>$alert.nwsHeadline</td></tr>
       <tr><td style='text-align:left;'><br/>Status: $alert.status</td></tr>
       <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
       <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>

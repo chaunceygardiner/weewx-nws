@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.0"
+WEEWX_NWS_VERSION = "4.1"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -96,7 +96,8 @@ table = [
     ('certainty',        'STRING'),           # For alerts, holds the certainty of the alert, null for others
     ('urgency',          'STRING'),           # For alerts, holds the urgency of the alert, null for others
     ('sender',           'STRING'),           # For alerts, holds the sender of the alert, null for others
-    ('senderName',      'STRING'),            # For alerts, holds the senderName of the alert, null for others
+    ('senderName',       'STRING'),           # For alerts, holds the senderName of the alert, null for others
+    ('nwsHeadline',      'STRING'),           # For alerts, holds the NWSheadline, null for others (and sometimes null for alerts (e.g. test alerts)
     ]
 
 schema = {
@@ -143,6 +144,7 @@ class Forecast:
     urgency         : Optional[str] # For alerts only
     sender          : Optional[str] # For alerts only
     senderName      : Optional[str] # For alerts only
+    nwsHeadline     : Optional[str] # For alerts only
 
 @dataclass
 class SshConfiguration:
@@ -548,6 +550,7 @@ class NWS(StdService):
         j['urgency']          = record.urgency
         j['sender']           = record.sender
         j['senderName']       = record.senderName
+        j['nwsHeadline']      = record.nwsHeadline
         log.debug('convert_to_json: returning: %s' % j)
         return j
 
@@ -1101,7 +1104,15 @@ class NWSPoller:
                         urgency          = alert['urgency'],
                         sender           = alert['sender'],
                         senderName       = alert['senderName'],
+                        nwsHeadline      = None
                         )
+                    if 'NWSheadline' in alert['parameters']:
+                        combinedHeadline = ''
+                        for headline in alert['parameters']['NWSheadline']:
+                            if combinedHeadline != '':
+                                headline += ', '
+                        combinedHeadline += headline
+                        record.nwsHeadline = combinedHeadline
                     alertCount += 1
                     log.debug('compose_alert_records: yielding record %s' % record)
                     yield record
@@ -1174,7 +1185,8 @@ class NWSPoller:
                 certainty        = None,
                 urgency          = None,
                 sender           = None,
-                senderName       = None)
+                senderName       = None,
+                nwsHeadline      = None)
             # Work around NWS breakage.  Until NWS patches the problem, iconUrl might not be a full URL.
             if not record.iconUrl.startswith('http'):
                 record.iconUrl = 'https://api.weather.gov/' + record.iconUrl
@@ -1267,6 +1279,7 @@ class NWSForecastVariables(SearchList):
             row['urgency']     = raw_row['urgency']
             row['sender']      = raw_row['sender']
             row['senderName']  = raw_row['senderName']
+            row['nwsHeadline'] = raw_row['nwsHeadline']
             rows.append(row)
         return rows
 
@@ -1361,7 +1374,7 @@ class NWSForecastVariables(SearchList):
         else:
             time_select_phrase = "generatedTime = (SELECT MAX(generatedTime)"
             order_by_clause = "ORDER BY startTime"
-        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s %s" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude, order_by_clause)
+        select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName, nwsHeadline FROM archive WHERE %s FROM archive WHERE interval = %d AND latitude = %s AND longitude = %s) AND interval = %d AND latitude = %s AND longitude = %s %s" % (time_select_phrase, NWS.get_interval(forecast_type), latitude, longitude, NWS.get_interval(forecast_type), latitude, longitude, order_by_clause)
         records = []
         forecast_count = 0
         for row in dbm.genSql(select):
@@ -1407,6 +1420,7 @@ class NWSForecastVariables(SearchList):
                 record['urgency'] = row[31]
                 record['sender'] = row[32]
                 record['senderName'] = row[33]
+                record['nwsHeadline'] = row[34]
 
                 records.append(record)
         return records
@@ -1758,9 +1772,9 @@ if __name__ == '__main__':
 
     def print_sqlite_records(conn, dbfile: str, forecast_type: ForecastType, criterion: Criterion) -> None:
         if criterion == Criterion.ALL:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName, nwsHeadline FROM archive WHERE interval = %d ORDER BY generatedTime, number" % NWS.get_interval(forecast_type)
         elif criterion == Criterion.LATEST:
-            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
+            select = "SELECT dateTime, interval, latitude, longitude, usUnits, generatedTime, number, name, startTime, expirationTime, id, endTime, isDaytime, outTemp, outTempTrend, pop, dewpoint, outHumidity, windSpeed, windSpeed2, windDir, iconUrl, shortForecast, detailedForecast, instruction, sent, status, messageType, category, severity, certainty, urgency, sender, senderName, nwsHeadline FROM archive WHERE interval = %d AND generatedTime = (SELECT MAX(generatedTime) FROM archive WHERE interval = %d) ORDER BY number" % (NWS.get_interval(forecast_type), NWS.get_interval(forecast_type))
 
         for row in conn.execute(select):
             record = {}
@@ -1798,6 +1812,7 @@ if __name__ == '__main__':
             record['urgency'] = row[31]
             record['sender'] = row[32]
             record['senderName'] = row[33]
+            record['nwsHeadline'] = row[34]
             pretty_print_record(record, forecast_type)
             print('------------------------')
 
@@ -1855,6 +1870,8 @@ if __name__ == '__main__':
             print('sender          : %s' % forecast.sender)
         if forecast.senderName is not None:
             print('senderName      : %s' % forecast.senderName)
+        if forecast.nwsHeadline is not None:
+            print('nwsHeadline     : %s' % forecast.nwsHeadline)
 
     def pretty_print_record(record, forecast_type) -> None:
         if forecast_type == ForecastType.ONE_HOUR or forecast_type == ForecastType.TWELVE_HOUR:
@@ -1904,6 +1921,8 @@ if __name__ == '__main__':
                 print('sender          : %s' % record['sender'])
             if record['senderName'] is not None:
                 print('senderName      : %s' % record['senderName'])
+            if record['nwsHeadline'] is not None:
+                print('nwsHeadline     : %s' % record['nwsHeadline'])
         else: # ForecastType.ALERTS
             print('dateTime        : %s' % timestamp_to_string(record['dateTime']))
             print('Headline        : %s' % record['shortForecast'])
@@ -1936,5 +1955,7 @@ if __name__ == '__main__':
                 print('Sender          : %s' % record['sender'])
             if record['senderName'] is not None:
                 print('Sender Name     : %s' % record['senderName'])
+            if record['nwsHeadline'] is not None:
+                print('NWS Headline    : %s' % record['nwsHeadline'])
 
     main()

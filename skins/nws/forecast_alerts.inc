@@ -11,12 +11,18 @@
       #for $alert in $nwsforecast.alerts()
       #set $alert_count += 1
       #set max_title_line = 80
-      #set headline_length = len($alert.headline)
+      ## If nwsHeadline is None, use headline
+      #if $alert.nwsHeadline is not None:
+        #set headline = $alert.nwsHeadline
+      #else
+        #set headline = $alert.headline
+      #end if
+      #set headline_length = len($headline)
       #if $headline_length > $max_title_line
         ## Figure out how many lines.
         #set line_count = math.ceil($headline_length / float($max_title_line))
         #set max_title_line = math.ceil($headline_length / $line_count)
-        #set words = $alert.headline.split()
+        #set words = $headline.split()
         #set lines = []
         #set char_count = 0
         #set idx = 0
@@ -34,23 +40,31 @@
           #set lines[$idx] += $word
           #set char_count += len($word)
         #end for
-        #set headline = ""
+        #set formatted_headline = ""
         #for line in $lines
-          #if $headline != ""
-            #set headline += '<br>'
+          #if $formatted_headline != ""
+            #set formatted_headline += '<br>'
           #end if
-          #set headline += $line
+          #set formatted_headline += $line
         #end for
       #else
-        #set headline = $alert.headline
+        #set formatted_headline = $headline
       #end if
-      <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$headline</td></tr>
+      <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$formatted_headline</td></tr>
       <tr><td style='text-align:left;'><br>Issued: $alert.effective</td></tr>
       <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
       <tr><td style='text-align:left;'>Ends: $alert.ends</td></tr>
       <tr><td style='text-align:left;'>Status: $alert.status</td></tr>
       <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
       <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
+      #try
+          #set $nwsHeadline = $alert.nwsHeadline.replace('\n\n', '<br><br>')
+          #set $nwsHeadline = $nwsHeadline.replace('\n', ' ')
+      #except
+        ## Calling replace has failed because of missing NWS Headline
+        ## alert.nwsHeadline is probably None
+        #set $nwsHeadline = $alert.nwsHeadline
+      #end try
       #try
           #set $desc = $alert.description.replace('\n\n', '<br><br>')
           #set $desc = $desc.replace('\n', ' ')
@@ -59,6 +73,12 @@
         ## alert.description is probably None
         #set $desc = $alert.description
       #end try
+      <tr>
+        <td style='text-align:left;'>
+          <br>
+          $nwsHeadline
+        </td>
+      </tr>
       <tr>
         <td style='text-align:left;'>
           <br>
@@ -74,6 +94,7 @@
         </td>
       </tr>
       <tr><td style='text-align:left;'>ID: $alert.id</td></tr>
+      <tr><td style='text-align:left;'>Headline: $alert.headline</td></tr>
       <tr><td style='text-align:left;'>Event: $alert.event</td></tr>
       <tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
       <tr><td style='text-align:left;'>Sent: $alert.sent</td></tr>

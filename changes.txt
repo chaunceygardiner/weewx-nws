@@ -1,6 +1,13 @@
 nws change history
 ------------------
 
+4.1 06/27/2024
+- Add nwsHeadline to alerts.
+    ******* IMPORTANT, you must delete the existing nws database (nws.sdb) if        *******
+    ******* udating versions earlier than 4.1.  Delete nws.sdb after installing the  *******
+    ******* update and just before restaring weewx.  This is necessary because the   *******
+    ******* database schema has changed.                                             *******
+
 4.0 06/21/2024
 - Add the following fields for one hour forecasts:
   pop (probabiliby of percipitation)
