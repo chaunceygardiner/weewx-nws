@@ -68,17 +68,16 @@
       #try
           #set $desc = $alert.description.replace('\n\n', '<br><br>')
           #set $desc = $desc.replace('\n', ' ')
+          #set $desc = $desc.replace('* WHAT...', '<u>What</u><br>')
+          #set $desc = $desc.replace('* WHERE...', '<u>Where</u><br>')
+          #set $desc = $desc.replace('* WHEN...', '<u>When</u><br>')
+          #set $desc = $desc.replace('* IMPACTS...', '<u>Impacts</u><br>')
+          #set $desc = $desc.replace('* ADDITIONAL DETAILS...', '<u>Additional Details</u><br>')
       #except
         ## Calling replace has failed because of malformed alerts.
         ## alert.description is probably None
         #set $desc = $alert.description
       #end try
-      <tr>
-        <td style='text-align:left;'>
-          <br>
-          $nwsHeadline
-        </td>
-      </tr>
       <tr>
         <td style='text-align:left;'>
           <br>
@@ -88,7 +87,7 @@
       <tr>
         <td style='text-align:left;'>
           <br>
-          Instructions: $alert.instructions
+          <u>Instructions</u><br>$alert.instructions
           <br>
           <br>
         </td>
@@ -103,6 +102,7 @@
       <tr><td style='text-align:left;'>Urgency: $alert.urgency</td></tr>
       <tr><td style='text-align:left;'>Sender: $alert.sender</td></tr>
       <tr><td style='text-align:left;'>Sender Name: $alert.senderName</td></tr>
+      <tr><td><br></td></tr>
       #end for
       #if $alert_count == 0
         <tr><td style='text-align:center;font-weight:bold;font-style:italic'>No active National Weather Service alerts for this location.</td></tr>
