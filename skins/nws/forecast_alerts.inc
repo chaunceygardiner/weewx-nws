@@ -68,11 +68,11 @@
       #try
           #set $desc = $alert.description.replace('\n\n', '<br><br>')
           #set $desc = $desc.replace('\n', ' ')
-          #set $desc = $desc.replace('* WHAT...', '<u>What</u><br>')
-          #set $desc = $desc.replace('* WHERE...', '<u>Where</u><br>')
-          #set $desc = $desc.replace('* WHEN...', '<u>When</u><br>')
-          #set $desc = $desc.replace('* IMPACTS...', '<u>Impacts</u><br>')
-          #set $desc = $desc.replace('* ADDITIONAL DETAILS...', '<u>Additional Details</u><br>')
+          #set $desc = $desc.replace('* WHAT...', '<em>What</em><br>')
+          #set $desc = $desc.replace('* WHERE...', '<em>Where</em><br>')
+          #set $desc = $desc.replace('* WHEN...', '<em>When</em><br>')
+          #set $desc = $desc.replace('* IMPACTS...', '<em>Impacts</em><br>')
+          #set $desc = $desc.replace('* ADDITIONAL DETAILS...', '<em>Additional Details</em><br>')
       #except
         ## Calling replace has failed because of malformed alerts.
         ## alert.description is probably None
@@ -87,7 +87,7 @@
       <tr>
         <td style='text-align:left;'>
           <br>
-          <u>Instructions</u><br>$alert.instructions
+          <em>Instructions</em><br>$alert.instructions
           <br>
           <br>
         </td>
