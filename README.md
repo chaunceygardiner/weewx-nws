@@ -31,11 +31,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    `pip install requests`
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v4.1).
+   Click on releases and pick the latest release (Release v4.2).
 
 1. Install the nws extension.
 
-   `weectl extension install weewx-nws-4.1.zip`
+   `weectl extension install weewx-nws-4.2.zip`
 
 ## WeeWX 4 Installation Instructions
 
@@ -52,11 +52,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    ```
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v4.1).
+   Click on releases and pick the latest release (Release v4.2).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-4.1.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws-4.2.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
