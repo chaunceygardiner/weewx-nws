@@ -51,22 +51,32 @@
         #set formatted_headline = $headline
       #end if
       <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$formatted_headline</td></tr>
-      <tr><td><br></td></tr>
-      <tr><td style='text-align:left;'>Event: $alert.event</td></tr>
-      <tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
-      <tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
-      <tr><td style='text-align:left;'>Ends: $alert.ends</td></tr>
-      <tr><td style='text-align:left;'>Status: $alert.status</td></tr>
-      <tr><td style='text-align:left;'>Severity: $alert.severity</td></tr>
-      <tr><td style='text-align:left;'>Certainty: $alert.certainty</td></tr>
-      #try
-          #set $nwsHeadline = $alert.nwsHeadline.replace('\n\n', '<br><br>')
-          #set $nwsHeadline = $nwsHeadline.replace('\n', ' ')
-      #except
-        ## Calling replace has failed because of missing NWS Headline
-        ## alert.nwsHeadline is probably None
-        #set $nwsHeadline = $alert.nwsHeadline
-      #end try
+      <tr>
+        <td>
+          <table>
+            <tr>
+              <td style='text-align:left;'>Status</td>
+              <td style='text-align:left;'>:</td>
+              <td style='text-align:left;'>$alert.status</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'>Severity</td>
+              <td style='text-align:left;'>:</td>
+              <td style='text-align:left;'>$alert.severity</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'>Certainty</td>
+              <td style='text-align:left;'>:</td>
+              <td style='text-align:left;'>$alert.certainty</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'>Urgency</td>
+              <td style='text-align:left;'>:</td>
+              <td style='text-align:left;'>$alert.urgency</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
       #try
           #set $desc = $alert.description.replace('\n\n', '<br><br>')
           #set $desc = $desc.replace('\n', ' ')
@@ -94,15 +104,18 @@
           <br>
         </td>
       </tr>
-      <tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
-      <tr><td style='text-align:left;'>Sent: $alert.sent</td></tr>
-      <tr><td style='text-align:left;'>Message Type: $alert.messageType</td></tr>
-      <tr><td style='text-align:left;'>Category: $alert.category</td></tr>
-      <tr><td style='text-align:left;'>Urgency: $alert.urgency</td></tr>
-      <tr><td style='text-align:left;'>Sender: $alert.sender</td></tr>
-      <tr><td style='text-align:left;'>Sender Name: $alert.senderName</td></tr>
       <tr><td style='text-align:left;'>ID: $alert.id</td></tr>
-      <tr><td style='text-align:left;'>Headline: $alert.headline</td></tr>
+      ##<tr><td style='text-align:left;'>Event: $alert.event</td></tr>
+      ##<tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
+      ##<tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
+      ##<tr><td style='text-align:left;'>Ends: $alert.ends</td></tr>
+      ##<tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
+      ##<tr><td style='text-align:left;'>Sent: $alert.sent</td></tr>
+      ##<tr><td style='text-align:left;'>Message Type: $alert.messageType</td></tr>
+      ##<tr><td style='text-align:left;'>Category: $alert.category</td></tr>
+      ##<tr><td style='text-align:left;'>Sender: $alert.sender</td></tr>
+      ##<tr><td style='text-align:left;'>Sender Name: $alert.senderName</td></tr>
+      ##<tr><td style='text-align:left;'>Headline: $alert.headline</td></tr>
       <tr><td><br></td></tr>
       #end for
       #if $alert_count == 0
