@@ -55,24 +55,24 @@
         <td>
           <table>
             <tr>
-              <td style='text-align:left;'>Status</td>
-              <td style='text-align:left;'>:</td>
-              <td style='text-align:left;'>$alert.status</td>
+              <td style='text-align:left;'><em>Status</em></td>
+              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.status</td>
             </tr>
             <tr>
-              <td style='text-align:left;'>Severity</td>
-              <td style='text-align:left;'>:</td>
-              <td style='text-align:left;'>$alert.severity</td>
+              <td style='text-align:left;'><em>Severity</em></td>
+              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.severity</td>
             </tr>
             <tr>
-              <td style='text-align:left;'>Certainty</td>
-              <td style='text-align:left;'>:</td>
-              <td style='text-align:left;'>$alert.certainty</td>
+              <td style='text-align:left;'><em>Certainty</em></td>
+              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.certainty</td>
             </tr>
             <tr>
-              <td style='text-align:left;'>Urgency</td>
-              <td style='text-align:left;'>:</td>
-              <td style='text-align:left;'>$alert.urgency</td>
+              <td style='text-align:left;'><em>Urgency</em></td>
+              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.urgency</td>
             </tr>
           </table>
         </td>
@@ -104,7 +104,16 @@
           <br>
         </td>
       </tr>
-      <tr><td style='text-align:left;'>ID: $alert.id</td></tr>
+      <tr>
+        <td>
+          <table>
+            <tr>
+              <td style='text-align:left;'><em>ID</em></td>
+              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.id</td>
+          </table>
+        </td>
+      </tr>
       ##<tr><td style='text-align:left;'>Event: $alert.event</td></tr>
       ##<tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
       ##<tr><td style='text-align:left;'>Onset: $alert.onset</td></tr>
