@@ -55,23 +55,19 @@
         <td>
           <table>
             <tr>
-              <td style='text-align:left;'><em>Status</em></td>
-              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'><em>Status:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.status</td>
             </tr>
             <tr>
-              <td style='text-align:left;'><em>Severity</em></td>
-              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'><em>Severity:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.severity</td>
             </tr>
             <tr>
-              <td style='text-align:left;'><em>Certainty</em></td>
-              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'><em>Certainty:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.certainty</td>
             </tr>
             <tr>
-              <td style='text-align:left;'><em>Urgency</em></td>
-              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'><em>Urgency:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.urgency</td>
             </tr>
           </table>
@@ -108,8 +104,7 @@
         <td>
           <table>
             <tr>
-              <td style='text-align:left;'><em>ID</em></td>
-              <td style='text-align:left;'><em>:</em></td>
+              <td style='text-align:left;'><em>ID:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.id</td>
           </table>
         </td>
