@@ -55,6 +55,14 @@
         <td>
           <table>
             <tr>
+              <td style='text-align:left;'><em>Onset:<em></td>
+              <td style='text-align:left;'>$alert.onset</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'><em>Ends:</em></td>
+              <td style='text-align:left;'>$alert.ends</td>
+            </tr>
+            <tr>
               <td style='text-align:left;'><em>Status:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.status</td>
             </tr>
