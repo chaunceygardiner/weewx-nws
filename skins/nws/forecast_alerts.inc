@@ -55,7 +55,7 @@
         <td>
           <table>
             <tr>
-              <td style='text-align:left;'><em>Onset:<em></td>
+              <td style='text-align:left;'><em>Onset:</em></td>
               <td style='text-align:left;'>$alert.onset</td>
             </tr>
             <tr>
