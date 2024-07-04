@@ -1,6 +1,10 @@
 nws change history
 ------------------
 
+4.3 07/03/2024
+- In addition to ignoring Test alerts, ignore Exercise, System and Draft alerts.
+- More formatting changes on the alerts tab of the nws report.
+
 4.2 07/03/2024
 - Formatting changes on alerts tab.
 

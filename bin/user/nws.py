@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.2"
+WEEWX_NWS_VERSION = "4.3"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -1067,8 +1067,14 @@ class NWSPoller:
                     log.info('found expired alert (skipping): %s' % id)
                 elif expires <= (time.time() - 24.0 * 60.0 * 60.0):  # Don't be so quick to stop showing expired alerts.  NWS doesn't reissue them quickly enough.
                     log.info('alert is past expiration time of %s (skipping): %s' % (timestamp_to_string(expires), alert['id']))
+                elif alert['status'] == 'Exercise':
+                    log.info("Skipping alert with status of 'Exercise': ID: %s, Description: %s" % (alert['id'], alert['description']))
+                elif alert['status'] == 'System':
+                    log.info("Skipping alert with status of 'System': ID: %s, Description: %s" % (alert['id'], alert['description']))
                 elif alert['status'] == 'Test':
-                    log.info("Skipping alert with status of 'Test': ID: %s, Headline: %s" % (alert['id'], alert['headline']))
+                    log.info("Skipping alert with status of 'Test': ID: %s, Description: %s" % (alert['id'], alert['description']))
+                elif alert['status'] == 'Draft':
+                    log.info("Skipping alert with status of 'Draft': ID: %s, Description: %s" % (alert['id'], alert['description']))
                 else:
                     record = Forecast(
                         interval         = NWS.get_interval(ForecastType.ALERTS),

@@ -102,10 +102,10 @@
               <td style='text-align:left;'><em>Ends:</em></td>
               <td style='text-align:left;'>$alert.ends</td>
             </tr>
-            <tr>
-              <td style='text-align:left;'><em>Status:</em></td>
-              <td style='text-align:left;'>&nbsp;$alert.status</td>
-            </tr>
+            ##x<tr>
+            ##x  <td style='text-align:left;'><em>Status:</em></td>
+            ##x  <td style='text-align:left;'>&nbsp;$alert.status</td>
+            ##x</tr>
             <tr>
               <td style='text-align:left;'><em>Severity:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.severity</td>
