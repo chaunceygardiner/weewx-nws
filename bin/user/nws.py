@@ -1057,7 +1057,7 @@ class NWSPoller:
                 id        = alert['id']
                 effective = parse(alert['effective'], tzinfos=tzinfos).timestamp()
                 expires   = parse(alert['expires'], tzinfos=tzinfos).timestamp()
-                onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp()
+                onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp() if alert['onset'] is not None else None
                 if alert['ends'] is not None:
                     ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
                 else:
@@ -1447,6 +1447,8 @@ if __name__ == '__main__':
                           help='Test the point in polygon function.')
         parser.add_option('--test-requester', dest='testreq', action='store_true',
                           help='Test the forecast requester.  Requires specify --type, --latitude, --longitude.')
+        parser.add_option('--test-parsing-all-alerts', dest='testparsingallalerts', action='store_true',
+                          help='Test parsing all NWS active alerts.')
         parser.add_option('--type', dest='ty',
                           help='ALERTS|TWELVE_HOUR|ONE_HOUR')
         parser.add_option('--nws-database', dest='db',
@@ -1497,6 +1499,9 @@ if __name__ == '__main__':
                 parser.error('--test-service requires --latitude and --longitude arguments')
             test_requester(forecast_type, options.lat, options.long)
 
+        if options.testparsingallalerts:
+            test_parsing_all_alerts()
+
         if options.testserv:
             if not options.lat or not options.long:
                 parser.error('--test-service requires --latitude and --longitude arguments')
@@ -1504,7 +1509,11 @@ if __name__ == '__main__':
 
         if options.view:
             if not options.db:
-                parser.error('--test-requester requires --nws-database argument')
+                parser.error('--view-forecasts requires --nws-database argument')
+            if not options.view_criterion:
+                parser.error('--view-forecasts requires --view-critereon argument')
+            if not options.ty:
+                parser.error('--view-forecasts requires --type argument')
 
             forecast_type = decode_forecast_type(options.ty)
             if forecast_type == None:
@@ -1604,7 +1613,7 @@ if __name__ == '__main__':
             oneHourForecasts      = [],
             oneHourForecastsJson  = '',
             lastModifiedOneHour   = None,
-            alertsUrl             = 'https://api.weather.gov/alerts/active?point=str(lat),str(long)',
+            alertsUrl             = 'https://api.weather.gov/alerts/active?point=%f,%f' % (lat, long),
             twelveHourForecastUrl = None,
             oneHourForecastUrl    = None,
             hardCodedTwelveHourForecastUrl = None,
@@ -1626,6 +1635,45 @@ if __name__ == '__main__':
         _, j = NWSPoller.request_forecast(cfg, forecast_type)
         if j is not None:
             for forecast in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
+                pretty_print_forecast(forecast)
+                print('------------------------')
+        else:
+            print('request_forecast returned None.')
+
+    def test_parsing_all_alerts() -> None:
+        cfg = Configuration(
+            lock                  = threading.Lock(),
+            alerts                = [],
+            signalDeleteAlerts    = False,
+            lastModifiedAlerts    = None,
+            twelveHourForecasts   = [],
+            twelveHourForecastsJson = '',
+            lastModifiedTwelveHour = None,
+            oneHourForecasts      = [],
+            oneHourForecastsJson  = '',
+            lastModifiedOneHour   = None,
+            alertsUrl             = 'https://api.weather.gov/alerts/active',
+            twelveHourForecastUrl = None,
+            oneHourForecastUrl    = None,
+            hardCodedTwelveHourForecastUrl = None,
+            hardCodedOneHourForecastUrl = None,
+            latitude              = 'dummy',
+            longitude             = 'dummy',
+            timeout_secs          = 5,
+            archive_interval      = 300,
+            user_agent            = '(weewx-nws test run, weewx-nws-developer)',
+            poll_secs             = 1800,
+            alert_poll_secs       = 600,
+            retry_wait_secs       = 300,
+            alert_retry_wait_secs = 30,
+            days_to_keep          = 90,
+            read_from_dir         = None,
+            ssh_config            = None,
+            )
+
+        _, j = NWSPoller.request_forecast(cfg, ForecastType.ALERTS)
+        if j is not None:
+            for forecast in NWSPoller.compose_records(j, ForecastType.ALERTS, cfg.latitude, cfg.longitude):
                 pretty_print_forecast(forecast)
                 print('------------------------')
         else:
@@ -1847,12 +1895,12 @@ if __name__ == '__main__':
         print('isDaytime       : %d' % forecast.isDaytime)
         print('outTemp         : %f' % forecast.outTemp)
         print('outTempTrend    : %s' % forecast.outTempTrend)
-        print('pop             : %d' % forecast.pop)
-        print('dewpoint        : %d' % forecast.dewpoint)
-        print('outHumidity     : %d' % forecast.outHumidity)
+        print('pop             : %s' % forecast.pop if forecast.pop is not None else 'None')
+        print('dewpoint        : %s' % forecast.dewpoint if forecast.dewpoint is not None else 'None')
+        print('outHumidity     : %s' % forecast.outHumidity if forecast.outHumidity is not None else 'None')
         print('windSpeed       : %f' % forecast.windSpeed)
         print('windSpeed2      : %s' % (forecast.windSpeed2 if forecast.windSpeed2 is not None else 'None'))
-        print('windDir         : %f' % forecast.windDir)
+        print('windDir         : %s' % forecast.windDir if forecast.windDir is not None else 'None')
         print('iconUrl         : %s' % forecast.iconUrl)
         print('shortForecast   : %s' % forecast.shortForecast)
         print('detailedForecast: %s' % forecast.detailedForecast)
@@ -1863,7 +1911,7 @@ if __name__ == '__main__':
         if forecast.status is not None:
             print('status          : %s' % forecast.status)
         if forecast.messageType is not None:
-            print('messasgeType    : %s' % forecast.messasgeType)
+            print('messasgeType    : %s' % forecast.messageType)
         if forecast.category is not None:
             print('category        : %s' % forecast.category)
         if forecast.severity is not None:
