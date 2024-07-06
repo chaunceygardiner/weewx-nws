@@ -89,7 +89,7 @@
         #else
           #set subTitle = $subHeadline
         #end if
-        <tr style='width:100%;'><td style='text-align:center;font-size:$subTitle_font_size;font-weight:bold;border-bottom:2pt solid Black;'>$subTitle</td></tr>
+        <tr style='width:100%;'><td style='text-align:center;font-size:$subTitle_font_size;font-weight:bold;border-bottom:2pt solid Black;'>$subTitle<br>&nbsp;</td></tr>
       #end if
       <tr>
         <td>
