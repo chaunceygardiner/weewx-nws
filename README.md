@@ -475,4 +475,4 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
 
 ## Licensing
 
-weewx-purple is licensed under the GNU Public License v3.
+weewx-nws is licensed under the GNU Public License v3.
