@@ -95,12 +95,16 @@
         <td>
           <table>
             <tr>
+              <td style='text-align:left;'><em>Issued:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.effective</td>
+            </tr>
+            <tr>
               <td style='text-align:left;'><em>Onset:</em></td>
-              <td style='text-align:left;'>$alert.onset</td>
+              <td style='text-align:left;'>&nbsp;$alert.onset</td>
             </tr>
             <tr>
               <td style='text-align:left;'><em>Ends:</em></td>
-              <td style='text-align:left;'>$alert.ends</td>
+              <td style='text-align:left;'>&nbsp;$alert.ends</td>
             </tr>
             ##x<tr>
             ##x  <td style='text-align:left;'><em>Status:</em></td>
@@ -154,18 +158,38 @@
             <tr>
               <td style='text-align:left;'><em>ID:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.id</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'><em>Event:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.event</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'><em>Expires:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.expires</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'><em>Sent:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.sent</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'><em>Message Type:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.messageType</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'><em>Category:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.category</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'><em>Sender:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.sender</td>
+            </tr>
+            <tr>
+              <td style='text-align:left;'><em>Sender Name:</em></td>
+              <td style='text-align:left;'>&nbsp;$alert.senderName</td>
+            </tr>
           </table>
         </td>
       </tr>
-      <tr><td><br></td></tr>
-      <tr><td style='text-align:left;'>Event: $alert.event</td></tr>
-      <tr><td style='text-align:left;'>Issued: $alert.effective</td></tr>
-      <tr><td style='text-align:left;'>Expires: $alert.expires</td></tr>
-      <tr><td style='text-align:left;'>Sent: $alert.sent</td></tr>
-      <tr><td style='text-align:left;'>Message Type: $alert.messageType</td></tr>
-      <tr><td style='text-align:left;'>Category: $alert.category</td></tr>
-      <tr><td style='text-align:left;'>Sender: $alert.sender</td></tr>
-      <tr><td style='text-align:left;'>Sender Name: $alert.senderName</td></tr>
       <tr><td><br></td></tr>
       #end for
       #if $alert_count == 0
