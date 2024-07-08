@@ -94,6 +94,7 @@
       <tr>
         <td>
           <table>
+            <tr><td><br></td></tr>
             <tr>
               <td style='text-align:left;'><em>Issued:</em></td>
               <td style='text-align:left;'>&nbsp;$alert.effective</td>
