@@ -97,15 +97,15 @@
             <tr><td><br></td></tr>
             <tr>
               <td style='text-align:left;'><em>Issued:</em></td>
-              <td style='text-align:left;'>&nbsp;$alert.effective</td>
+              <td style='text-align:left;'>&nbsp;$alert.effective.format('%a, %b %d, %Y %r')</td>
             </tr>
             <tr>
               <td style='text-align:left;'><em>Onset:</em></td>
-              <td style='text-align:left;'>&nbsp;$alert.onset</td>
+              <td style='text-align:left;'>&nbsp;$alert.onset.format('%a, %b %d, %Y %r')</td>
             </tr>
             <tr>
               <td style='text-align:left;'><em>Ends:</em></td>
-              <td style='text-align:left;'>&nbsp;$alert.ends</td>
+              <td style='text-align:left;'>&nbsp;$alert.ends.format('%a, %b %d, %Y %r')</td>
             </tr>
             ##x<tr>
             ##x  <td style='text-align:left;'><em>Status:</em></td>
@@ -166,11 +166,11 @@
             </tr>
             <tr>
               <td style='text-align:left;'><em>Expires:</em></td>
-              <td style='text-align:left;'>&nbsp;$alert.expires</td>
+              <td style='text-align:left;'>&nbsp;$alert.expires.format('%a, %b %d, %Y %r')</td>
             </tr>
             <tr>
               <td style='text-align:left;'><em>Sent:</em></td>
-              <td style='text-align:left;'>&nbsp;$alert.sent</td>
+              <td style='text-align:left;'>&nbsp;$alert.sent.format('%a, %b %d, %Y %r')</td>
             </tr>
             <tr>
               <td style='text-align:left;'><em>Message Type:</em></td>
