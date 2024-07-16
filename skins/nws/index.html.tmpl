@@ -1,4 +1,4 @@
-## Copyright John A Kline
+## Copyright 2024 John A Kline
 ## See LICENSE.txt for your rights
 #errorCatcher Echo
 #encoding UTF-8
@@ -8,85 +8,71 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>NWS Forecast</title>
     <meta name="description" content="NWS 12-hour.">
-    <style>
-      .forecastnav {
-        overflow: hidden;
-      }
-      .forecastnav span {
-        float: left;
-        color: #f2f2f2;
-        text-align: center;
-        padding: 14px 0px;
-        text-decoration: none;
-        font-size: 17px;
-      }
-      .forecastnav span:hover {
-        background-color: #ddd;
-        color: black;
-      }
-      .forecastnav span.active {
-        background-color: #367ba3;
-        color: white;
-      }
-    </style>
+    #include "style.inc"
   </head>
   <body>
-    <div class="forecastnav" style="width:100%;">
-      <table style="text-align:center;width:40%;margin-left:30%;">
-        <tr>
-          <td style="background-color:black;text-align:center;">
-            <span id="days" onclick="clickDays()" style="width:33%;" class="active">7 Day</span>
-            <span id="hours" onclick="clickHours()" style="width:34%;">Hourly</span>
-            <span id="alerts" onclick="clickAlerts()" style="width:33%;">Alerts</span>
-          </td>
-        </tr>
-      </table>
-    </div>
+    #set global $selection = "days"
+    #include "menubar.inc"
     <br>
     <br>
-    <div id="days_block" style="text-align:center;">
+    <div style="text-align:center;">
       <div style="display:inline-block;">
-        #include "forecast_days.inc"
+        ## forecast days - Copyright 2020-2024 John A Kline
+        ## See LICENSE.txt for your rights
+        #errorCatcher Echo
+        #encoding UTF-8
+        <div>
+          <table style='width:97%;text-align:center;border-style:solid;padding:30px;border:1pt solid LightGray;'>
+            #set $title_font_size = 'large'
+            #set $forecast_generated_at = ''
+            #for $twelve_hour in $nwsforecast.twelve_hour_forecasts()
+            #set $forecast_generated_at = $twelve_hour.generatedTime ##.format('%a %l %p')
+            <tr>
+              <td>
+                ## ------------------------------------------------
+                ## |       |               |                       |
+                ## |       |     Temp      |     Memorial Day      |
+                ## |       |     78 F      |-----------------------|
+                ## | ICON  | rising slowly |  Partly cloudy with   |
+                ## |       |      Wind     |  high of 84.  Winds   |
+                ## |       |   1 mph NNW   |  between 1 and 9 mph  |
+                ## |       |               |                       |
+                ## -------------------------------------------------
+                <table style='width:100%;border-bottom:1pt solid LightGray;padding:15px;'>
+                  <tr>
+                    #set $icon = $twelve_hour.iconUrl
+                    <td style='width:16%;'><img src='$icon' alt='$icon'></td>
+                    <td style='width:30%;'>
+                      <table style='width:100%;text-align:center;'>
+                        <tr style='width:100%;'><td>Temp</td></tr>
+                        <tr style='width:100%;'><td>$twelve_hour.outTemp.format('%.0f')$unit.label.outTemp $twelve_hour.outTempTrend </td></tr>
+                        <tr style='width:100%;'><td>Wind</td></tr>
+        #if $twelve_hour.windSpeed2 is None
+                        <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
+        #else
+                        <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f') to $twelve_hour.windSpeed2.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
+        #end if
+                      </table>
+                    </td>
+                    <td style='width:54%;'>
+                      <table style='width:100%;text-align:center;'>
+                        <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$twelve_hour.name</td></tr>
+                        <tr style='width:100%;'><td>$twelve_hour.detailedForecast</td></tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            #end for
+            #if $forecast_generated_at != ''
+            <tr>
+              <td style='text-align:center;font-style:italic;color:Gray;'>Forecast generated $forecast_generated_at.</td>
+            </tr>
+            #end if
+          </table>
+        </div>
       </div>
     </div>
-    <div id="hours_block" style="display:none;text-align:center;">
-      <div style="display:inline-block;">
-        #include "forecast_hours.inc"
-      </div>
-    </div>
-    <div id="alerts_block" style="display:none;text-align:center;">
-      <div style="display:inline-block;">
-        #include "forecast_alerts.inc"
-      </div>
-    </div>
-    <script>
-      function resetForecastMenuBar() {
-        document.getElementById('days').classList.remove('active');
-        document.getElementById('hours').classList.remove('active');
-        document.getElementById('alerts').classList.remove('active');
-        document.getElementById('days_block').style.display = 'none';
-        document.getElementById('hours_block').style.display = 'none';
-        document.getElementById('alerts_block').style.display = 'none';
-      }
-      function clickDays() {
-        resetForecastMenuBar();
-        document.getElementById('days').classList.add('active');
-        document.getElementById('days_block').style.display = 'block';
-        document.getElementById('forecast-title').innerHTML = 'NWS 7 Day Forecast';
-      }
-      function clickHours() {
-        resetForecastMenuBar();
-        document.getElementById('hours').classList.add('active');
-        document.getElementById('hours_block').style.display = 'block';
-        document.getElementById('forecast-title').innerHTML = 'NWS Hourly Forecast';
-      }
-      function clickAlerts() {
-        resetForecastMenuBar();
-        document.getElementById('alerts').classList.add('active');
-        document.getElementById('alerts_block').style.display = 'block';
-        document.getElementById('forecast-title').innerHTML = 'Active NWS Alerts';
-      }
-      clickDays();
-    </script>
   </body>
 </html>

@@ -64,11 +64,12 @@ class NWSInstaller(ExtensionInstaller):
             files=[
                 ('bin/user', ['bin/user/nws.py']),
                 ('skins/nws', [
-                    'skins/nws/forecast_alerts.inc',
-                    'skins/nws/forecast_days.inc',
-                    'skins/nws/forecast_hours.inc',
+                    'skins/nws/alerts.html.tmpl',
+                    'skins/nws/hours.html.tmpl',
                     'skins/nws/index.html.tmpl',
+                    'skins/nws/menubar.inc',
                     'skins/nws/skin.conf',
+                    'skins/nws/style.inc',
                     'skins/nws/icons/large/night/dust',
                     'skins/nws/icons/large/night/sleet',
                     'skins/nws/icons/large/night/fog',
