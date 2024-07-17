@@ -1,9 +1,8 @@
 nws change history
 ------------------
 
-4.4 ??/??/????
-- Add --test-parsing-all-alerts option for testing parsing all alerts in the NWS system.
-- Various bug fixes when running tests.
+4.4 07/17/2024
+- Fix issue #8: Missing math import statement in alerts.html.tmpl #8
 
 4.3 07/03/2024
 - In addition to ignoring Test alerts, ignore Exercise, System and Draft alerts.
