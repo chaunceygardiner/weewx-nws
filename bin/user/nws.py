@@ -49,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.4"
+WEEWX_NWS_VERSION = "4.5"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -76,7 +76,7 @@ table = [
     ('endTime',          'FLOAT NOT NULL'),   # For alerts, holds ends
     ('isDaytime',        'INTEGER NOT NULL'),
     ('outTemp',          'FLOAT NOT NULL'),   # Needs to be converted.  NWS temperature
-    # missing NWS temperatureUnit, which is always "F"
+                                              # missing NWS temperatureUnit, which is always "F"
     ('outTempTrend',     'STRING'),           # NWS temperatureTrend
     ('pop',              'INTEGER'),          # probabilityOfPercipitation, percent, always? null for 12-hour, alerts
     ('dewpoint',         'FLOAT'),            # In celsius from NWS, converted to F, null for 12-hour, alerts
@@ -321,22 +321,22 @@ class NWS(StdService):
         # Start a thread to query NWS for 1H forecasts
         nws_1h_poller: NWSPoller = NWSPoller(self.cfg, ForecastType.ONE_HOUR)
         t_1h_forecasts: threading.Thread = threading.Thread(target=nws_1h_poller.poll_nws)
-        t_1h_forecasts.setName('NWS_1h_Forecasts')
-        t_1h_forecasts.setDaemon(True)
+        t_1h_forecasts.name = 'NWS_1h_Forecasts'
+        t_1h_forecasts.daemon = True
         t_1h_forecasts.start()
 
         # Start a thread to query NWS for 12H forecasts
         nws_12h_poller: NWSPoller = NWSPoller(self.cfg, ForecastType.TWELVE_HOUR)
         t_12h_forecasts: threading.Thread = threading.Thread(target=nws_12h_poller.poll_nws)
-        t_12h_forecasts.setName('NWS_12h_Forecasts')
-        t_12h_forecasts.setDaemon(True)
+        t_12h_forecasts.name = 'NWS_12h_Forecasts'
+        t_12h_forecasts.daemon = True
         t_12h_forecasts.start()
 
         # Start a thread to query NWS for alerts
         nws_alerts_poller: NWSPoller = NWSPoller(self.cfg, ForecastType.ALERTS)
         t_alerts: threading.Thread = threading.Thread(target=nws_alerts_poller.poll_nws)
-        t_alerts.setName('NWS_Alerts')
-        t_alerts.setDaemon(True)
+        t_alerts.name = 'NWS_Alerts'
+        t_alerts.daemon = True
         t_alerts.start()
 
         self.bind(weewx.END_ARCHIVE_PERIOD, self.end_archive_period)
@@ -492,7 +492,7 @@ class NWS(StdService):
 
     @staticmethod
     def rsync_forecast(local_file: str, remote_file: str, remote_host: str,
-            remote_port: int, timeout: int, remote_user: str, ssh_options: str,
+            remote_port: int, timeout: int, remote_user: str, ssh_options: List[str],
             compress: bool, log_success: bool) -> None:
         log.debug('rsync_forecast() start')
         rsync_upload = weeutil.rsyncupload.RsyncUpload(
@@ -722,7 +722,7 @@ class NWS(StdService):
         dbmanager = self.engine.db_binder.get_manager(self.data_binding)
         dbmanager.addRecord(record)
 
-    def select_forecasts(self, forecast_type: ForecastType, max_forecasts: int=None) -> List[Dict[str, Any]]:
+    def select_forecasts(self, forecast_type: ForecastType, max_forecasts: Optional[int] = None) -> List[Dict[str, Any]]:
         # Used for testing.
         dbmanager = self.engine.db_binder.get_manager(self.data_binding)
         return NWSForecastVariables.fetch_records(dbmanager, forecast_type, self.cfg.latitude, self.cfg.longitude, max_forecasts)
@@ -765,13 +765,13 @@ class NWSPoller:
                         on_retry = False
                         on_retry_count = 0
                         sleep_time = NWSPoller.time_to_next_poll(self.poll_secs)
-                        log.debug('poll_nws: Sleeping for %f seconds.' % sleep_time)
+                        log.info('poll_nws(%s): Sleeping for %f seconds.' % (self.forecast_type, sleep_time))
                         time.sleep(sleep_time)
                 else:
                     on_retry = False
                     on_retry_count = 0
                     sleep_time = NWSPoller.time_to_next_poll(self.poll_secs)
-                    log.debug('poll_nws: Sleeping for %f seconds.' % sleep_time)
+                    log.debug('poll_nws(%s): Sleeping for %f seconds.' % (self.forecast_type, sleep_time))
                     time.sleep(sleep_time)
             except Exception as e:
                 log.error('poll_nws(%s): Encountered exception. Retrying in %d seconds. exception: %s (%s)' % (self.forecast_type, self.retry_wait_secs, e, type(e)))
@@ -979,8 +979,8 @@ class NWSPoller:
             if lastModified is not None:
                 lastModifiedStr = lastModified.strftime('%a, %d %b %Y %H:%M:%S %Z')
                 headers['If-Modified-Since'] = lastModifiedStr
-            # Work around NWS caching issue.
-            headers['Feature-Flags'] =  '%f' % time.time()
+            #!JK # Work around NWS caching issue.
+            #!JK headers['Feature-Flags'] =  '%f' % time.time()
             log.info('%s: calling requests.Response with %r' % (forecast_type, headers))
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
             log.debug('response: %s' % response)
@@ -994,6 +994,18 @@ class NWSPoller:
             if response:
                 j = response.json()
                 log.debug('request_forecast(%s): response.headers: %r' % (forecast_type, response.headers))
+                # Sanity check the json.  If bad, return True, None
+                err = NWSPoller.sanity_check_json(j, forecast_type)
+                if err:
+                    log.info('request_forecast(%s): sanity check failed(%s): %s.' % (forecast_type, forecastUrl, err))
+                    return True, None
+                # One more sanity check, try parsing and composing records.
+                try:
+                    for record in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
+                        pass
+                except Exception as e:
+                    log.info('request_forecast(%s): json error in data from %s returnd from NWS: %s (%s).' % (forecast_type, forecastUrl, e, type(e)))
+                    return True, None
                 last_mod = None
                 tzinfos = {'UTC': tz.gettz("UTC")}
                 if 'Last-Modified' in response.headers:
@@ -1051,13 +1063,19 @@ class NWSPoller:
             try:
                 alert = feature['properties']
                 tzinfos = {'UTC': tz.gettz("UTC")}
-                if alert is None or 'effective' not in alert or 'expires' not in alert or 'onset' not in alert or 'ends' not in alert:
+                if alert is None:
                     log.info('malformed alert (skipping): %s' % alert)
+                    continue
+                if alert['status'] == 'Exercise' or alert['status'] == 'System' or alert['status'] == 'Test' or alert['status'] == 'Draft':
+                    log.info("Skipping alert with status of '%s': %s" % (alert['status'], alert))
+                    continue
+                if alert is None or 'effective' not in alert or 'expires' not in alert or 'onset' not in alert or 'ends' not in alert:
+                    log.info('Malformed alert (skipping): %s' % alert)
                     continue
                 id        = alert['id']
                 effective = parse(alert['effective'], tzinfos=tzinfos).timestamp()
                 expires   = parse(alert['expires'], tzinfos=tzinfos).timestamp()
-                onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp() if alert['onset'] is not None else None
+                onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp()
                 if alert['ends'] is not None:
                     ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
                 else:
@@ -1126,10 +1144,281 @@ class NWSPoller:
                 log.info('malformed alert (skipping): %s, %s' % (feature, e))
 
     @staticmethod
+    def sanity_check_json(j: Dict[str, Any], forecast_type: ForecastType) -> Optional[str]:
+        if forecast_type == ForecastType.ALERTS:
+            return NWSPoller.sanity_check_alerts_json(j)
+        else:
+            return NWSPoller.sanity_check_forecast_json(j, forecast_type)
+
+    @staticmethod
+    def check_for_entry(d: Dict[str, Any], path: List[str], allow_none: bool) -> Tuple[Any, Optional[str]]:
+        """Returns entry, None if entry exists, else None, error_msg"""
+        sub_dict = d
+        parent_str: str = ''
+        for element in path:
+            if type(sub_dict) != dict:
+                return None, '%s[%s] is not a dict.' % (parent_str, element)
+            if element not in sub_dict:
+                if parent_str == '':
+                    return None, '%s not found' % element
+                else:
+                    return None, '%s not found in %s' % (element, parent_str)
+            if sub_dict[element] == None:
+                if allow_none:
+                    return None, None
+                else:
+                    return None, '%s[%s] is None' % (parent_str, element)
+            parent_str += '[%s]' % element
+            sub_dict = sub_dict[element]
+        return sub_dict, None # subdict is actually the element
+
+    @staticmethod
+    def check_for_date_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+        for path in paths:
+            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            if err:
+                return err
+            if element is None:
+                return None
+            if type(element) is not str:
+                return 'Expected date string: %s:%s.' % (path, element)
+            tzinfos = {'UTC': tz.gettz("UTC")}
+            try:
+                _ = parse(element, tzinfos=tzinfos).timestamp()
+            except Exception as e:
+                return '%s: Could not parse %s as a date: %s(%s)).' % (path, element, e, type(e))
+        return None
+
+    @staticmethod
+    def check_for_int_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+        for path in paths:
+            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            if err:
+                return err
+            if element is None:
+                return None
+            if not isinstance(element, int):
+                return '%s: int expected, found %s(%s).' % (path, element, type(element))
+        return None
+
+    @staticmethod
+    def check_for_list_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+        for path in paths:
+            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            if err:
+                return err
+            if element is None:
+                return None
+            if not isinstance(element, list):
+                return '%s: list expected, found %s(%s).' % (path, element, type(element))
+        return None
+
+    @staticmethod
+    def check_for_str_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+        for path in paths:
+            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            if err:
+                return err
+            if element is None:
+                return None
+            if not isinstance(element, str):
+                return '%s: str expected, found %s(%s).' % (path, element, type(element))
+        return None
+
+    @staticmethod
+    def check_for_dict_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+        for path in paths:
+            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            if err:
+                return err
+            if element is None:
+                return None
+            if not isinstance(element, dict):
+                return '%s: dict expected, found %s(%s).' % (path, element, type(element))
+        return None
+
+    @staticmethod
+    def check_for_float_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+        for path in paths:
+            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            if err:
+                return err
+            if element is None:
+                return None
+            if not isinstance(element, float):
+                return '%s: float expected, found %s(%s).' % (path, element, type(element))
+        return None
+
+    @staticmethod
+    def check_for_number_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+        for path in paths:
+            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            if err:
+                return err
+            if element is None:
+                return None
+            if not isinstance(element, float) and  not isinstance(element, int):
+                return '%s: float or int expected, found %s(%s).' % (path, element, type(element))
+        return None
+
+    @staticmethod
+    def check_for_bool_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+        for path in paths:
+            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            if err:
+                return err
+            if element is None:
+                return None
+            if not isinstance(element, bool):
+                return '%s: bool expected, found %s(%s).' % (path, element, type(element))
+        return None
+
+    @staticmethod
+    def sanity_check_alerts_json(j: Dict[str, Any]) -> Optional[str]:
+        err = NWSPoller.check_for_list_entries(j, [['features']])
+        if err:
+            return err
+        for feature in j['features']:
+            err = NWSPoller.check_for_str_entries(feature, [['properties','status']])
+            if err:
+                return err
+            if feature['properties']['status'] == 'Exercise' or feature['properties']['status'] == 'System' or feature['properties']['status'] == 'Test' or feature['properties']['status'] == 'Draft':
+                continue
+            err = NWSPoller.check_for_str_entries(feature, [
+                    ['properties','id'],
+                    ['properties','headline'],
+                    ['properties','description'],
+                    ['properties','messageType'],
+                    ['properties','category'],
+                    ['properties','severity'],
+                    ['properties','certainty'],
+                    ['properties','urgency'],
+                    ['properties','sender'],
+                    ['properties','senderName'],
+                    ])
+            if err:
+                return err
+            # NWSHeadline may or may not exist.  If it does, it needs to be a str.
+            if 'NWSHeadline' in feature['properties']:
+                err = NWSPoller.check_for_str_entries(feature, [['properties','NWSHeadline']])
+                if err:
+                    return err
+            err = NWSPoller.check_for_str_entries(feature, [['properties','instruction']], True)
+            if err:
+                return err
+            err = NWSPoller.check_for_date_entries(feature, [
+                    ['properties','effective'],
+                    ['properties','expires'],
+                    ['properties','onset'],
+                    ])
+            if err:
+                return err
+            # Ends must be there, but it might be None
+            err = NWSPoller.check_for_date_entries(feature, [['properties','ends']], True)
+            if err:
+                return err
+        return None
+
+    @staticmethod
+    def sanity_check_forecast_json(j: Dict[str, Any], forecast_type: ForecastType) -> Optional[str]:
+        err = NWSPoller.check_for_date_entries(j, [
+                ['properties','updateTime'],
+                ])
+        if err:
+            return err
+
+        err = NWSPoller.check_for_str_entries(j, [
+                ['properties','units'],
+                ])
+        if err:
+            return err
+
+        err = NWSPoller.check_for_list_entries(j, [
+                ['properties','periods'],
+                ])
+        if err:
+            return err
+
+        for period in j['properties']['periods']:
+
+            err = NWSPoller.check_for_str_entries(period, [
+                    ['windSpeed'],
+                    ['windDirection'],
+                    ['name'],
+                    ['temperatureTrend'],
+                    ['icon'],
+                    ['shortForecast'],
+                    ['detailedForecast'],
+                    ['startTime'],
+                    ['endTime'],
+                    ])
+            if err:
+                return err
+
+            try:
+                _ = datetime.datetime.fromisoformat(period['startTime']).timestamp()
+            except Exception as e:
+                return '%s: Cannot decode startTime: %s: %s(%s).' % (forecast_type, period['startTime'], e, type(e))
+
+            try:
+                _ = datetime.datetime.fromisoformat(period['endTime']).timestamp()
+            except Exception as e:
+                return '%s: Cannot decode endTime: %s: %s(%s).' % (forecast_type, period['endTime'], e, type(e))
+
+            try:
+                # windSpeed needs further validation
+                windSpeedStr = period['windSpeed']
+                windSpeedArray = windSpeedStr.split()
+                _ = to_int(windSpeedArray[0])
+                if len(windSpeedArray) == 2:
+                    _ = None
+                    windSpeedUnit = windSpeedArray[1]
+                else:
+                    _ = to_int(windSpeedArray[2])
+                    windSpeedUnit = windSpeedArray[3]
+                if windSpeedUnit != "mph":
+                    return '%s: Expecting windspeed to be in MPH but found %s.' % (forecast_type, windSpeedUnit)
+            except Exception as e:
+                return '%s: Couldn\'t decode windspeed %s: %s(%s)' % (forecast_type, windSpeedStr, e, type(e))
+
+            err = NWSPoller.check_for_int_entries(period, [
+                    ['number'],
+                    ['temperature'],
+                    ])
+            if err:
+                return err
+
+            err = NWSPoller.check_for_bool_entries(period, [
+                    ['isDaytime'],
+                    ])
+            if err:
+                return err
+
+            if forecast_type == ForecastType.ONE_HOUR:
+                err = NWSPoller.check_for_int_entries(period, [
+                        ['probabilityOfPrecipitation','value'],
+                        ['relativeHumidity', 'value'],
+                        ])
+                if err:
+                    return err
+
+                err = NWSPoller.check_for_number_entries(period, [
+                        ['dewpoint', 'value'],
+                        ])
+                if err:
+                    return err
+
+        return None
+
+    @staticmethod
     def compose_records(j, forecast_type: ForecastType, latitude: str, longitude: str) -> Iterator[Forecast]:
         if forecast_type == ForecastType.ALERTS:
             yield from NWSPoller.compose_alert_records(j, latitude, longitude)
-            return
+        else:
+            yield from NWSPoller.compose_forecast_records(j, forecast_type, latitude, longitude)
+
+    @staticmethod
+    def compose_forecast_records(j, forecast_type: ForecastType, latitude: str, longitude: str) -> Iterator[Forecast]:
 
         if not NWS.check_latlong_against_nws_polygon(float(latitude), float(longitude), j['geometry']['coordinates']):
             log.warning("Lat/Long %s/%s does not fall within bounds of forecast's polygon (due to NWS Bug)." % (latitude, longitude))
@@ -1174,8 +1463,8 @@ class NWSPoller:
                 outTemp          = to_float(period['temperature']),
                 outTempTrend     = period['temperatureTrend'],
                 pop              = period['probabilityOfPrecipitation']['value'],
-                dewpoint         = round(period['dewpoint']['value'] * 9.0 / 5.0 + 32.0) if forecast_type == ForecastType.ONE_HOUR and period['dewpoint'] is not None else None,
-                outHumidity      = period['relativeHumidity']['value'] if forecast_type == ForecastType.ONE_HOUR and period['relativeHumidity'] is not None else None,
+                dewpoint         = round(period['dewpoint']['value'] * 9.0 / 5.0 + 32.0) if forecast_type == ForecastType.ONE_HOUR else None,
+                outHumidity      = period['relativeHumidity']['value'] if forecast_type == ForecastType.ONE_HOUR else None,
                 windSpeed        = windSpeed,
                 windSpeed2       = windSpeed2,
                 windDir          = NWSPoller.translate_wind_dir(period['windDirection']),
@@ -1348,7 +1637,7 @@ class NWSForecastVariables(SearchList):
             return []
 
     @staticmethod
-    def fetch_records(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
+    def fetch_records(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: Optional[int] = None) -> List[Dict[str, Any]]:
         for i in range(3):
             try:
                 return NWSForecastVariables.fetch_records_internal(dbm, forecast_type, latitude, longitude, max_forecasts)
@@ -1363,7 +1652,7 @@ class NWSForecastVariables(SearchList):
         return []
 
     @staticmethod
-    def fetch_records_internal(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: int=None) -> List[Dict[str, Any]]:
+    def fetch_records_internal(dbm: weewx.manager.Manager, forecast_type: ForecastType, latitude, longitude, max_forecasts: Optional[int] = None) -> List[Dict[str, Any]]:
         # Fetch last records inserted for this forecast_type
         # This is tricky.  Sometimes, servers return older forecasts (i.e., generated at a time older than the latest generated).
         # As such, we'd like to select only the records that match MAX(generatedTime).  Alas, if we do that, when multiple alerts are
@@ -1434,7 +1723,10 @@ class NWSForecastVariables(SearchList):
 if __name__ == '__main__':
     usage = """%prog [options] [--help]"""
 
+    import weewx
     import weeutil.logger
+
+    weeutil.logger.setup('nws', {})
 
     def main():
         import optparse
@@ -1457,6 +1749,8 @@ if __name__ == '__main__':
                           help='Manually insert a forecast from a file.  Requires --nws-database, --type, --filename, --latitude, --longitude and --archive-interval')
         parser.add_option('--test-service', dest='testserv', action='store_true',
                           help='Test the NWS service.  Requires --latitude and --longitude.')
+        parser.add_option('--test-multiple-gridpoints', dest='testmultigrid', action='store_true',
+                          help='Test requesting 12H and 1H forecasts from multiple gridpoints.')
         parser.add_option('--latitude', type='float', dest='lat',
                           help='The latitude of the station.')
         parser.add_option('--longitude', type='float', dest='long',
@@ -1480,6 +1774,7 @@ if __name__ == '__main__':
             forecast_type = decode_forecast_type(options.ty)
             if forecast_type == None:
                 parser.error('--type must be one of: ALERTS|TWELVE_HOUR|ONE_HOUR')
+            assert forecast_type is not None
             if not options.fname:
                 parser.error('--insert-forecast requires --filename argument')
             if not options.db:
@@ -1495,6 +1790,7 @@ if __name__ == '__main__':
             forecast_type = decode_forecast_type(options.ty)
             if forecast_type == None:
                 parser.error('--type must be one of: ALERTS|TWELVE_HOUR|ONE_HOUR')
+            assert forecast_type is not None
             if not options.lat or not options.long:
                 parser.error('--test-service requires --latitude and --longitude arguments')
             test_requester(forecast_type, options.lat, options.long)
@@ -1507,6 +1803,9 @@ if __name__ == '__main__':
                 parser.error('--test-service requires --latitude and --longitude arguments')
             test_service(options.lat, options.long)
 
+        if options.testmultigrid:
+            test_forecast_requests_from_multiple_gridpoints()
+
         if options.view:
             if not options.db:
                 parser.error('--view-forecasts requires --nws-database argument')
@@ -1518,10 +1817,12 @@ if __name__ == '__main__':
             forecast_type = decode_forecast_type(options.ty)
             if forecast_type == None:
                 parser.error('--type must be one of: ALERTS|TWELVE_HOUR|ONE_HOUR')
+            assert forecast_type is not None
 
             criterion = decode_criterion(options.view_criterion)
             if criterion == None:
                 parser.error('--vew-criterion must be one of: ALL|LATEST|SUMMARY')
+            assert criterion is not None
 
             view_sqlite_database(options.db, forecast_type, criterion)
 
@@ -1673,11 +1974,120 @@ if __name__ == '__main__':
 
         _, j = NWSPoller.request_forecast(cfg, ForecastType.ALERTS)
         if j is not None:
+            err = NWSPoller.sanity_check_alerts_json(j)
+            if err:
+                print('Sanity check failed on NWS response: %s', err)
             for forecast in NWSPoller.compose_records(j, ForecastType.ALERTS, cfg.latitude, cfg.longitude):
                 pretty_print_forecast(forecast)
                 print('------------------------')
         else:
             print('request_forecast returned None.')
+
+    def test_forecast_requests_from_multiple_gridpoints() -> None:
+        lat_long_tuples = [
+                ('39.2904'  , '-76.6122'  , 'Baltimore'    ),
+                ('42.3601'  , '-71.0589'  , 'Boston'       ),
+                ('41.8781'  , '-87.6298'  , 'Chicago'      ),
+                ('32.7767'  , '-96.7970'  , 'Dallas'       ),
+                ('39.770'   , '-104.870'  , 'Denver'       ),
+                ('42.380'   , '-83.100'   , 'Detroit'      ),
+                ('44.513332', '-88.015831', 'Green Bay'    ),
+                ('29.740700', '-95.463600', 'Houston'      ),
+                ('39.780'   , '-86.150'   , 'Indianapolis' ),
+                ('39.120'   , '-94.550'   , 'Kansas City'  ),
+                ('40.0379'  , '-76.3055'  , 'Lancaster'    ),
+                ('34.0549'  , '-118.2426' , 'Los Angeles'  ),
+                ('25.780'   , '-80.210'   , 'Miami'        ),
+                ('44.960'   , '-93.270'   , 'Minneapolis'  ),
+                ('30.070'   , '-89.930'   , 'New Orleans'  ),
+                ('40.7128'  , '-74.0060'  , 'New York'     ),
+                ('41.260'   , '-96.010'   , 'Omaha'        ),
+                ('37.4419'  , '-122.1430' , 'Palo Alto'    ),
+                ('40.010'   , '-75.130'   , 'Philadelphia' ),
+                ('33.4484'  , '-112.0740' , 'Phoenix'      ),
+                ('40.440'   , '-79.980'   , 'Pittsburgh'   ),
+                ('29.460'   , '-98.510'   , 'San Antonio'  ),
+                ('32.810'   , '-117.140'  , 'San Diego'    ),
+                ('37.770'   , '-122.450'  , 'San Francisco'),
+                ('47.620'   , '-122.350'  , 'Seattle'      ),
+                ]
+
+        for lat_long in lat_long_tuples:
+            print('%s: Lat. %s, Long. %s' % (lat_long[2], lat_long[0], lat_long[1]))
+            cfg = Configuration(
+            lock                  = threading.Lock(),
+            alerts                = [],
+            signalDeleteAlerts    = False,
+            lastModifiedAlerts    = None,
+            twelveHourForecasts   = [],
+            twelveHourForecastsJson = '',
+            lastModifiedTwelveHour = None,
+            oneHourForecasts      = [],
+            oneHourForecastsJson  = '',
+            lastModifiedOneHour   = None,
+            alertsUrl             = 'https://api.weather.gov/alerts/active?point=%s,%s' % (lat_long[0], lat_long[1]),
+            twelveHourForecastUrl = None,
+            oneHourForecastUrl    = None,
+            hardCodedTwelveHourForecastUrl = None,
+            hardCodedOneHourForecastUrl = None,
+            latitude              = lat_long[0],
+            longitude             = lat_long[1],
+            timeout_secs          = 5,
+            archive_interval      = 300,
+            user_agent            = '(weewx-nws test run, weewx-nws-developer)',
+            poll_secs             = 1800,
+            alert_poll_secs       = 600,
+            retry_wait_secs       = 300,
+            alert_retry_wait_secs = 30,
+            days_to_keep          = 90,
+            read_from_dir         = None,
+            ssh_config            = None,
+            )
+
+            print('    Fetching URLs:')
+            if not NWSPoller.request_urls(cfg):
+                print('        request_urls failed for cfg: %s' % cfg)
+                sys.exit(1)
+            print('        TWELVE_HOUR URL: %s' % cfg.twelveHourForecastUrl)
+            print('        ONE_HOUR    URL: %s' % cfg.oneHourForecastUrl)
+            print('        ALERTS      URL: %s' % cfg.alertsUrl)
+
+            print('    Requesting TWELVE_HOUR forecasts...')
+            _, j = NWSPoller.request_forecast(cfg, ForecastType.TWELVE_HOUR)
+            if j is not None:
+                err = NWSPoller.sanity_check_json(j, ForecastType.TWELVE_HOUR)
+                if err:
+                    print('        TWELVE_HOUR Sanity check failed: %s', err)
+                    sys.exit(1)
+                else:
+                    print('        Fetched %d TWELVE_HOUR forecasts.' % len(j['properties']['periods']))
+            else:
+                print('        request_forecast(TWELVE_HOUR) returned None.')
+
+            print('    Requesting ONE_HOUR forecasts...')
+            _, j = NWSPoller.request_forecast(cfg, ForecastType.ONE_HOUR)
+            if j is not None:
+                err = NWSPoller.sanity_check_json(j, ForecastType.ONE_HOUR)
+                if err:
+                    print('ONE_HOUR Sanity check failed: %s', err)
+                    sys.exit(1)
+                else:
+                    print('        Fetched %d ONEE_HOUR forecasts.' % len(j['properties']['periods']))
+            else:
+                print('        request_forecast(ONE_HOUR) returned None.')
+
+            print('    Requesting ALERTS...')
+            _, j = NWSPoller.request_forecast(cfg, ForecastType.ALERTS)
+            if j is not None:
+                err = NWSPoller.sanity_check_json(j, ForecastType.ALERTS)
+                if err:
+                    print('        ALERTS Sanity check failed: %s', err)
+                    sys.exit(1)
+                else:
+                    print('        Fetched %d ALERTs.' % len(j['features']))
+            else:
+                print('        request_forecast(ALERTS) returned None.')
+
 
     def test_point_in_polygon() -> None:
         point = Point(

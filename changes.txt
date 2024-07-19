@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+4.5 07/22/2024
+- Comprehensive sanity checking on forecasts/alerts returned from NWS.
+
 4.4 07/17/2024
 - Fix issue #8: Missing math import statement in alerts.html.tmpl #8
 
