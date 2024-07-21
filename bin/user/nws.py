@@ -979,8 +979,6 @@ class NWSPoller:
             if lastModified is not None:
                 lastModifiedStr = lastModified.strftime('%a, %d %b %Y %H:%M:%S %Z')
                 headers['If-Modified-Since'] = lastModifiedStr
-            #!JK # Work around NWS caching issue.
-            #!JK headers['Feature-Flags'] =  '%f' % time.time()
             log.info('%s: calling requests.Response with %r' % (forecast_type, headers))
             response: requests.Response = session.get(url=forecastUrl, headers=headers, timeout=cfg.timeout_secs)
             log.debug('response: %s' % response)
@@ -1740,7 +1738,7 @@ if __name__ == '__main__':
         parser.add_option('--test-requester', dest='testreq', action='store_true',
                           help='Test the forecast requester.  Requires specify --type, --latitude, --longitude.')
         parser.add_option('--test-parsing-all-alerts', dest='testparsingallalerts', action='store_true',
-                          help='Test parsing all NWS active alerts.')
+                          help='Test parsing all NWS active alerts. [--print-records=True|False] (defaults to False).')
         parser.add_option('--type', dest='ty',
                           help='ALERTS|TWELVE_HOUR|ONE_HOUR')
         parser.add_option('--nws-database', dest='db',
@@ -1764,6 +1762,9 @@ if __name__ == '__main__':
                           help='View forecast records.  Must specify --nws-database, --type and --view-criterion.')
         parser.add_option('--filename', type='str', dest='fname',
                           help='The filename from which to read the forecast.')
+        parser.add_option('--print-records', dest='print_records',
+                          default=False,
+                          help='Print forecasts/alerts.')
         (options, args) = parser.parse_args()
 
         weeutil.logger.setup('nws', {})
@@ -1796,7 +1797,7 @@ if __name__ == '__main__':
             test_requester(forecast_type, options.lat, options.long)
 
         if options.testparsingallalerts:
-            test_parsing_all_alerts()
+            test_parsing_all_alerts(options.print_records)
 
         if options.testserv:
             if not options.lat or not options.long:
@@ -1941,7 +1942,7 @@ if __name__ == '__main__':
         else:
             print('request_forecast returned None.')
 
-    def test_parsing_all_alerts() -> None:
+    def test_parsing_all_alerts(print_records: bool) -> None:
         cfg = Configuration(
             lock                  = threading.Lock(),
             alerts                = [],
@@ -1977,9 +1978,15 @@ if __name__ == '__main__':
             err = NWSPoller.sanity_check_alerts_json(j)
             if err:
                 print('Sanity check failed on NWS response: %s', err)
-            for forecast in NWSPoller.compose_records(j, ForecastType.ALERTS, cfg.latitude, cfg.longitude):
-                pretty_print_forecast(forecast)
-                print('------------------------')
+            alert_count: int = 0
+            for alert in  NWSPoller.compose_records(j, ForecastType.ALERTS, cfg.latitude, cfg.longitude):
+                alert_count += 1
+                if print_records:
+                    pretty_print_forecast(alert)
+                    print('------------------------')
+                else:
+                    pass
+            print('Parsed %d alerts.' % alert_count)
         else:
             print('request_forecast returned None.')
 
