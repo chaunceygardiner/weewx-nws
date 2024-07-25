@@ -38,6 +38,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import weewx
 import weewx.units
+import weeutil
 import weeutil.weeutil
 
 from weeutil.weeutil import timestamp_to_string
