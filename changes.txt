@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+4.5.1 07/24/2024
+- Add back imoprt weeutil statement.
+
 4.5 07/22/2024
 - Comprehensive sanity checking on forecasts/alerts returned from NWS.
 
