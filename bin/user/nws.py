@@ -39,7 +39,6 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 import weewx
 import weewx.units
 import weeutil
-import weeutil.weeutil
 
 from weeutil.weeutil import timestamp_to_string
 from weeutil.weeutil import to_bool
@@ -50,7 +49,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.5.1"
+WEEWX_NWS_VERSION = "4.5.2"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -1723,7 +1722,6 @@ if __name__ == '__main__':
     usage = """%prog [options] [--help]"""
 
     import weewx
-    import weeutil.logger
 
     weeutil.logger.setup('nws', {})
 
@@ -1738,8 +1736,8 @@ if __name__ == '__main__':
                           help='Test the point in polygon function.')
         parser.add_option('--test-requester', dest='testreq', action='store_true',
                           help='Test the forecast requester.  Requires specify --type, --latitude, --longitude.')
-        parser.add_option('--test-parsing-all-alerts', dest='testparsingallalerts', action='store_true',
-                          help='Test parsing all NWS active alerts. [--print-records=True|False] (defaults to False).')
+        parser.add_option('--test-parse-all-alerts', dest='testparseallalerts', action='store_true',
+                          help='Test by feteching and parsing all NWS active alerts. [--print-records=True|False] (defaults to False).')
         parser.add_option('--type', dest='ty',
                           help='ALERTS|TWELVE_HOUR|ONE_HOUR')
         parser.add_option('--nws-database', dest='db',
@@ -1797,8 +1795,8 @@ if __name__ == '__main__':
                 parser.error('--test-service requires --latitude and --longitude arguments')
             test_requester(forecast_type, options.lat, options.long)
 
-        if options.testparsingallalerts:
-            test_parsing_all_alerts(options.print_records)
+        if options.testparseallalerts:
+            test_parse_all_alerts(options.print_records)
 
         if options.testserv:
             if not options.lat or not options.long:
@@ -1943,7 +1941,7 @@ if __name__ == '__main__':
         else:
             print('request_forecast returned None.')
 
-    def test_parsing_all_alerts(print_records: bool) -> None:
+    def test_parse_all_alerts(print_records: bool) -> None:
         cfg = Configuration(
             lock                  = threading.Lock(),
             alerts                = [],
