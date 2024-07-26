@@ -38,9 +38,9 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import weewx
 import weewx.units
-import weeutil
+import weeutil.rsyncupload
+import weeutil.logger
 
-from weeutil.rsyncupload import RsyncUpload
 from weeutil.weeutil import timestamp_to_string
 from weeutil.weeutil import to_bool
 from weeutil.weeutil import to_float
@@ -496,7 +496,7 @@ class NWS(StdService):
             remote_port: int, timeout: int, remote_user: str, ssh_options: List[str],
             compress: bool, log_success: bool) -> None:
         log.debug('rsync_forecast() start')
-        rsync_upload = RsyncUpload(
+        rsync_upload = weeutil.rsyncupload.RsyncUpload(
             local_file,
             remote_file,
             server=remote_host,
@@ -1721,8 +1721,6 @@ class NWSForecastVariables(SearchList):
 
 if __name__ == '__main__':
     usage = """%prog [options] [--help]"""
-
-    import weewx
 
     weeutil.logger.setup('nws', {})
 
