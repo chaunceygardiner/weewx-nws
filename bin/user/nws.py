@@ -50,7 +50,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.5.2"
+WEEWX_NWS_VERSION = "4.5.3"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -1342,7 +1342,6 @@ class NWSPoller:
 
             err = NWSPoller.check_for_str_entries(period, [
                     ['windSpeed'],
-                    ['windDirection'],
                     ['name'],
                     ['temperatureTrend'],
                     ['icon'],
@@ -1351,6 +1350,12 @@ class NWSPoller:
                     ['startTime'],
                     ['endTime'],
                     ])
+            if err:
+                return err
+
+            err = NWSPoller.check_for_str_entries(period, [
+                    ['windDirection'],
+                    ], allow_none = True)
             if err:
                 return err
 
@@ -1934,9 +1939,12 @@ if __name__ == '__main__':
 
         _, j = NWSPoller.request_forecast(cfg, forecast_type)
         if j is not None:
+            count: int = 0
             for forecast in NWSPoller.compose_records(j, forecast_type, cfg.latitude, cfg.longitude):
+                count += 1
                 pretty_print_forecast(forecast)
                 print('------------------------')
+            print('%d %s printed.' % (count, forecast_type))
         else:
             print('request_forecast returned None.')
 
@@ -2366,7 +2374,7 @@ if __name__ == '__main__':
             print('outHumidity     : %s' % (record['outHumidity'] if record['outHumidity'] is not None else 'None'))
             print('windSpeed       : %f' % record['windSpeed'])
             print('windSpeed2      : %s' % (record['windSpeed2'] if record['windSpeed2'] is not None else 'None'))
-            print('windDir         : %f' % record['windDir'])
+            print('windDir         : %s' % (record['windDir'] if record['windDir'] is not None else 'None'))
             print('iconUrl         : %s' % record['iconUrl'])
             print('shortForecast   : %s' % record['shortForecast'])
             print('detailedForecast: %s' % record['detailedForecast'])

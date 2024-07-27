@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+4.5.3 07/27/2024
+- Print counts when executing --test-requester (used for testing).
+
 4.5.2 07/24/2024
 - Another import cleanup.
 - rename --test-parsing-all-alerts to --test-parse-all-alerts
