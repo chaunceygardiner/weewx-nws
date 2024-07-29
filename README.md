@@ -19,16 +19,25 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
 
 ## WeeWX 5 Installation Instructions
 
-1. Activate the virtual environment (actual syntax varies by type of WeeWX install):
+1. If pip install:
+   Activate the virtual environment (actual syntax varies by type of WeeWX install):
    `/home/weewx/weewx-venv/bin/activate`
-
-1. Install the dateutil package.
-
+   Install the dateutil package.
    `pip install python-dateutil`
-
-1. Install the requests package.
-
+   Install the requests package.
    `pip install requests`
+
+1. If package install:
+   Install dateutil for python3 (it is required by the nws extension).
+   On debian, this can be accomplished with:
+   ```
+   sudo apt install python3-dateutil
+   ```
+   Install python3's requests package.
+   On debian, this can be accomplished with:
+   ```
+   apt install python3-requests
+   ```
 
 1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
    Click on releases and pick the latest release (Release v4.5.3).
