@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+4.5.4 08/02/2024
+- Don't reject forecasts with missing wind speed, relative humidity or dewpoint in one or more periods.
+
 4.5.3 07/27/2024
 - Print counts when executing --test-requester (used for testing).
 

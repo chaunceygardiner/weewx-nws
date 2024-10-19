@@ -50,7 +50,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.5.3"
+WEEWX_NWS_VERSION = "4.5.4"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -82,7 +82,7 @@ table = [
     ('pop',              'INTEGER'),          # probabilityOfPercipitation, percent, always? null for 12-hour, alerts
     ('dewpoint',         'FLOAT'),            # In celsius from NWS, converted to F, null for 12-hour, alerts
     ('outHumidity',      'INTEGER'),          # percent, null for 12-hour, alerts
-    ('windSpeed',        'FLOAT NOT NULL'),   # NWS windSpeed "2 to 9 mph" or "9 mph"
+    ('windSpeed',        'FLOAT'),            # NWS windSpeed "2 to 9 mph" or "9 mph"
     ('windSpeed2',       'FLOAT'),            # 2nd speed if NWS windSpeed of "2 to 9 mph" form.
     ('windDir',          'FLOAT'),            # NWS windDirection
     ('iconUrl',          'STRING NOT NULL'),  # NWS icon
@@ -1340,8 +1340,10 @@ class NWSPoller:
 
         for period in j['properties']['periods']:
 
+            # The following are sometimes None.  We'll have to live with it.
+            # 'windSpeed'
+
             err = NWSPoller.check_for_str_entries(period, [
-                    ['windSpeed'],
                     ['name'],
                     ['temperatureTrend'],
                     ['icon'],
@@ -1352,6 +1354,11 @@ class NWSPoller:
                     ])
             if err:
                 return err
+
+            # Sometimes NWS produces an unknown icon (which doesn't exist).
+            # "https://api.weather.gov/icons/land/night/unknown?size=medium"
+            if 'unknown' in period['icon']:
+                log.info('%s: Missing icon, continuing: %s' % (forecast_type, period))
 
             err = NWSPoller.check_for_str_entries(period, [
                     ['windDirection'],
@@ -1369,21 +1376,24 @@ class NWSPoller:
             except Exception as e:
                 return '%s: Cannot decode endTime: %s: %s(%s).' % (forecast_type, period['endTime'], e, type(e))
 
-            try:
-                # windSpeed needs further validation
-                windSpeedStr = period['windSpeed']
-                windSpeedArray = windSpeedStr.split()
-                _ = to_int(windSpeedArray[0])
-                if len(windSpeedArray) == 2:
-                    _ = None
-                    windSpeedUnit = windSpeedArray[1]
-                else:
-                    _ = to_int(windSpeedArray[2])
-                    windSpeedUnit = windSpeedArray[3]
-                if windSpeedUnit != "mph":
-                    return '%s: Expecting windspeed to be in MPH but found %s.' % (forecast_type, windSpeedUnit)
-            except Exception as e:
-                return '%s: Couldn\'t decode windspeed %s: %s(%s)' % (forecast_type, windSpeedStr, e, type(e))
+            # windSpeed needs validation (it it is not None)
+            if 'windSpeed' not in period or period['windSpeed'] is None:
+                log.info('%s: Missing windSpeed, continuing: %s' % (forecast_type, period))
+            else:
+                try:
+                    windSpeedStr = period['windSpeed']
+                    windSpeedArray = windSpeedStr.split()
+                    _ = to_int(windSpeedArray[0])
+                    if len(windSpeedArray) == 2:
+                        _ = None
+                        windSpeedUnit = windSpeedArray[1]
+                    else:
+                        _ = to_int(windSpeedArray[2])
+                        windSpeedUnit = windSpeedArray[3]
+                    if windSpeedUnit != "mph":
+                        return '%s: Expecting windspeed to be in MPH but found %s.' % (forecast_type, windSpeedUnit)
+                except Exception as e:
+                    return '%s: Couldn\'t decode windspeed %s: %s(%s)' % (forecast_type, windSpeedStr, e, type(e))
 
             err = NWSPoller.check_for_int_entries(period, [
                     ['number'],
@@ -1401,14 +1411,30 @@ class NWSPoller:
             if forecast_type == ForecastType.ONE_HOUR:
                 err = NWSPoller.check_for_int_entries(period, [
                         ['probabilityOfPrecipitation','value'],
-                        ['relativeHumidity', 'value'],
                         ])
                 if err:
                     return err
 
+                err = NWSPoller.check_for_int_entries(period, [
+                        ['relativeHumidity', 'value'],
+                        ], allow_none = True)
+                if err:
+                    return err
+
+                # Log message if relativeHumidity is missing.
+                if 'relativeHumidity' not in period or period['relativeHumidity'] is None:
+                    log.info('%s: Missing relativeHumidity, continuing: %s' % (forecast_type, period))
+
                 err = NWSPoller.check_for_number_entries(period, [
                         ['dewpoint', 'value'],
-                        ])
+                        ], allow_none = True)
+                if err:
+                    return err
+
+                # Log message if dewpoint is missing.
+                if 'dewpoint' not in period or period['dewpoint'] is None:
+                    log.info('%s: Missing dewpoint, continuing: %s' % (forecast_type, period))
+
                 if err:
                     return err
 
@@ -1428,10 +1454,10 @@ class NWSPoller:
             log.warning("Lat/Long %s/%s does not fall within bounds of forecast's polygon (due to NWS Bug)." % (latitude, longitude))
 
         # 2020-05-18T22:02:26+00:00
-        log.debug('compose_records(%s): updateTime: %s' % (forecast_type, j['properties']['updateTime']))
+        log.debug('compose_forecast_records(%s): updateTime: %s' % (forecast_type, j['properties']['updateTime']))
         tzinfos = {'UTC': tz.gettz("UTC")}
         updateTime = parse(j['properties']['updateTime'], tzinfos=tzinfos).timestamp()
-        log.debug('compose_records(%s): updateTime: %s' % (forecast_type, timestamp_to_string(updateTime)))
+        log.debug('compose_forecast_records(%s): updateTime: %s' % (forecast_type, timestamp_to_string(updateTime)))
 
         units = j['properties']['units']
         if units == 'us':
@@ -1450,7 +1476,7 @@ class NWSPoller:
                 windSpeed2 = to_int(windSpeedArray[2])
                 windSpeedUnit = windSpeedArray[3]
             if windSpeedUnit != "mph":
-                log.info('compose_records(%s): expecting windspeed to be in MPH but found %s, please file an issue on github.' % (forecast_type, windSpeedUnit))
+                log.info('compose_forecast_records(%s): expecting windspeed to be in MPH but found %s, please file an issue on github.' % (forecast_type, windSpeedUnit))
             record = Forecast(
                 interval         = NWS.get_interval(forecast_type),
                 latitude         = latitude,
@@ -1467,8 +1493,8 @@ class NWSPoller:
                 outTemp          = to_float(period['temperature']),
                 outTempTrend     = period['temperatureTrend'],
                 pop              = period['probabilityOfPrecipitation']['value'],
-                dewpoint         = round(period['dewpoint']['value'] * 9.0 / 5.0 + 32.0) if forecast_type == ForecastType.ONE_HOUR else None,
-                outHumidity      = period['relativeHumidity']['value'] if forecast_type == ForecastType.ONE_HOUR else None,
+                dewpoint         = round(period['dewpoint']['value'] * 9.0 / 5.0 + 32.0) if forecast_type == ForecastType.ONE_HOUR and 'dewpoint' in period and period['dewpoint'] is not None else None,
+                outHumidity      = period['relativeHumidity']['value'] if forecast_type == ForecastType.ONE_HOUR and 'relativeHumidity' in period and period['relativeHumidity'] is not None else None,
                 windSpeed        = windSpeed,
                 windSpeed2       = windSpeed2,
                 windDir          = NWSPoller.translate_wind_dir(period['windDirection']),
@@ -1488,7 +1514,10 @@ class NWSPoller:
                 nwsHeadline      = None)
             # Work around NWS breakage.  Until NWS patches the problem, iconUrl might not be a full URL.
             if not record.iconUrl.startswith('http'):
-                record.iconUrl = 'https://api.weather.gov/' + record.iconUrl
+                # Only do this workaround if the icons is not the missing icon.
+                # This is because missing will be a relative url.
+                if 'missing' not in record.iconUrl:
+                    record.iconUrl = 'https://api.weather.gov/' + record.iconUrl
             yield record
 
     @staticmethod
@@ -2346,8 +2375,8 @@ if __name__ == '__main__':
         print('pop             : %s' % forecast.pop if forecast.pop is not None else 'None')
         print('dewpoint        : %s' % forecast.dewpoint if forecast.dewpoint is not None else 'None')
         print('outHumidity     : %s' % forecast.outHumidity if forecast.outHumidity is not None else 'None')
-        print('windSpeed       : %f' % forecast.windSpeed)
-        print('windSpeed2      : %s' % (forecast.windSpeed2 if forecast.windSpeed2 is not None else 'None'))
+        print('windSpeed       : %s' % forecast.windSpeed if forecast.windSpeed is not None else 'None')
+        print('windSpeed2      : %s' % forecast.windSpeed2 if forecast.windSpeed2 is not None else 'None')
         print('windDir         : %s' % forecast.windDir if forecast.windDir is not None else 'None')
         print('iconUrl         : %s' % forecast.iconUrl)
         print('shortForecast   : %s' % forecast.shortForecast)
@@ -2394,12 +2423,12 @@ if __name__ == '__main__':
             print('isDaytime       : %d' % record['isDaytime'])
             print('outTemp         : %f' % record['outTemp'])
             print('outTempTrend    : %s' % record['outTempTrend'])
-            print('pop             : %s' % (record['pop'] if record['pop'] is not None else 'None'))
-            print('dewpoint        : %s' % (record['dewpoint'] if record['dewpoint'] is not None else 'None'))
-            print('outHumidity     : %s' % (record['outHumidity'] if record['outHumidity'] is not None else 'None'))
-            print('windSpeed       : %f' % record['windSpeed'])
-            print('windSpeed2      : %s' % (record['windSpeed2'] if record['windSpeed2'] is not None else 'None'))
-            print('windDir         : %s' % (record['windDir'] if record['windDir'] is not None else 'None'))
+            print('pop             : %s' % record['pop'] if record['pop'] is not None else 'None')
+            print('dewpoint        : %s' % record['dewpoint'] if record['dewpoint'] is not None else 'None')
+            print('outHumidity     : %s' % record['outHumidity'] if record['outHumidity'] is not None else 'None')
+            print('windSpeed       : %f' % record['windSpeed'] if record['windSpeed'] is not None else 'None')
+            print('windSpeed2      : %s' % record['windSpeed2'] if record['windSpeed2'] is not None else 'None')
+            print('windDir         : %s' % record['windDir'] if record['windDir'] is not None else 'None')
             print('iconUrl         : %s' % record['iconUrl'])
             print('shortForecast   : %s' % record['shortForecast'])
             print('detailedForecast: %s' % record['detailedForecast'])

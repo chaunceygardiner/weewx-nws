@@ -39,12 +39,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    apt install python3-requests
    ```
 
-1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v4.5.3).
+1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws/releases/download/latest/weewx-nws.zip).
 
 1. Install the nws extension.
 
-   `weectl extension install weewx-nws-4.5.3.zip`
+   `weectl extension install weewx-nws.zip`
 
 ## WeeWX 4 Installation Instructions
 
@@ -60,12 +59,11 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
    apt install python3-requests
    ```
 
-1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws).
-   Click on releases and pick the latest release (Release v4.5.3).
+1. Download the release from the [github](https://github.com/chaunceygardiner/weewx-nws/releases/download/latest/weewx-nws.zip).
 
 1. Run the following command.
    ```
-   sudo /home/weewx/bin/wee_extension --install weewx-nws-4.5.3.zip
+   sudo /home/weewx/bin/wee_extension --install weewx-nws.zip
    ```
    Note: The above command assumes a WeeWX installation of `/home/weewx`.
          Adjust the command as necessary.
