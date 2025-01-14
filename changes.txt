@@ -1,6 +1,9 @@
 nws change history
 ------------------
 
+4.5.5 01/14/2025
+- Log some more info for a couple of cases where the json returned from NWS is malformed.
+
 4.5.4 08/02/2024
 - Don't reject forecasts with missing wind speed, relative humidity or dewpoint in one or more periods.
 

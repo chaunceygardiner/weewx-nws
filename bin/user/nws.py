@@ -50,7 +50,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.5.4"
+WEEWX_NWS_VERSION = "4.5.5"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -129,7 +129,7 @@ class Forecast:
     pop             : Optional[int]
     dewpoint        : Optional[float]
     outHumidity     : Optional[int]
-    windSpeed       : float
+    windSpeed       : Optional[float] # Observed occasionally missing on 1H forecasts.
     windSpeed2      : Optional[float]
     windDir         : Optional[float]
     iconUrl         : str
@@ -1051,6 +1051,8 @@ class NWSPoller:
                 # Keep track of ids in expiredReferences in alert[parameters].
                 if 'expiredReferences' in alert['parameters']:
                     for expiredRef in alert['parameters']['expiredReferences']:
+                        if expiredRef is None:
+                            log.info('compose_alert_records: alert[parameters][expiredReferences] is None, unable to collect expired alert ids--error will follow: %s' % feature)
                         split_text = expiredRef.split(',')
                         for segment in split_text:
                             if segment.startswith("urn:oid"):
@@ -1111,7 +1113,7 @@ class NWSPoller:
                         pop              = None,                    # Dummy
                         dewpoint         = None,                    # Dummy
                         outHumidity      = None,                    # Dummy
-                        windSpeed        = 0.0,                     # Dummy
+                        windSpeed        = None,                    # Dummy
                         windSpeed2       = None,                    # Dummy
                         windDir          = None,                    # Dummy
                         iconUrl          = '',                      # Dummy
@@ -1467,16 +1469,20 @@ class NWSPoller:
 
         for period in j['properties']['periods']:
             windSpeedStr = period['windSpeed']
-            windSpeedArray = windSpeedStr.split()
-            windSpeed = to_int(windSpeedArray[0])
-            if len(windSpeedArray) == 2:
+            if windSpeedStr is None:
+                windSpeed = None
                 windSpeed2 = None
-                windSpeedUnit = windSpeedArray[1]
             else:
-                windSpeed2 = to_int(windSpeedArray[2])
-                windSpeedUnit = windSpeedArray[3]
-            if windSpeedUnit != "mph":
-                log.info('compose_forecast_records(%s): expecting windspeed to be in MPH but found %s, please file an issue on github.' % (forecast_type, windSpeedUnit))
+                windSpeedArray = windSpeedStr.split()
+                windSpeed = to_int(windSpeedArray[0])
+                if len(windSpeedArray) == 2:
+                    windSpeed2 = None
+                    windSpeedUnit = windSpeedArray[1]
+                else:
+                    windSpeed2 = to_int(windSpeedArray[2])
+                    windSpeedUnit = windSpeedArray[3]
+                if windSpeedUnit != "mph":
+                    log.info('compose_forecast_records(%s): expecting windspeed to be in MPH but found %s, please file an issue on github.' % (forecast_type, windSpeedUnit))
             record = Forecast(
                 interval         = NWS.get_interval(forecast_type),
                 latitude         = latitude,
@@ -1825,7 +1831,7 @@ if __name__ == '__main__':
                 parser.error('--type must be one of: ALERTS|TWELVE_HOUR|ONE_HOUR')
             assert forecast_type is not None
             if not options.lat or not options.long:
-                parser.error('--test-service requires --latitude and --longitude arguments')
+                parser.error('--test-requestor requires --latitude and --longitude arguments')
             test_requester(forecast_type, options.lat, options.long)
 
         if options.testparseallalerts:
@@ -2231,6 +2237,7 @@ if __name__ == '__main__':
 
         assert NWS.point_in_polygon(point, polygon_91_87) == True
         assert NWS.point_in_polygon(point, polygon_92_88) == False
+        print('Test completed.')
 
     def test_service(lat: float, long: float) -> None:
         from weewx.engine import StdEngine
