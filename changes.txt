@@ -6,6 +6,10 @@ nws change history
 
 4.5.4 08/02/2024
 - Don't reject forecasts with missing wind speed, relative humidity or dewpoint in one or more periods.
+    ******* IMPORTANT, you must delete the existing nws database (nws.sdb) if        *******
+    ******* udating versions earlier than 4.5.4.  Delete nws.sdb after installing the  *******
+    ******* update and just before restaring weewx.  This is necessary because the   *******
+    ******* database schema has changed.                                             *******
 
 4.5.3 07/27/2024
 - Print counts when executing --test-requester (used for testing).

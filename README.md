@@ -9,11 +9,8 @@ Copyright (C)2020-2024 by John A Kline (john@johnkline.com)
 
 **This plugin requires Python 3.7, WeeWX 4 or 5**
 
-**If you are updating from versions less than 4.1, you MUST delete the nws database (nws.sdb) before
-  restarting weewx.  This is because the database schema has changed.  If you don't do this, nws
-  won't work and the following statement will be in the weewx log:
-  ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
-  Note: There will also be other nws errors in the log. **
+**If you are updating from versions less than 4.5.4, you MUST delete the nws database (nws.sdb) before
+  restarting weewx.  This is because the database schema has changed.**
 
 # Installation Instructions
 
