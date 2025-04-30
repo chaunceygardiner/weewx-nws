@@ -50,7 +50,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.5.5"
+WEEWX_NWS_VERSION = "4.5.6"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -1360,7 +1360,7 @@ class NWSPoller:
             # Sometimes NWS produces an unknown icon (which doesn't exist).
             # "https://api.weather.gov/icons/land/night/unknown?size=medium"
             if 'unknown' in period['icon']:
-                log.info('%s: Missing icon, continuing: %s' % (forecast_type, period))
+                return '%s: Missing icon: %s' % (forecast_type, period)
 
             err = NWSPoller.check_for_str_entries(period, [
                     ['windDirection'],
@@ -1380,7 +1380,7 @@ class NWSPoller:
 
             # windSpeed needs validation (it it is not None)
             if 'windSpeed' not in period or period['windSpeed'] is None:
-                log.info('%s: Missing windSpeed, continuing: %s' % (forecast_type, period))
+                return '%s: Missing windSpeed: %s' % (forecast_type, period)
             else:
                 try:
                     windSpeedStr = period['windSpeed']
@@ -1425,7 +1425,7 @@ class NWSPoller:
 
                 # Log message if relativeHumidity is missing.
                 if 'relativeHumidity' not in period or period['relativeHumidity'] is None:
-                    log.info('%s: Missing relativeHumidity, continuing: %s' % (forecast_type, period))
+                    return '%s: Missing relativeHumidity: %s' % (forecast_type, period)
 
                 err = NWSPoller.check_for_number_entries(period, [
                         ['dewpoint', 'value'],
@@ -1435,7 +1435,7 @@ class NWSPoller:
 
                 # Log message if dewpoint is missing.
                 if 'dewpoint' not in period or period['dewpoint'] is None:
-                    log.info('%s: Missing dewpoint, continuing: %s' % (forecast_type, period))
+                    return '%s: Missing dewpoint: %s' % (forecast_type, period)
 
                 if err:
                     return err
@@ -1801,7 +1801,7 @@ if __name__ == '__main__':
         parser.add_option('--filename', type='str', dest='fname',
                           help='The filename from which to read the forecast.')
         parser.add_option('--print-records', dest='print_records',
-                          default=False,
+                          default=False, action = 'store_true',
                           help='Print forecasts/alerts.')
         (options, args) = parser.parse_args()
 
@@ -1826,6 +1826,8 @@ if __name__ == '__main__':
             test_point_in_polygon()
 
         if options.testreq:
+            if not options.ty:
+                parser.error('--test-requester requires --type ALERTS|TWELVE_HOUR|ONE_HOUR')
             forecast_type = decode_forecast_type(options.ty)
             if forecast_type == None:
                 parser.error('--type must be one of: ALERTS|TWELVE_HOUR|ONE_HOUR')
