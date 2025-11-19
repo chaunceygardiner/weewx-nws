@@ -50,7 +50,7 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.5.6"
+WEEWX_NWS_VERSION = "4.5.7"
 
 if sys.version_info[0] < 3:
     raise weewx.UnsupportedFeature(
@@ -994,7 +994,7 @@ class NWSPoller:
                 j = response.json()
                 log.debug('request_forecast(%s): response.headers: %r' % (forecast_type, response.headers))
                 # Sanity check the json.  If bad, return True, None
-                err = NWSPoller.sanity_check_json(j, forecast_type)
+                err = NWSPoller.sanity_check_json(response.text, j, forecast_type)
                 if err:
                     log.info('request_forecast(%s): sanity check failed(%s): %s.' % (forecast_type, forecastUrl, err))
                     return True, None
@@ -1145,147 +1145,147 @@ class NWSPoller:
                 log.info('malformed alert (skipping): %s, %s' % (feature, e))
 
     @staticmethod
-    def sanity_check_json(j: Dict[str, Any], forecast_type: ForecastType) -> Optional[str]:
+    def sanity_check_json(response_text: str, j: Dict[str, Any], forecast_type: ForecastType) -> Optional[str]:
         if forecast_type == ForecastType.ALERTS:
-            return NWSPoller.sanity_check_alerts_json(j)
+            return NWSPoller.sanity_check_alerts_json(response_text, j)
         else:
-            return NWSPoller.sanity_check_forecast_json(j, forecast_type)
+            return NWSPoller.sanity_check_forecast_json(response_text, j, forecast_type)
 
     @staticmethod
-    def check_for_entry(d: Dict[str, Any], path: List[str], allow_none: bool) -> Tuple[Any, Optional[str]]:
+    def check_for_entry(response_text: str, d: Dict[str, Any], path: List[str], allow_none: bool) -> Tuple[Any, Optional[str]]:
         """Returns entry, None if entry exists, else None, error_msg"""
         sub_dict = d
         parent_str: str = ''
         for element in path:
             if type(sub_dict) != dict:
-                return None, '%s[%s] is not a dict.' % (parent_str, element)
+                return None, '%s[%s] is not a dict. response.text: %s' % (parent_str, element, response_text)
             if element not in sub_dict:
                 if parent_str == '':
-                    return None, '%s not found' % element
+                    return None, '%s not found; response.text: %s' % (element, response_text)
                 else:
-                    return None, '%s not found in %s' % (element, parent_str)
+                    return None, '%s not found in %s; response.text: %s' % (element, parent_str, response_text)
             if sub_dict[element] == None:
                 if allow_none:
                     return None, None
                 else:
-                    return None, '%s[%s] is None' % (parent_str, element)
+                    return None, '%s[%s] is None. response.text: %s' % (parent_str, element, response_text)
             parent_str += '[%s]' % element
             sub_dict = sub_dict[element]
         return sub_dict, None # subdict is actually the element
 
     @staticmethod
-    def check_for_date_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+    def check_for_date_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
         for path in paths:
-            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
             if err:
                 return err
             if element is None:
                 return None
             if type(element) is not str:
-                return 'Expected date string: %s:%s.' % (path, element)
+                return 'Expected date string: %s:%s. response.text: %s' % (path, element, response_text)
             tzinfos = {'UTC': tz.gettz("UTC")}
             try:
                 _ = parse(element, tzinfos=tzinfos).timestamp()
             except Exception as e:
-                return '%s: Could not parse %s as a date: %s(%s)).' % (path, element, e, type(e))
+                return '%s: Could not parse %s as a date: %s(%s)). response.text: %s' % (path, element, e, type(e), response_text)
         return None
 
     @staticmethod
-    def check_for_int_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+    def check_for_int_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
         for path in paths:
-            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
             if err:
                 return err
             if element is None:
                 return None
             if not isinstance(element, int):
-                return '%s: int expected, found %s(%s).' % (path, element, type(element))
+                return '%s: int expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
         return None
 
     @staticmethod
-    def check_for_list_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+    def check_for_list_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
         for path in paths:
-            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
             if err:
                 return err
             if element is None:
                 return None
             if not isinstance(element, list):
-                return '%s: list expected, found %s(%s).' % (path, element, type(element))
+                return '%s: list expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
         return None
 
     @staticmethod
-    def check_for_str_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+    def check_for_str_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
         for path in paths:
-            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
             if err:
                 return err
             if element is None:
                 return None
             if not isinstance(element, str):
-                return '%s: str expected, found %s(%s).' % (path, element, type(element))
+                return '%s: str expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
         return None
 
     @staticmethod
-    def check_for_dict_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+    def check_for_dict_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
         for path in paths:
-            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
             if err:
                 return err
             if element is None:
                 return None
             if not isinstance(element, dict):
-                return '%s: dict expected, found %s(%s).' % (path, element, type(element))
+                return '%s: dict expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
         return None
 
     @staticmethod
-    def check_for_float_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+    def check_for_float_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
         for path in paths:
-            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
             if err:
                 return err
             if element is None:
                 return None
             if not isinstance(element, float):
-                return '%s: float expected, found %s(%s).' % (path, element, type(element))
+                return '%s: float expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
         return None
 
     @staticmethod
-    def check_for_number_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+    def check_for_number_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
         for path in paths:
-            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
             if err:
                 return err
             if element is None:
                 return None
             if not isinstance(element, float) and  not isinstance(element, int):
-                return '%s: float or int expected, found %s(%s).' % (path, element, type(element))
+                return '%s: float or int expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
         return None
 
     @staticmethod
-    def check_for_bool_entries(d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
+    def check_for_bool_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
         for path in paths:
-            element, err = NWSPoller.check_for_entry(d, path, allow_none)
+            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
             if err:
                 return err
             if element is None:
                 return None
             if not isinstance(element, bool):
-                return '%s: bool expected, found %s(%s).' % (path, element, type(element))
+                return '%s: bool expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
         return None
 
     @staticmethod
-    def sanity_check_alerts_json(j: Dict[str, Any]) -> Optional[str]:
-        err = NWSPoller.check_for_list_entries(j, [['features']])
+    def sanity_check_alerts_json(response_text: str, j: Dict[str, Any]) -> Optional[str]:
+        err = NWSPoller.check_for_list_entries(response_text, j, [['features']])
         if err:
             return err
         for feature in j['features']:
-            err = NWSPoller.check_for_str_entries(feature, [['properties','status']])
+            err = NWSPoller.check_for_str_entries(response_text, feature, [['properties','status']])
             if err:
                 return err
             if feature['properties']['status'] == 'Exercise' or feature['properties']['status'] == 'System' or feature['properties']['status'] == 'Test' or feature['properties']['status'] == 'Draft':
                 continue
-            err = NWSPoller.check_for_str_entries(feature, [
+            err = NWSPoller.check_for_str_entries(response_text, feature, [
                     ['properties','id'],
                     ['properties','headline'],
                     ['properties','description'],
@@ -1301,13 +1301,13 @@ class NWSPoller:
                 return err
             # NWSHeadline may or may not exist.  If it does, it needs to be a str.
             if 'NWSHeadline' in feature['properties']:
-                err = NWSPoller.check_for_str_entries(feature, [['properties','NWSHeadline']])
+                err = NWSPoller.check_for_str_entries(response_text, feature, [['properties','NWSHeadline']])
                 if err:
                     return err
-            err = NWSPoller.check_for_str_entries(feature, [['properties','instruction']], True)
+            err = NWSPoller.check_for_str_entries(response_text, feature, [['properties','instruction']], True)
             if err:
                 return err
-            err = NWSPoller.check_for_date_entries(feature, [
+            err = NWSPoller.check_for_date_entries(response_text, feature, [
                     ['properties','effective'],
                     ['properties','expires'],
                     ['properties','onset'],
@@ -1315,26 +1315,26 @@ class NWSPoller:
             if err:
                 return err
             # Ends must be there, but it might be None
-            err = NWSPoller.check_for_date_entries(feature, [['properties','ends']], True)
+            err = NWSPoller.check_for_date_entries(response_text, feature, [['properties','ends']], True)
             if err:
                 return err
         return None
 
     @staticmethod
-    def sanity_check_forecast_json(j: Dict[str, Any], forecast_type: ForecastType) -> Optional[str]:
-        err = NWSPoller.check_for_date_entries(j, [
+    def sanity_check_forecast_json(response_text: str, j: Dict[str, Any], forecast_type: ForecastType) -> Optional[str]:
+        err = NWSPoller.check_for_date_entries(response_text, j, [
                 ['properties','updateTime'],
                 ])
         if err:
             return err
 
-        err = NWSPoller.check_for_str_entries(j, [
+        err = NWSPoller.check_for_str_entries(response_text, j, [
                 ['properties','units'],
                 ])
         if err:
             return err
 
-        err = NWSPoller.check_for_list_entries(j, [
+        err = NWSPoller.check_for_list_entries(response_text, j, [
                 ['properties','periods'],
                 ])
         if err:
@@ -1345,9 +1345,8 @@ class NWSPoller:
             # The following are sometimes None.  We'll have to live with it.
             # 'windSpeed'
 
-            err = NWSPoller.check_for_str_entries(period, [
+            err = NWSPoller.check_for_str_entries(response_text, period, [
                     ['name'],
-                    ['temperatureTrend'],
                     ['icon'],
                     ['shortForecast'],
                     ['detailedForecast'],
@@ -1357,12 +1356,18 @@ class NWSPoller:
             if err:
                 return err
 
+            err = NWSPoller.check_for_str_entries(response_text, period, [
+                    ['temperatureTrend'],
+                    ], allow_none = True)
+            if err:
+                return err
+
             # Sometimes NWS produces an unknown icon (which doesn't exist).
             # "https://api.weather.gov/icons/land/night/unknown?size=medium"
             if 'unknown' in period['icon']:
                 return '%s: Missing icon: %s' % (forecast_type, period)
 
-            err = NWSPoller.check_for_str_entries(period, [
+            err = NWSPoller.check_for_str_entries(response_text, period, [
                     ['windDirection'],
                     ], allow_none = True)
             if err:
@@ -1397,27 +1402,27 @@ class NWSPoller:
                 except Exception as e:
                     return '%s: Couldn\'t decode windspeed %s: %s(%s)' % (forecast_type, windSpeedStr, e, type(e))
 
-            err = NWSPoller.check_for_int_entries(period, [
+            err = NWSPoller.check_for_int_entries(response_text, period, [
                     ['number'],
                     ['temperature'],
                     ])
             if err:
                 return err
 
-            err = NWSPoller.check_for_bool_entries(period, [
+            err = NWSPoller.check_for_bool_entries(response_text, period, [
                     ['isDaytime'],
                     ])
             if err:
                 return err
 
             if forecast_type == ForecastType.ONE_HOUR:
-                err = NWSPoller.check_for_int_entries(period, [
+                err = NWSPoller.check_for_int_entries(response_text, period, [
                         ['probabilityOfPrecipitation','value'],
                         ])
                 if err:
                     return err
 
-                err = NWSPoller.check_for_int_entries(period, [
+                err = NWSPoller.check_for_int_entries(response_text, period, [
                         ['relativeHumidity', 'value'],
                         ], allow_none = True)
                 if err:
@@ -1427,7 +1432,7 @@ class NWSPoller:
                 if 'relativeHumidity' not in period or period['relativeHumidity'] is None:
                     return '%s: Missing relativeHumidity: %s' % (forecast_type, period)
 
-                err = NWSPoller.check_for_number_entries(period, [
+                err = NWSPoller.check_for_number_entries(response_text, period, [
                         ['dewpoint', 'value'],
                         ], allow_none = True)
                 if err:
@@ -2018,7 +2023,7 @@ if __name__ == '__main__':
 
         _, j = NWSPoller.request_forecast(cfg, ForecastType.ALERTS)
         if j is not None:
-            err = NWSPoller.sanity_check_alerts_json(j)
+            err = NWSPoller.sanity_check_alerts_json(str(j), j)
             if err:
                 print('Sanity check failed on NWS response: %s', err)
             alert_count: int = 0
@@ -2130,7 +2135,7 @@ if __name__ == '__main__':
             print('    Requesting TWELVE_HOUR forecasts...')
             _, j = NWSPoller.request_forecast(cfg, ForecastType.TWELVE_HOUR)
             if j is not None:
-                err = NWSPoller.sanity_check_json(j, ForecastType.TWELVE_HOUR)
+                err = NWSPoller.sanity_check_json(str(j), j, ForecastType.TWELVE_HOUR)
                 if err:
                     print('        TWELVE_HOUR Sanity check failed: %s', err)
                     sys.exit(1)
@@ -2142,7 +2147,7 @@ if __name__ == '__main__':
             print('    Requesting ONE_HOUR forecasts...')
             _, j = NWSPoller.request_forecast(cfg, ForecastType.ONE_HOUR)
             if j is not None:
-                err = NWSPoller.sanity_check_json(j, ForecastType.ONE_HOUR)
+                err = NWSPoller.sanity_check_json(str(j), j, ForecastType.ONE_HOUR)
                 if err:
                     print('ONE_HOUR Sanity check failed: %s', err)
                     sys.exit(1)
@@ -2154,7 +2159,7 @@ if __name__ == '__main__':
             print('    Requesting ALERTS...')
             _, j = NWSPoller.request_forecast(cfg, ForecastType.ALERTS)
             if j is not None:
-                err = NWSPoller.sanity_check_json(j, ForecastType.ALERTS)
+                err = NWSPoller.sanity_check_json(str(j), j, ForecastType.ALERTS)
                 if err:
                     print('        ALERTS Sanity check failed: %s', err)
                     sys.exit(1)
