@@ -2,6 +2,7 @@ nws change history
 ------------------
 
 4.5.7 6/01/2025
+- NWS sent forecast with temperatureTrend = null, Relax sanity check to account for this.
 - Log text response when reporting sanity check errors.
 
 4.5.6 4/30/2025
