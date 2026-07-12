@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Copyright 2020-2024 by John A Kline <john@johnkline.com>
+# Copyright 2020-2026 by John A Kline <john@johnkline.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -50,15 +50,15 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "4.5.7"
+WEEWX_NWS_VERSION = "5.0"
 
-if sys.version_info[0] < 3:
+if sys.version_info < (3, 9):
     raise weewx.UnsupportedFeature(
-        "weewx-nws requires Python 3, found %s" % sys.version_info[0])
+        "weewx-nws requires Python 3.9 or later, found %s.%s" % (sys.version_info[0], sys.version_info[1]))
 
-if weewx.__version__ < "4":
+if weewx.__version__ < "5":
     raise weewx.UnsupportedFeature(
-        "WeeWX 4 is required, found %s" % weewx.__version__)
+        "WeeWX 5 is required, found %s" % weewx.__version__)
 
 # Schema for nws database (nws.sdb).
 table = [
@@ -1238,17 +1238,10 @@ class NWSPoller:
                 return '%s: dict expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
         return None
 
-    @staticmethod
-    def check_for_float_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
-        for path in paths:
-            element, err = NWSPoller.check_for_entry(response_text, d, path, allow_none)
-            if err:
-                return err
-            if element is None:
-                return None
-            if not isinstance(element, float):
-                return '%s: float expected, found %s(%s). response.text: %s' % (path, element, type(element), response_text)
-        return None
+    # Note: there is deliberately no check_for_float_entries: json does not
+    # distinguish 15 from 15.0, and NWS emits both for fractional-capable
+    # fields, so a float-only check would spuriously reject whole numbers.
+    # Use check_for_number_entries.
 
     @staticmethod
     def check_for_number_entries(response_text: str, d: Dict[str, Any], paths: List[List[str]], allow_none: bool = False) -> Optional[str]:
@@ -1322,6 +1315,20 @@ class NWSPoller:
 
     @staticmethod
     def sanity_check_forecast_json(response_text: str, j: Dict[str, Any], forecast_type: ForecastType) -> Optional[str]:
+        # compose_forecast_records dereferences j['geometry']['coordinates']
+        # (the gridpoint polygon check).
+        err = NWSPoller.check_for_dict_entries(response_text, j, [
+                ['geometry'],
+                ])
+        if err:
+            return err
+
+        err = NWSPoller.check_for_list_entries(response_text, j, [
+                ['geometry','coordinates'],
+                ])
+        if err:
+            return err
+
         err = NWSPoller.check_for_date_entries(response_text, j, [
                 ['properties','updateTime'],
                 ])
@@ -1540,7 +1547,7 @@ class NWSPoller:
         elif wdir_str == 'NE':
             return 45.0
         elif wdir_str == 'ENE':
-            return 77.5
+            return 67.5
         elif wdir_str == 'E':
             return 90.0
         elif wdir_str == 'ESE':
@@ -1792,6 +1799,8 @@ if __name__ == '__main__':
                           help='Test the NWS service.  Requires --latitude and --longitude.')
         parser.add_option('--test-multiple-gridpoints', dest='testmultigrid', action='store_true',
                           help='Test requesting 12H and 1H forecasts from multiple gridpoints.')
+        parser.add_option('--check-grid', dest='checkgrid', action='store_true',
+                          help='Check that NWS returns the correct gridpoint for --latitude/--longitude; if not, print the weewx.conf lines that hard code the correct gridpoint.')
         parser.add_option('--latitude', type='float', dest='lat',
                           help='The latitude of the station.')
         parser.add_option('--longitude', type='float', dest='long',
@@ -1847,10 +1856,15 @@ if __name__ == '__main__':
         if options.testserv:
             if not options.lat or not options.long:
                 parser.error('--test-service requires --latitude and --longitude arguments')
-            test_service(options.lat, options.long)
+            test_service(options.lat, options.long, options.binding)
 
         if options.testmultigrid:
             test_forecast_requests_from_multiple_gridpoints()
+
+        if options.checkgrid:
+            if not options.lat or not options.long:
+                parser.error('--check-grid requires --latitude and --longitude arguments')
+            check_grid(options.lat, options.long)
 
         if options.view:
             if not options.db:
@@ -2152,7 +2166,7 @@ if __name__ == '__main__':
                     print('ONE_HOUR Sanity check failed: %s', err)
                     sys.exit(1)
                 else:
-                    print('        Fetched %d ONEE_HOUR forecasts.' % len(j['properties']['periods']))
+                    print('        Fetched %d ONE_HOUR forecasts.' % len(j['properties']['periods']))
             else:
                 print('        request_forecast(ONE_HOUR) returned None.')
 
@@ -2164,10 +2178,58 @@ if __name__ == '__main__':
                     print('        ALERTS Sanity check failed: %s', err)
                     sys.exit(1)
                 else:
-                    print('        Fetched %d ALERTs.' % len(j['features']))
+                    print('        Fetched %d ALERTS.' % len(j['features']))
             else:
                 print('        request_forecast(ALERTS) returned None.')
 
+
+    def check_grid(lat: float, long: float) -> None:
+        """Check that NWS's /points endpoint maps lat/long to a gridpoint whose
+           polygon actually contains lat/long (it has been observed off by (1,1),
+           see the README).  If it doesn't, search the neighboring gridpoints and
+           print the weewx.conf lines that hard code the correct one."""
+        session = requests.Session()
+        headers = {'User-Agent': '(weewx-nws test run, weewx-nws-developer)'}
+
+        def grid_contains_point(office: str, x: int, y: int) -> bool:
+            url = 'https://api.weather.gov/gridpoints/%s/%d,%d/forecast' % (office, x, y)
+            # A unique Feature-Flags value busts NWS's cache, and 500s are common
+            # on gridpoint requests -- retry a couple of times.
+            hdrs = dict(headers)
+            hdrs['Feature-Flags'] = '%f' % time.time()
+            for _ in range(3):
+                response = session.get(url=url, headers=hdrs, timeout=5)
+                if response.status_code != 500:
+                    break
+                time.sleep(2)
+            response.raise_for_status()
+            return NWS.check_latlong_against_nws_polygon(lat, long, response.json()['geometry']['coordinates'])
+
+        url = 'https://api.weather.gov/points/%f,%f' % (lat, long)
+        response = session.get(url=url, headers=headers, timeout=5)
+        response.raise_for_status()
+        forecast_url = response.json()['properties']['forecast']
+        # forecast_url is of the form https://api.weather.gov/gridpoints/MTR/92,88/forecast
+        segments = forecast_url.split('/gridpoints/')[1].split('/')
+        office = segments[0]
+        x, y = [int(value) for value in segments[1].split(',')]
+
+        if grid_contains_point(office, x, y):
+            print('nws computed the correct grid(%d, %d) for lat/long %f/%f' % (x, y, lat, long))
+            return
+        print('nws computed the incorrect grid(%d, %d) for lat/long %f/%f' % (x, y, lat, long))
+        print()
+        for dx, dy in [(1, 1), (1, 0), (0, 1), (0, -1), (-1, 0), (-1, -1)]:
+            try:
+                inside = grid_contains_point(office, x + dx, y + dy)
+            except Exception:
+                inside = False
+            if inside:
+                print('Add the following two lines to the [NWS] section in weewx.conf:')
+                print('    twelve_hour_forecast_url = "https://api.weather.gov/gridpoints/%s/%d,%d/forecast"' % (office, x + dx, y + dy))
+                print('    one_hour_forecast_url = "https://api.weather.gov/gridpoints/%s/%d,%d/forecast/hourly"' % (office, x + dx, y + dy))
+                return
+        print('Could not find correct grid to use.  Try running again.')
 
     def test_point_in_polygon() -> None:
         point = Point(
@@ -2246,7 +2308,7 @@ if __name__ == '__main__':
         assert NWS.point_in_polygon(point, polygon_92_88) == False
         print('Test completed.')
 
-    def test_service(lat: float, long: float) -> None:
+    def test_service(lat: float, long: float, binding: str) -> None:
         from weewx.engine import StdEngine
         from tempfile import NamedTemporaryFile
 
@@ -2263,9 +2325,9 @@ if __name__ == '__main__':
                 'StdArchive': {
                     'archive_interval': 300},
                 'NWS': {
-                    'binding': 'nws_binding'},
+                    'data_binding': binding},
                 'DataBindings': {
-                    'nws_binding': {
+                    binding: {
                         'database': 'nws_sqlite',
                         'manager': 'weewx.manager.Manager',
                         'table_name': 'archive',

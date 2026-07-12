@@ -1,0 +1,129 @@
+{
+  "@context": [
+    "https://geojson.org/geojson-ld/geojson-context.jsonld",
+    {
+      "@version": "1.1",
+      "wx": "https://api.weather.gov/ontology#",
+      "geo": "http://www.opengis.net/ont/geosparql#",
+      "unit": "http://codes.wmo.int/common/unit/",
+      "@vocab": "https://api.weather.gov/ontology#"
+    }
+  ],
+  "type": "Feature",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -122.1049,
+          37.4241
+        ],
+        [
+          -122.1105,
+          37.4459
+        ],
+        [
+          -122.1381,
+          37.4415
+        ],
+        [
+          -122.1325,
+          37.4196
+        ],
+        [
+          -122.1049,
+          37.4241
+        ]
+      ]
+    ]
+  },
+  "properties": {
+    "units": "us",
+    "forecastGenerator": "BaselineForecastGenerator",
+    "generatedAt": "2026-07-12T19:30:00+00:00",
+    "updateTime": "2026-07-12T18:26:51+00:00",
+    "validTimes": "2026-07-12T12:00:00+00:00/P7DT13H",
+    "elevation": {
+      "unitCode": "wmoUnit:m",
+      "value": 24.9936
+    },
+    "periods": [
+      {
+        "number": 1,
+        "name": "This Afternoon",
+        "startTime": "2026-07-12T12:00:00-07:00",
+        "endTime": "2026-07-12T18:00:00-07:00",
+        "isDaytime": true,
+        "temperature": 83,
+        "temperatureUnit": "F",
+        "temperatureTrend": null,
+        "probabilityOfPrecipitation": {
+          "unitCode": "wmoUnit:percent",
+          "value": 12
+        },
+        "windSpeed": "5 mph",
+        "windDirection": "NNW",
+        "icon": "https://api.weather.gov/icons/land/day/bkn?size=medium",
+        "shortForecast": "Mostly Cloudy",
+        "detailedForecast": "Mostly cloudy. High near 83, with temperatures falling to around 81 in the afternoon. North northwest wind around 5 mph."
+      },
+      {
+        "number": 2,
+        "name": "Tonight",
+        "startTime": "2026-07-12T18:00:00-07:00",
+        "endTime": "2026-07-13T06:00:00-07:00",
+        "isDaytime": false,
+        "temperature": 63,
+        "temperatureUnit": "F",
+        "temperatureTrend": null,
+        "probabilityOfPrecipitation": {
+          "unitCode": "wmoUnit:percent",
+          "value": 7
+        },
+        "windSpeed": "1 to 5 mph",
+        "windDirection": "NNW",
+        "icon": "https://api.weather.gov/icons/land/night/bkn?size=medium",
+        "shortForecast": "Mostly Cloudy",
+        "detailedForecast": "Mostly cloudy. Low around 63, with temperatures rising to around 65 overnight. North northwest wind 1 to 5 mph."
+      },
+      {
+        "number": 3,
+        "name": "Monday",
+        "startTime": "2026-07-13T06:00:00-07:00",
+        "endTime": "2026-07-13T18:00:00-07:00",
+        "isDaytime": true,
+        "temperature": 87,
+        "temperatureUnit": "F",
+        "temperatureTrend": null,
+        "probabilityOfPrecipitation": {
+          "unitCode": "wmoUnit:percent",
+          "value": 7
+        },
+        "windSpeed": "1 to 7 mph",
+        "windDirection": "NNW",
+        "icon": "https://api.weather.gov/icons/land/day/bkn?size=medium",
+        "shortForecast": "Partly Sunny",
+        "detailedForecast": "Partly sunny, with a high near 87. North northwest wind 1 to 7 mph."
+      },
+      {
+        "number": 4,
+        "name": "Monday Night",
+        "startTime": "2026-07-13T18:00:00-07:00",
+        "endTime": "2026-07-14T06:00:00-07:00",
+        "isDaytime": false,
+        "temperature": 66,
+        "temperatureUnit": "F",
+        "temperatureTrend": null,
+        "probabilityOfPrecipitation": {
+          "unitCode": "wmoUnit:percent",
+          "value": 1
+        },
+        "windSpeed": "1 to 5 mph",
+        "windDirection": "NW",
+        "icon": "https://api.weather.gov/icons/land/night/sct?size=medium",
+        "shortForecast": "Partly Cloudy",
+        "detailedForecast": "Partly cloudy, with a low around 66. Northwest wind 1 to 5 mph."
+      }
+    ]
+  }
+}

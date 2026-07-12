@@ -1,6 +1,25 @@
 nws change history
 ------------------
 
+5.0 07/12/2026
+- weewx-nws now requires WeeWX 5 and Python 3.9 (WeeWX 4 support removed).
+- Fix windDir for ENE forecasts: it was reported as 77.5 degrees; ENE is 67.5 degrees.
+- Fix the hourly page of the sample report: a ranged wind speed (e.g. "2 to 9 mph")
+  rendered literal template text due to a missing $ in hours.html.tmpl.
+- --test-service now honors the --binding option (it was accepted but ignored since it
+  was introduced in 2020; test-service's inline config also used the key 'binding'
+  where the service reads 'data_binding').
+- Sanity check forecasts for a well formed geometry (used for the gridpoint polygon
+  check).  A forecast without one was already rejected, but at compose time and
+  without logging the raw response.
+- Fold the check_grid.py utility into nws.py.  It no longer requires matplotlib.
+  Run with: python bin/user/nws.py --check-grid --latitude <lat> --longitude <long>
+  The standalone check_grid.py has been removed.
+- Add a test suite (tests/).  Run from the repo root, with a python in which
+  WeeWX is installed: python -m pytest tests
+  Also added tests/verify_cli.py, a harness that runs every nws.py command-line
+  option against live NWS and reports PASS/FAIL per option.
+
 4.5.7 6/01/2025
 - NWS sent forecast with temperatureTrend = null, Relax sanity check to account for this.
 - Log text response when reporting sanity check errors.

@@ -1,4 +1,4 @@
-# Copyright 2020-2024 by John A Kline <john@johnkline.com>
+# Copyright 2020-2026 by John A Kline <john@johnkline.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -22,7 +22,7 @@ def loader():
 class NWSInstaller(ExtensionInstaller):
     def __init__(self):
         super(NWSInstaller, self).__init__(
-            version="4.5.7",
+            version="5.0",
             name='nws',
             description='Fetch NWS Hourly Forecast.',
             author="John A Kline",

@@ -79,7 +79,7 @@
         #if $hour.windSpeed2 is None
                             <td style='width:33%;'>Wind<br>$hour.windSpeed.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
         #else
-                            <td style='width:33%;'>Wind<br>$hour.windSpeed.format('%.0f') to hour.windSpeed2.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
+                            <td style='width:33%;'>Wind<br>$hour.windSpeed.format('%.0f') to $hour.windSpeed2.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass</td>
         #end if
                           </tr>
                           <tr>
