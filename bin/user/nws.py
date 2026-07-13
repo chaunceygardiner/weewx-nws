@@ -50,7 +50,18 @@ from weewx.cheetahgenerator import SearchList
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "5.0"
+WEEWX_NWS_VERSION = "5.1"
+
+def reraise_if_terminate(e: BaseException) -> None:
+    """weewxd stops by raising Terminate from its SIGTERM signal handler --
+    inside whatever the main thread is executing at that instant.  Every
+    broad exception handler on a main-thread path (NWS.__init__ runs at
+    engine startup; saveForecastsToDB and its helpers run every
+    END_ARCHIVE_PERIOD) must call this first and hand the exception back,
+    or weewx cannot shut down.  weewxd runs as __main__, so its Terminate
+    class cannot be imported here and is recognized by name."""
+    if type(e).__name__ == 'Terminate':
+        raise e
 
 if sys.version_info < (3, 9):
     raise weewx.UnsupportedFeature(
@@ -399,6 +410,7 @@ class NWS(StdService):
                         log.debug('Forecast %s, generated %s, already exists in the database.' % (forecast_type, timestamp_to_string(bucket[0].generatedTime)))
                     bucket.clear()
         except Exception as e:
+            reraise_if_terminate(e)
             # Include a stack traceback in the log:
             # but eat this exception as we don't want to bring down weewx
             log.error('saveForedcastsToDB(%s): %s (%s)' % (forecast_type, e, type(e)))
@@ -412,6 +424,7 @@ class NWS(StdService):
             log.debug('Checking if forecast already in db: select: %s.' % select)
             return dbmanager.getSql(select) is not None
         except Exception as e:
+            reraise_if_terminate(e)
             log.error('forecast_in_db(%s, %d) failed with %s (%s).' % (forecast_type, generatedTime, e, type(e)))
             weeutil.logger.log_traceback(log.error, "    ****  ")
             raise Exception('forecast_in_db(%s, %d) failed with %s (%s).' % (forecast_type, generatedTime, e, type(e)))
@@ -426,6 +439,7 @@ class NWS(StdService):
                log.debug('Checking if there are any expired alerts in the archive to delete: select: %s.' % select)
                row = dbmanager.getSql(select)
            except Exception as e:
+               reraise_if_terminate(e)
                log.error('delete_expired_alerts: %s failed with %s (%s).' % (select, e, type(e)))
                weeutil.logger.log_traceback(log.error, "    ****  ")
                return
@@ -434,6 +448,7 @@ class NWS(StdService):
                log.info('Pruning ForecastType.ALERTS')
                dbmanager.getSql(delete)
         except Exception as e:
+           reraise_if_terminate(e)
            log.error('delete_expired_alerts: %s failed with %s (%s).' % (delete, e, type(e)))
            weeutil.logger.log_traceback(log.error, "    ****  ")
 
@@ -445,6 +460,7 @@ class NWS(StdService):
                log.debug('Getting count of alerts: %s.' % select)
                row = dbmanager.getSql(select)
            except Exception as e:
+               reraise_if_terminate(e)
                log.error('delete_all_alerts: %s failed with %s (%s).' % (select, e, type(e)))
                weeutil.logger.log_traceback(log.error, "    ****  ")
                return
@@ -454,6 +470,7 @@ class NWS(StdService):
                log.info('Deleted %d ForecastType.ALERTS' % row[0])
                dbmanager.getSql(delete)
         except Exception as e:
+           reraise_if_terminate(e)
            log.error('delete_all_alerts: %s failed with %s (%s).' % (delete, e, type(e)))
            weeutil.logger.log_traceback(log.error, "    ****  ")
 
@@ -471,6 +488,7 @@ class NWS(StdService):
                log.info('Pruning %s rows older than %s.' % (forecast_type, timestamp_to_string(n_days_ago)))
                dbmanager.getSql(delete)
             except Exception as e:
+               reraise_if_terminate(e)
                log.error('delete_old_forecasts(%s): %s failed with %s (%s).' % (forecast_type, delete, e, type(e)))
                weeutil.logger.log_traceback(log.error, "    ****  ")
 
@@ -917,6 +935,7 @@ class NWSPoller:
             log.info('request_urls: Attempt to fetch from: %s failed: %s (%s).' % (url, e, type(e)))
             return False
         except Exception as e:
+            reraise_if_terminate(e)
             # Unexpected exceptions need a stack track to diagnose.
             log.error('request_urls: Attempt to fetch from: %s failed: %s (%s).' % (url, e, type(e)))
             weeutil.logger.log_traceback(log.error, "    ****  ")

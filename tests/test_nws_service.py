@@ -408,6 +408,29 @@ class TestRequestUrls:
         fake_session.response = FakeResponse(404, {'title': 'Data Unavailable', 'status': 404})
         assert NWSPoller.request_urls(make_cfg()) == False
 
+    # weewxd stops by raising Terminate (recognized by name -- weewxd runs as
+    # __main__ so the class can't be imported) from its SIGTERM handler inside
+    # whatever the main thread is executing.  request_urls runs on the main
+    # thread at engine startup: its broad handler must re-raise Terminate...
+    def test_terminate_escapes(self, monkeypatch):
+        class Terminate(Exception):
+            pass
+        class TerminatingSession:
+            def get(self, url: str, headers: Dict[str, str], timeout: int) -> FakeResponse:
+                raise Terminate()
+        monkeypatch.setattr(requests, 'Session', TerminatingSession)
+        with pytest.raises(Terminate):
+            NWSPoller.request_urls(make_cfg())
+
+    # ...while an ordinary unexpected exception is still swallowed (logged,
+    # returns False) so a transient failure can't bring down weewx.
+    def test_ordinary_exception_still_swallowed(self, monkeypatch):
+        class FailingSession:
+            def get(self, url: str, headers: Dict[str, str], timeout: int) -> FakeResponse:
+                raise ValueError('boom')
+        monkeypatch.setattr(requests, 'Session', FailingSession)
+        assert NWSPoller.request_urls(make_cfg()) == False
+
 
 class TestFetchRecordsRetry:
     # weewxd writes while reports read, and sqlite 'database is locked' has

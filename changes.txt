@@ -1,6 +1,13 @@
 nws change history
 ------------------
 
+5.1 07/12/2026
+- Fix shutdown: weewx could fail to stop when the SIGTERM that stops weewxd
+  landed while the main thread was inside weewx-nws's startup or
+  end-of-archive-period database code — the broad exception handlers there
+  logged the shutdown exception and continued.  Those handlers now pass the
+  shutdown through.
+
 5.0 07/12/2026
 - weewx-nws now requires WeeWX 5 and Python 3.9 (WeeWX 4 support removed).
 - Fix windDir for ENE forecasts: it was reported as 77.5 degrees; ENE is 67.5 degrees.
