@@ -532,6 +532,11 @@ There are two layers of testing, with different jobs:
   # (pytest via: sudo apt install python3-pytest).
   PYTHONPATH=/usr/share/weewx python3 -m pytest tests
   ```
+  A companion script, `tests/validate_skin_html.py` (run the same way), renders the
+  sample skin's pages — both with and without an active alert, since the alerts page
+  emits different markup in each case — and validates the HTML with the
+  [Nu Html Checker](https://validator.github.io/validator/).  It additionally needs
+  `java` and `vnu.jar` (see the script's docstring).
 
 * **The live utilities built into nws.py** (described below) contact the real
   api.weather.gov.  Their job is catching changes in *what NWS serves* — the hermetic

@@ -1,6 +1,16 @@
 nws change history
 ------------------
 
+5.1.1 (not yet released)
+- Fix an HTML validation warning on the sample report's alerts page: the spacer
+  row at the top of an alert's details table was one column wide, so the Nu
+  Html Checker warned on every two-column row (Issued, Onset, ...) that
+  followed.  The warnings only appeared when an alert was active.
+- Add tests/validate_skin_html.py: renders the sample skin (both with and
+  without an active alert) and validates every page with the Nu Html Checker.
+  It would have caught the warning above regardless of the day's weather; it
+  requires java and vnu.jar, and is not part of the pytest suite.
+
 5.1 07/12/2026
 - Fix shutdown: weewx could fail to stop when the SIGTERM that stops weewxd
   landed while the main thread was inside weewx-nws's startup or
