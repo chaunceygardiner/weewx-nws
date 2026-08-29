@@ -1,7 +1,7 @@
 nws change history
 ------------------
 
-5.1.1 (not yet released)
+5.1.1 (in progress)
 - Fix an HTML validation warning on the sample report's alerts page: the spacer
   row at the top of an alert's details table was one column wide, so the Nu
   Html Checker warned on every two-column row (Issued, Onset, ...) that
@@ -10,6 +10,18 @@ nws change history
   without an active alert) and validates every page with the Nu Html Checker.
   It would have caught the warning above regardless of the day's weather; it
   requires java and vnu.jar, and is not part of the pytest suite.
+- The installer now writes the [NWS] section of weewx.conf with comments
+  explaining every option, and writes each option that merely selects a default
+  (days_to_keep, poll_secs, alert_poll_secs, retry_wait_secs,
+  alert_retry_wait_secs and timeout_secs) commented out, showing the default
+  that governs.  Leave such a line commented and weewx-nws's own value governs,
+  including a better one a later release might bring; uncomment it to pin the
+  station to the value written there.  data_binding stays live, as data
+  bindings are everywhere else in weewx.conf.  User-Agent stays live too and is
+  now marked as the placeholder it has always been -- it is the one option that
+  must be edited.  This is a FRESH INSTALL change only: upgrading never
+  rewrites weewx.conf, so existing stations are untouched.  No default has
+  changed.
 
 5.1 07/12/2026
 - Fix shutdown: weewx could fail to stop when the SIGTERM that stops weewxd

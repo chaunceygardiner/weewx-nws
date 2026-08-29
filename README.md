@@ -124,13 +124,16 @@ below).  WeeWX 4 users: weewx-nws 4.5.7 was the last release to support WeeWX 4.
        one_hour_forecast_url = "https://api.weather.gov/gridpoints/MTR/91,87/forecast/hourly"
    ```
 
-1. By default, nws will keep 9 days of forecasts.  One can change this in weewx.conf.
-   Set days_to_keep to zero to keep all forecasts.  Although this is configurable, keeping
-   a large number of days will slow things down.
+1. By default, nws will keep 9 days of forecasts.  One can change this in the [NWS]
+   section of weewx.conf.  Go by what your own file shows: where the days_to_keep line
+   reads `#days_to_keep = 9`, uncomment it and change the number; where it reads
+   `days_to_keep = 9`, simply change the number; and where there is no such line at all,
+   add one.  Set days_to_keep to zero to keep all forecasts.  Although this is
+   configurable, keeping a large number of days will slow things down.
    Note: Alerts are deleted when they expire.  As such, days_to_keep has no effect on alerts.
    ```
    [NWS]
-       days_to_keep = 9  # Set to zero to never delete any forecasts.
+       #days_to_keep = 9
    ```
 
 1. Add NWSForecastVariables to each report that you want to have access to forecasts and alerts.
@@ -168,12 +171,20 @@ below).  WeeWX 4 users: weewx-nws 4.5.7 was the last release to support WeeWX 4.
 All options for the `[NWS]` section of weewx.conf follow, with their defaults.  The
 install seeds this section; in normal use, only `User-Agent` needs to be changed.
 
+Most of what the install writes it writes **commented out**, showing the default that
+will be used.  Leave such a line commented and weewx-nws's own value governs -- including
+a better one that a later release might bring; uncomment it to pin this station to the
+value written there.  Upgrading never rewrites weewx.conf, so what any given station
+carries depends on when it was installed.  Go by what your own file shows: where a line
+reads `#poll_secs = 1800`, uncomment it and change the number; where it reads
+`poll_secs = 1800`, simply change the number; and where there is no such line at all,
+add one.
+
+The last few options -- latitude, longitude, the forecast URL overrides, read_from_dir
+and [[RsyncSpec]] -- are not written at all; add them by hand if you need them.
+
 ```
 [NWS]
-    # Contact information identifying you to NWS, sent on every request.
-    # NWS's API rules ask that this identify your site and give a contact address.
-    User-Agent = '(my-weather-site.com, me@my-weather-site.com)'
-
     # The data binding to use for the forecast database.  The install also seeds
     # the matching nws_binding/nws_sqlite entries under [DataBindings] and
     # [Databases]; there is no reason to change any of this.
@@ -181,24 +192,29 @@ install seeds this section; in normal use, only `User-Agent` needs to be changed
 
     # Days of old forecasts to keep in the database (0 = keep forever).  Expired
     # alerts are always deleted, regardless of this setting.
-    days_to_keep = 9
+    #days_to_keep = 9
 
     # Seconds between requests for forecasts (twelve-hour and one-hour).  Polls
     # align to the wall clock: 1800 polls on the hour and half hour.
-    poll_secs = 1800
+    #poll_secs = 1800
 
     # Seconds between requests for alerts.  Alerts are polled more often than
     # forecasts because they are time critical.
-    alert_poll_secs = 600
+    #alert_poll_secs = 600
 
     # Seconds to wait before retrying after repeated failures (forecasts/alerts).
     # Transient failures are first retried a few times, seconds apart; these
     # values govern the wait once NWS looks to be down.
-    retry_wait_secs = 300
-    alert_retry_wait_secs = 30
+    #retry_wait_secs = 300
+    #alert_retry_wait_secs = 30
 
     # Seconds before an HTTP request to NWS times out.
-    timeout_secs = 10
+    #timeout_secs = 10
+
+    # Contact information identifying you to NWS, sent on every request.  NWS's
+    # API rules ask that this identify your site and give a contact address.
+    # This is the one option that must be edited.
+    User-Agent = "(my-weather-site.com, me@my-weather-site.com)"
 
     # Override the station location from [Station].  Best practice is NOT to set
     # these; see the configuration steps above.
