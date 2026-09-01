@@ -124,6 +124,43 @@ means NWS has nothing for you, not that nothing has been fetched.  See
 Test, exercise, system and draft alerts never appear.  NWS issues them regularly — a
 required weekly test, for instance — and weewx-nws skips them as it parses.
 
+## Icons
+
+Each forecast period carries an `iconUrl` naming one of NWS's 34 conditions.  The extension
+draws all 34 itself, day and night, so a skin can show a crisp, styleable icon instead of
+hot-linking a photograph.
+
+| Tag | Returns |
+|---|---|
+| `$nwsforecast.icon_sprite` | The `<symbol>` definitions.  Emit **once** per page |
+| `$nwsforecast.icon(iconUrl)` | An `<svg>` for that period, ready to drop in |
+| `$nwsforecast.icon(iconUrl, cls)` | The same, with `cls` in place of the default `wxi` |
+| `$nwsforecast.icon_name(iconUrl)` | `(condition, is_night, known)` parsed out of the URL |
+
+```
+$nwsforecast.icon_sprite
+
+#for $twelve_hour in $nwsforecast.twelve_hour_forecasts()
+  $nwsforecast.icon($twelve_hour.iconUrl)
+#end for
+```
+
+Worked examples, including what to do when NWS names a condition the extension has no
+symbol for, are in [Drawn icons](recipes.md#drawn-icons).
+
+{: .important }
+Three sets of names are a contract, and will not change without a major version: the symbol
+ids, `wx-<condition>-<day|night>` (for example `wx-fog-night`); the css classes on the
+markup `icon()` emits — `wxi` on the `<svg>`, `wxi wxi-fallback` on the `<img>` used when a
+condition has no drawn symbol, and `wxi wxi-unknown` on the empty box used when NWS itself
+has no icon for a period; and the `--wx-*` custom properties that colour the drawings.
+Style those, and reference those ids, freely.
+
+The icons carry no width or height of their own — sizing is the skin's job, via `.wxi`.
+Every colour is emitted as `var(--wx-name, #default)`, so they render exactly as shown
+until you redefine something; a complete dark palette ships with the extension.  Both are
+covered in [Drawn icons](recipes.md#drawn-icons).
+
 ## Values, and formatting them
 
 Times, temperatures, wind speeds and directions, dewpoint, humidity and probability of

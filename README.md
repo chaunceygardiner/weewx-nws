@@ -53,7 +53,8 @@ its **7 Day**, **Hourly** and **Alerts** tabs are driven by these tags.
   [recipes](https://chaunceygardiner.github.io/weewx-nws/recipes.html)
 
 - **A sample report that works out of the box.**  A seven-day page, an hourly page and an
-  alerts page, plus NWS's icon set bundled (three sizes × day and night × 34 conditions).
+  alerts page, with drawn weather icons that need no request to NWS and take their colours
+  from your stylesheet.
   → [The sample report](https://chaunceygardiner.github.io/weewx-nws/sample-report.html)
 
 - **Nothing to configure to get going.**  The station's latitude and longitude come from

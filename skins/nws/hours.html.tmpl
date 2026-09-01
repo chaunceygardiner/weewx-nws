@@ -11,6 +11,9 @@
     #include "style.inc"
   </head>
   <body>
+    ## The <symbol> definitions every $nwsforecast.icon() below points at.
+    ## Once per page: a <use> with no symbol to point at draws nothing.
+    $nwsforecast.icon_sprite
     #set global $selection = "hours"
     #include "menubar.inc"
     <br>
@@ -31,10 +34,7 @@
               <tr>
                 #for $hour in $nwsforecast.one_hour_forecasts(7)
                   <td style='width:14.2857%;$at_a_glance_padding'>
-                    #set $icon = $hour.iconUrl
-                    #set icon = $icon.replace('?size=small', '?size=medium')
-                    #set icon = $icon.replace(',0?', '?')
-                    <img src='$icon' alt='$icon'>
+                    $nwsforecast.icon($hour.iconUrl)
                   </td>
                 #end for
               </tr>
@@ -62,10 +62,7 @@
               #for $hour in $nwsforecast.one_hour_forecasts()
               #set $forecast_generated_at = $hour.generatedTime
               <tr class='forecast_hours'>
-                #set icon = $hour.iconUrl
-                #set icon = $icon.replace('?size=small', '?size=medium')
-                #set icon = $icon.replace(',0?', '?')
-                <td style='width:20%;'><img src='$icon' alt='$icon'></td>
+                <td style='width:20%;'>$nwsforecast.icon($hour.iconUrl)</td>
                 <td style='width:80%;'>
                   <table style='width:100%;border-bottom:none;padding:0px;'>
                     <tr><td style='font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$hour.startTime.format('%a %l %p')</td></tr>

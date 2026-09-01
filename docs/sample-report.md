@@ -62,10 +62,8 @@ repository's `tests/validate_skin_html.py` renders both.
 | `skins/nws/menubar.inc` | The three-tab navigation bar shared by all three |
 | `skins/nws/style.inc` | The stylesheet for that bar |
 | `skins/nws/skin.conf` | The skin's own configuration |
-| `skins/nws/nws_icons/` | NWS's weather icons: three sizes × day and night × 34 conditions |
 
-`skin.conf` names the search list extension, generates the three pages, and copies the
-icons once:
+`skin.conf` names the search list extension and generates the three pages:
 
 ```ini
 [CheetahGenerator]
@@ -77,9 +75,6 @@ icons once:
             template = hours.html.tmpl
         [[[alerts]]]
             template = alerts.html.tmpl
-
-[CopyGenerator]
-    copy_once = nws_icons/*
 ```
 
 The report itself is a stanza in `weewx.conf`:
@@ -120,13 +115,16 @@ have.
 
 ## Icons
 
-NWS's icon URLs have changed and broken before, so the extension bundles the icon set:
-three sizes (`small`, `medium`, `large`), day and night, 34 conditions.  They are copied to
-`<HTML_ROOT>/nws/nws_icons/<size>/<day-or-night>/<name>` — PNG files with no extension.
+Since 5.2 the sample report **draws** its icons.  The extension carries a drawn SVG symbol
+for all 34 NWS conditions, day and night; the seven-day and hourly pages emit
+`$nwsforecast.icon_sprite` once and then call `$nwsforecast.icon()` per period, so the
+pages make no request to api.weather.gov at all and the icons stay crisp at any size.
+`skins/nws/style.inc` sizes them at 86 px — what NWS's `?size=medium` raster measured — so
+the pages lay out as they always did.  See [Drawn icons](recipes.md#drawn-icons) for the
+tags, the colour properties and the dark palette.
 
-The sample report's pages use NWS's hosted icons, by the `iconUrl` each period carries.  To
-serve the bundled copies instead, map the URL to a local path — the recipe is in
-[Serving the icons yourself](recipes.md#serving-the-icons-yourself).
+(Through 5.1 the pages hot-linked NWS's hosted images, and the extension separately bundled
+NWS's icon set as PNG files that nothing referenced.  Both are gone in 5.2.)
 
 The condition names, which are the last path segment of an NWS icon URL:
 

@@ -48,9 +48,31 @@ from weeutil.weeutil import to_int
 from weewx.engine import StdService
 from weewx.cheetahgenerator import SearchList
 
+# nwsicons is `user.nwsicons` under weewxd, where WEEWX_ROOT/bin is on the
+# path.  Run nws.py directly -- which the README and the utilities page both
+# document -- and sys.path[0] IS bin/user, so there is no `user` package and
+# the flat name is the only one that resolves.
+#
+# Which arm wins depends on whether ANY `user` package is importable, not on
+# how nws.py was started: a PYTHONPATH naming the parent of an installed
+# WeeWX `user` package (docs/utilities.md tells users to export exactly that)
+# makes the first arm succeed and bind the INSTALLED nwsicons.py.  That is
+# right for weewxd and for --test-service; it is a trap only for a test run,
+# where it would quietly exercise the installed copy instead of the repo's.
+# tests/test_nwsicons.py asserts the two resolve to one module for that
+# reason.
+#
+# This stays LOUD: a genuinely missing nwsicons.py fails both imports and the
+# second ImportError propagates, and a syntax error inside it raises
+# SyntaxError, which this does not catch at all.
+try:
+    import user.nwsicons as nwsicons
+except ImportError:
+    import nwsicons  # type: ignore[no-redef]
+
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "5.1"
+WEEWX_NWS_VERSION = "5.2"
 
 def reraise_if_terminate(e: BaseException) -> None:
     """weewxd stops by raising Terminate from its SIGTERM signal handler --
@@ -1366,6 +1388,7 @@ class NWSPoller:
         if err:
             return err
 
+        unknown_icons = 0
         for period in j['properties']['periods']:
 
             # The following are sometimes None.  We'll have to live with it.
@@ -1390,8 +1413,17 @@ class NWSPoller:
 
             # Sometimes NWS produces an unknown icon (which doesn't exist).
             # "https://api.weather.gov/icons/land/night/unknown?size=medium"
+            # This USED to fail the whole reply.  That threw away an entire
+            # forecast -- up to 156 periods -- over one missing glyph, and the
+            # site then served the previous forecast until NWS sent a clean
+            # one.  The period is kept now: it is good data apart from the
+            # icon, and the report tags render such a period with an empty
+            # icon box rather than a broken image (api.weather.gov answers 400
+            # for that URL, so it must not be linked).  Counted here and
+            # logged once for the reply, below -- never once per period, since
+            # a bad reply could carry a hundred and drown out the signal.
             if 'unknown' in period['icon']:
-                return '%s: Missing icon: %s' % (forecast_type, period)
+                unknown_icons += 1
 
             err = NWSPoller.check_for_str_entries(response_text, period, [
                     ['windDirection'],
@@ -1470,6 +1502,11 @@ class NWSPoller:
 
                 if err:
                     return err
+
+        if unknown_icons != 0:
+            log.info('%s: %d of %d periods carry NWS\'s `unknown` icon; storing '
+                     'them (they render with an empty icon box).'
+                     % (forecast_type, unknown_icons, len(j['properties']['periods'])))
 
         return None
 
@@ -1608,6 +1645,27 @@ class NWSForecastVariables(SearchList):
 
     def get_extension_list(self, timespan, db_lookup) -> List[Dict[str, 'NWSForecastVariables']]:
         return [{'nwsforecast': self}]
+
+    @property
+    def icon_sprite(self) -> str:
+        """The <symbol> definitions every $nwsforecast.icon() refers to.
+        Emit this ONCE per page; a <use> with no symbol to point at draws
+        nothing.  See bin/user/nwsicons.py for the id and class contracts."""
+        return nwsicons.sprite()
+
+    def icon(self, icon_url: Optional[str], cls: str = 'wxi') -> str:
+        """A period's icon URL as ready-to-drop markup: an <svg><use> naming
+        the drawn symbol, an <img> at NWS's own image for a condition this
+        release has no symbol for (which is logged, once per weewxd run), or an
+        empty box for a period NWS itself has no icon for."""
+        return nwsicons.icon(icon_url, cls)
+
+    def icon_name(self, icon_url: Optional[str]) -> Tuple[str, bool, bool]:
+        """(condition, is_night, known) parsed out of a period's icon URL --
+        for a skin that would rather draw its own icon than re-implement the
+        parsing.  Handles the ',NN' chance suffix and the 'sct/fog' composite
+        (the first condition wins; the period's own text carries the 'then')."""
+        return nwsicons.icon_name(icon_url)
 
     def one_hour_forecasts(self, max_forecasts:Optional[int]=None) -> List[Dict[str, Any]]:
         return self.forecasts(ForecastType.ONE_HOUR, max_forecasts)

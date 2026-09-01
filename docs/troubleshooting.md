@@ -63,7 +63,7 @@ no current forecast.  In order of likelihood:
    they were fetched for, and reads match on them.  Change either, and the next save prunes
    the old rows and stores new ones; between those two moments the tags return nothing.
 4. **The database is elsewhere.**  Confirm with the `Using binding` line, and look at what
-   is in it: [`--view-forecasts`](utilities.md#view-forecasts) with
+   is in it: [`--view-forecasts`](utilities.md#--view-forecasts) with
    `--view-criterion SUMMARY`.
 
 ## `sanity check failed`
@@ -78,7 +78,7 @@ that text is the evidence, so keep it.
 
 Nearly always this is NWS having a bad few minutes, and the next poll succeeds.  If it
 persists, NWS has changed something: run
-[`--test-requester`](utilities.md#test-requester) for your location to see the current
+[`--test-requester`](utilities.md#--test-requester) for your location to see the current
 response, and please
 [open an issue](https://github.com/chaunceygardiner/weewx-nws/issues) with the logged text.
 
@@ -125,7 +125,7 @@ again.  Nothing is lost that the next poll does not replace.  See
 
 - **Check that NWS has one for your point**, not just for your county or state:
   `https://api.weather.gov/alerts/active?point=<lat>,<long>` in a browser, or
-  [`--test-requester --type ALERTS`](utilities.md#test-requester).  An alert covering
+  [`--test-requester --type ALERTS`](utilities.md#--test-requester).  An alert covering
   your area but not your coordinates does not apply.
 - **The alert may be a test.**  Test, exercise, system and draft alerts are skipped, with a
   line in the log saying which: `Skipping alert with status of 'Test'`.
@@ -153,7 +153,7 @@ swallowed instead of being passed through.  If you are on an earlier release, up
 
 ## Still stuck
 
-Run [`--test-requester`](utilities.md#test-requester) with your station's latitude and
+Run [`--test-requester`](utilities.md#--test-requester) with your station's latitude and
 longitude, and
 [open an issue](https://github.com/chaunceygardiner/weewx-nws/issues) with what it prints
 and the `user.nws` lines from your log.

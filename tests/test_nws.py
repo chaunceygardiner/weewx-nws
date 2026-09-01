@@ -24,7 +24,9 @@ No test talks to the real NWS.
 
 import datetime
 import json
+import logging
 import os
+import subprocess
 import sys
 import time
 
@@ -188,6 +190,53 @@ class TestTranslateWindDir:
         assert NWSPoller.translate_wind_dir('NORTH') is None
 
 
+class TestCommandLine:
+    """nws.py is documented as runnable directly -- README, docs/utilities.md.
+
+    Nothing exercised that until 5.2, and the gap cost us: adding
+    `import user.nwsicons` at module scope broke EVERY command-line option
+    (run directly, sys.path[0] is bin/user, so there is no `user` package),
+    and the hermetic suite stayed green throughout because it imports the
+    module rather than running it.  These run the real script in a subprocess,
+    which is the only way to see what a user sees.  Both options are offline.
+    """
+
+    NWS_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          '..', 'bin', 'user', 'nws.py')
+
+    def _run(self, *args):
+        # Filter PYTHONPATH; do NOT clear it.  nws.py imports weewx at module
+        # scope, and on a Debian or Red Hat install weewx is reachable only
+        # via PYTHONPATH (README: `PYTHONPATH=/usr/share/weewx python3 -m
+        # pytest tests`).  Clearing it there kills the subprocess with
+        # "No module named 'weewx'", which these tests would report as exactly
+        # the "No module named 'user'" bug they exist to catch -- a false
+        # positive wearing the costume of a true one.
+        #
+        # Drop only the entries that would make a `user` package importable,
+        # since resolving nwsicons WITHOUT one is the single thing under test.
+        env = dict(os.environ)
+        kept = [p for p in env.get('PYTHONPATH', '').split(os.pathsep)
+                if p and not os.path.isdir(os.path.join(p, 'user'))]
+        if kept:
+            env['PYTHONPATH'] = os.pathsep.join(kept)
+        else:
+            env.pop('PYTHONPATH', None)
+        return subprocess.run([sys.executable, self.NWS_PY] + list(args),
+                              capture_output=True, text=True, timeout=120, env=env)
+
+    def test_help_runs(self):
+        done = self._run('--help')
+        assert done.returncode == 0, done.stderr
+        assert 'ModuleNotFoundError' not in done.stderr
+        assert '--test-requester' in done.stdout
+
+    def test_point_in_polygon_runs(self):
+        # The one utility that touches no network at all.
+        done = self._run('--test-point-in-polygon')
+        assert done.returncode == 0, done.stderr
+        assert 'ModuleNotFoundError' not in done.stderr
+
 class TestSanityCheckForecast:
     def test_valid_one_hour_passes(self, one_hour_json):
         assert sanity_check(one_hour_json, ForecastType.ONE_HOUR) is None
@@ -241,11 +290,40 @@ class TestSanityCheckForecast:
         one_hour_json['properties']['periods'][0]['windSpeed'] = '15 km/h'
         assert sanity_check(one_hour_json, ForecastType.ONE_HOUR) is not None
 
-    def test_unknown_icon_rejected(self, one_hour_json):
-        one_hour_json['properties']['periods'][0]['icon'] = \
+    def test_unknown_icon_no_longer_discards_the_forecast(self, caplog):
+        """Since 5.2 an `unknown` icon keeps its period instead of failing
+        the whole reply.
+
+        NWS really does send `.../land/night/unknown?size=medium`.  Rejecting
+        on it threw away an entire forecast -- up to 156 periods -- over one
+        missing glyph, and the site served the previous forecast until NWS
+        sent a clean one.  The period is good data apart from the icon, and
+        the report tags now render it as an empty icon box rather than
+        hot-linking a URL api.weather.gov answers 400 for.
+        """
+        j = load_fixture('one_hour.json')
+        j['properties']['periods'][0]['icon'] = \
             'https://api.weather.gov/icons/land/night/unknown?size=medium'
-        err = sanity_check(one_hour_json, ForecastType.ONE_HOUR)
-        assert err is not None and 'icon' in err
+        with caplog.at_level(logging.INFO):
+            assert sanity_check(j, ForecastType.ONE_HOUR) is None
+        # The operator still has to hear about it -- once for the reply,
+        # naming the count, not once per period.
+        lines = [r for r in caplog.records if 'unknown' in r.getMessage()]
+        assert len(lines) == 1, [r.getMessage() for r in lines]
+        assert '1 of %d periods' % len(j['properties']['periods']) \
+            in lines[0].getMessage()
+
+    def test_several_unknown_icons_are_logged_once_for_the_reply(self, caplog):
+        # A pathological reply could carry one per period; that many identical
+        # lines is how a real signal gets ignored.
+        j = load_fixture('one_hour.json')
+        for period in j['properties']['periods']:
+            period['icon'] = \
+                'https://api.weather.gov/icons/land/night/unknown?size=medium'
+        with caplog.at_level(logging.INFO):
+            assert sanity_check(j, ForecastType.ONE_HOUR) is None
+        lines = [r for r in caplog.records if 'unknown' in r.getMessage()]
+        assert len(lines) == 1, [r.getMessage() for r in lines]
 
     def test_null_dewpoint_value_allowed(self, one_hour_json):
         # The dewpoint entry must exist, but its value may be null (4.5.4/4.5.6

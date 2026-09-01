@@ -1,7 +1,63 @@
 nws change history
 ------------------
 
-5.1.1 (in progress)
+5.2 (in progress)
+- weewx-nws now draws its own weather icons.  $nwsforecast.icon() turns a
+  forecast period's icon URL into an <svg> naming one of 68 drawn symbols (34
+  NWS conditions, day and night), $nwsforecast.icon_sprite emits the symbol
+  definitions those refer to, and $nwsforecast.icon_name() hands back the
+  (condition, is_night, known) parsed out of the URL for a skin that would
+  rather draw its own.  Drawn icons stay crisp at any size, take their colours
+  from your stylesheet, and avoid the split "X then Y" composites the
+  photographs produce, which read as rendering glitches at the size a forecast
+  table uses.
+  Three sets of names are a contract and will not change without a major
+  version: the symbol ids (wx-<condition>-<day|night>), the css classes on the
+  emitted markup (wxi, wxi-fallback, wxi-unknown) and the --wx-* custom
+  properties that colour the drawings.  See the Tags and Recipes pages.
+- The sample report draws its icons instead of hot-linking api.weather.gov.
+  Its pages now make no request to NWS at all.  skins/nws/style.inc sizes them
+  at 86px, what NWS's ?size=medium raster measured, so the pages lay out as
+  they did before.
+- Every colour in the drawn set is emitted as var(--wx-name, #default), so a
+  skin can recolour any part of it and one that defines nothing renders the
+  shipped look.  A complete dark palette, chosen against a dark card and
+  checked at small sizes, ships as nwsicons.DARK with a dark_css() helper that
+  emits it as a paste-able rule; the Recipes page lists it in full.
+- Fixed: the "overcast" symbol was a flat silhouette on a light page.  Its two
+  cloud layers differed by 1.4 luma, because the back layer was drawn at 75%
+  opacity rather than as a colour, and a translucent fill composites against
+  the page rather than against a colour.  Those tonal opacities are solid ramp
+  steps now (measured 28 luma apart, on any background); genuine translucency
+  is kept and tunable via --wx-op-band and --wx-op-tube.
+- Fixed: a hurricane's or tropical storm's eye was painted white, so it showed
+  as a white blob on any page that was not white.  The centre is simply left
+  unpainted now and the page shows through.
+- A forecast period with a blank icon URL renders the empty icon box rather
+  than a clear-sky icon.  Alert records carry no icon, so a skin calling
+  $nwsforecast.icon($alert.iconUrl) would otherwise have shown a sun over a
+  tornado warning.
+- A condition with no drawn symbol falls back to NWS's own image and is logged
+  once per weewxd run.  Coverage is complete as of this release -- the drawn
+  set, the conditions NWS publishes and their descriptions all match exactly --
+  so the only way this can fire is NWS adding a condition, which is worth
+  hearing about.  tests/test_nwsicons.py checks the set against
+  https://api.weather.gov/icons itself rather than against a copied list; run
+  it with `pytest tests -m network` (the rest of the suite stays offline).
+- An `unknown` icon no longer discards the whole forecast.  NWS sometimes gives
+  a period the icon name `unknown`, meaning it has none for that period.  That
+  used to fail the entire reply in the sanity check -- throwing away up to 156
+  periods of good data over one missing glyph, and leaving the site serving the
+  previous forecast until NWS sent a clean one.  Such periods are now stored
+  and logged once per reply with a count.  They render as an empty icon box:
+  api.weather.gov answers 400 for that URL, so it must not be linked.
+- Remove the 204 bundled icon photographs.  They were installed and copied into
+  the report's HTML_ROOT but no template ever referenced them.  Nothing that
+  worked before stops working.
+  Note for upgrades: weectl only adds and overwrites, so the 204 files a 5.1 or
+  earlier install put in skins/nws/nws_icons/ and in the report's HTML_ROOT are
+  left behind.  Nothing reads them.  They can be deleted at leisure:
+    rm -r /home/weewx/skins/nws/nws_icons /home/weewx/public_html/nws/nws_icons
 - weewx-nws now has a user manual, at
   https://chaunceygardiner.github.io/weewx-nws/ -- installation, configuration,
   every $nwsforecast tag and field, the sample report, gridpoints, the

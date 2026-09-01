@@ -25,6 +25,7 @@ Run from the repo root with the WeeWX venv python:
 """
 
 import os
+import re
 import sys
 import time
 import types
@@ -152,7 +153,6 @@ class TestRenderedPages:
         period = load_fixture('one_hour.json')['properties']['periods'][0]
         assert period['shortForecast'] in page           # e.g. 'Mostly Cloudy'
         assert 'PoP:' in page
-        assert '?size=medium' in page                    # small icons upsized
         assert 'Forecast generated' in page
 
     def test_alerts_page(self, pages):
@@ -165,10 +165,52 @@ class TestRenderedPages:
         assert 'Drink plenty of fluids.' in page         # instructions
         assert 'No active National Weather Service alerts' not in page
 
-    def test_icons_copied(self, pages, tmp_path_factory):
-        # CopyGenerator copy_once must ship the icon tree next to the pages.
-        html_root = os.path.join(str(tmp_path_factory.getbasetemp()), 'skin0', 'public_html', 'nws')
-        assert os.path.exists(os.path.join(html_root, 'nws_icons', 'medium', 'day', 'skc'))
+class TestDrawnIcons:
+    """Since 5.2 the sample skin draws its icons instead of hot-linking NWS.
+
+    Worth pinning here rather than only in test_nwsicons.py: that module tests
+    the markup a function returns, this one tests that the templates actually
+    CALL it.  Under #errorCatcher Echo a mistyped tag renders as literal text
+    and a page full of prose still 'renders', so a passing render proves
+    nothing about the icons on its own.
+    """
+
+    def test_sprite_is_emitted_once_on_each_icon_page(self, pages):
+        for name in ('index.html', 'hours.html'):
+            page = pages[name]
+            # Exactly one sprite: a second would redefine all 68 ids.
+            assert page.count('<symbol id="wx-') == 68, name
+            assert page.count('id="wx-skc-day"') == 1, name
+
+    def test_alerts_page_carries_no_sprite(self, pages):
+        # It has no icons, so 60k of symbol definitions would be dead weight.
+        assert '<symbol id="wx-' not in pages['alerts.html']
+
+    def test_periods_reference_drawn_symbols(self, pages):
+        for name in ('index.html', 'hours.html'):
+            page = pages[name]
+            uses = re.findall(r'<use href="#(wx-[a-z_]+-(?:day|night))"/>', page)
+            assert uses, '%s references no drawn symbol' % name
+            # Every <use> must point at a symbol the same page defines, or it
+            # draws nothing at all -- silently, with no console error.
+            for symbol_id in set(uses):
+                assert 'id="%s"' % symbol_id in page, '%s: dangling %s' % (
+                    name, symbol_id)
+
+    def test_pages_no_longer_hot_link_nws(self, pages):
+        # The whole point of the drawn set: no third-party request per period,
+        # and nothing that breaks when NWS moves its icon URLs again.
+        for name in ('index.html', 'hours.html'):
+            assert 'api.weather.gov' not in pages[name], name
+
+    def test_colours_arrive_as_overridable_tokens(self, pages):
+        # A skin must be able to theme these; if the fills ever revert to bare
+        # hex, weewx-nws 6.0's light/dark/auto has nothing to hold on to.
+        page = pages['index.html']
+        assert 'var(--wx-sun, #F2B705)' in page
+        assert 'var(--wx-cloud-2, #9AA5B4)' in page
+        assert 'var(--wx-eye, transparent)' in page
+        assert not re.search(r'<(?:circle|path|rect|line)[^>]*fill="#[0-9A-Fa-f]', page)
 
 class TestRenderedVariants:
     def test_ranged_wind_and_no_alerts(self, tmp_path):
@@ -188,3 +230,27 @@ class TestRenderedVariants:
         # The pre-fix bug rendered the literal text 'hour.windSpeed2.format'.
         assert 'windSpeed2' not in pages['hours.html']
         assert 'No active National Weather Service alerts' in pages['alerts.html']
+
+    def test_nws_unknown_icon_renders_an_empty_box(self, tmp_path):
+        """End to end for the path 5.2 opened up.
+
+        Through 5.1 an `unknown` icon failed the whole reply in
+        sanity_check_forecast_json, so no such record ever reached a template
+        and this could not be exercised at all.  Now the period stores, and
+        the page must show an empty icon box -- NOT an <img> at
+        api.weather.gov, which answers 400 for that URL.
+        """
+        one_hour = freshen(load_fixture('one_hour.json'))
+        twelve_hour = freshen(load_fixture('twelve_hour.json'))
+        for period in one_hour['properties']['periods']:
+            period['icon'] = \
+                'https://api.weather.gov/icons/land/night/unknown?size=medium'
+        pages = render_skin(tmp_path, one_hour, twelve_hour, make_alerts_json())
+        for name, page in pages.items():
+            assert_fully_rendered(page, name)
+        hours = pages['hours.html']
+        assert 'wxi-unknown' in hours
+        assert 'api.weather.gov' not in hours
+        assert '<use href="#wx-unknown' not in hours   # no such symbol exists
+        # The 12-hour page is unaffected: its periods still draw normally.
+        assert '<use href="#wx-' in pages['index.html']
