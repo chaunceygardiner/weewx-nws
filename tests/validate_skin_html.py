@@ -30,7 +30,7 @@ $VNU_JAR.  Download:
 Not collected by pytest (vnu.jar and java are not test-suite requirements).
 Part of the pre-release checklist.  Run from the repository root with the
 python that runs WeeWX -- same rules as the test suite (see the README's
-"Testing and development"):
+"Testing" section):
     /home/weewx/weewx-venv/bin/python tests/validate_skin_html.py
     PYTHONPATH=/usr/share/weewx python3 tests/validate_skin_html.py
 

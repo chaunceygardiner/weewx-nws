@@ -2,6 +2,12 @@ nws change history
 ------------------
 
 5.1.1 (in progress)
+- weewx-nws now has a user manual, at
+  https://chaunceygardiner.github.io/weewx-nws/ -- installation, configuration,
+  every $nwsforecast tag and field, the sample report, gridpoints, the
+  command-line utilities and troubleshooting, with search.  The README is now a
+  summary that links to it, and the [NWS] section the installer writes points
+  there as well.
 - Fix an HTML validation warning on the sample report's alerts page: the spacer
   row at the top of an alert's details table was one column wide, so the Nu
   Html Checker warned on every two-column row (Issued, Onset, ...) that

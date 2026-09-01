@@ -20,8 +20,8 @@ every utility runs and that live NWS output still parses.  It is part of the
 pre-release checklist and is NOT collected by pytest (no network in pytest).
 
 Run it from the repository root with the python that runs WeeWX -- same rules
-as the utilities themselves (see the README's "Running nws.py from the command
-line").  For a pip install or migrated setup.py layout, activate the virtual
+as the utilities themselves (see the manual's "Command-line utilities" page).
+For a pip install or migrated setup.py layout, activate the virtual
 environment (or name its python explicitly); for a package install, set
 PYTHONPATH so weewx is importable:
     /home/weewx/weewx-venv/bin/python tests/verify_cli.py [--skip-multigrid]

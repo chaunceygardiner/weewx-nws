@@ -1,7 +1,7 @@
 Icons come in small, medium and large.
 They have both day and night versions.
 Icons can be found at the path (relative to the nws skin) at:
-	icons/<size>/<day-or-night>/<icon-name>
+	nws_icons/<size>/<day-or-night>/<icon-name>
 
 The list of icon names and their description follow:
 

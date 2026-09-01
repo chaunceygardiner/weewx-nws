@@ -1,0 +1,48 @@
+# GitHub Pages configuration for https://chaunceygardiner.github.io/weewx-nws/
+title: weewx-nws
+description: >-
+  National Weather Service forecasts and alerts for WeeWX -- twelve-hour and
+  one-hour forecasts, active alerts, $nwsforecast tags for your own reports,
+  and a sample forecast report that works out of the box.
+url: "https://chaunceygardiner.github.io"
+baseurl: "/weewx-nws"
+
+# Pinned to the same version the sibling manuals render from, so they cannot
+# drift apart when upstream releases.
+remote_theme: just-the-docs/just-the-docs@v0.12.0
+plugins:
+  - jekyll-remote-theme
+  - jekyll-sitemap
+  # Turns the .md links between pages into real URLs.  GitHub Pages enables
+  # this by default; naming it here keeps a local jekyll build identical.
+  - jekyll-relative-links
+
+search_enabled: true
+heading_anchors: true
+
+aux_links:
+  "weewx-nws on GitHub":
+    - "https://github.com/chaunceygardiner/weewx-nws"
+aux_links_new_tab: true
+
+# External links shown at the bottom of the left sidebar nav, on every page.
+nav_external_links:
+  - title: weewx-nws on GitHub
+    url: https://github.com/chaunceygardiner/weewx-nws
+  - title: Download weewx-nws.zip
+    url: https://github.com/chaunceygardiner/weewx-nws/releases/latest/download/weewx-nws.zip
+
+callouts:
+  note:
+    title: Note
+    color: blue
+  important:
+    title: Important
+    color: red
+  tip:
+    title: Tip
+    color: green
+
+footer_content: >-
+  weewx-nws is Copyright &copy; 2020&ndash;2026 John A Kline and is
+  licensed under the GNU Public License v3.

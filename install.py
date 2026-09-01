@@ -39,8 +39,8 @@ from setup import ExtensionInstaller
 # for the other sections on the subsection weectl creates.
 CONFIG = """
 [NWS]
-    # This section configures the weewx-nws extension.  See the README.md
-    # for details.
+    # This section configures the weewx-nws extension.  The manual is at
+    # https://chaunceygardiner.github.io/weewx-nws/
     #
     # An option shown commented out is one the extension supplies itself.
     # Leave it commented and the extension's own value governs, including a
