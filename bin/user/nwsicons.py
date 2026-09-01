@@ -138,44 +138,56 @@ OPACITY = {
     'tube': ('--wx-op-tube', '.28'),
 }
 
-# A DARK PALETTE, CHOSEN RATHER THAN GUESSED.
+# A DARK PALETTE, DERIVED RATHER THAN GUESSED.
 #
-# The cost of theming these is not typing twenty lines, it is picking twenty
-# values that keep the ramps legible on a dark ground -- work that should be
-# done once, here, by whoever owns the drawing, instead of re-derived by every
-# consumer.  Measured against #111834 (luma 27), a real card colour:
+# Not hand-picked, and not the light values nudged.  The objective: reproduce
+# the LIGHT palette's RELATIVE PROMINENCE STRUCTURE -- each token's perceptual
+# distance (OKLab dE) from its own page, as a ratio to cloud's -- on a dark
+# ground.  Lightness is the only free variable; hue and chroma are held, so hot
+# stays red and sun stays gold.  A global scale was searched exhaustively.
 #
-#   cloud ramp   207 / 161 / 120   gaps of 46 and 41, and the darkest step
-#                                  still sits 93 above the background
-#   swirl ramp   158 / 121 /  85   the tornado funnel fades toward the GROUND,
-#                                  so on a dark page it darkens downward --
-#                                  the ramp direction inverts with the theme,
-#                                  which is precisely what an opacity could
-#                                  never express
+# THE CLOUD RAMP INVERTS HERE, AND THAT IS DELIBERATE.  On dark the FRONT cloud
+# is darkest and the BACK cloud lightest -- the opposite of light mode.  It
+# follows from the objective: in light the back cloud is the MORE prominent of
+# the two (cloudd 2.32x cloud), so on a dark ground it must be the lighter one.
+# Preserving absolute lightness order was never a decision anyone made; it was
+# an artefact of starting from the light palette and perturbing it.  Stated in
+# PROMINENCE terms the two palettes are identical in shape -- cloud ramp
+# ascending, funnel descending -- which is how the tests assert both at once.
+# Measured at 34px in Chromium and Firefox the inverted ramp is MORE legible
+# than what it replaced: bkn +54.3 and ovc +43.8 luma, against +45.5 and +41.2.
 #
-# Blues and the moon are lifted hard: #2F6EA8 rain reads at luma 98, which is
-# nearly invisible on a dark card.  --wx-eye is already transparent and needs
-# no dark value; it is listed so this stays a complete mirror of PALETTE.
+# GROUND: #111834.  Consumers also render on a #151c38 tint, 4.0 luma lighter;
+# the dimmest element clears the card by 62.9 and the tint by 58.9, so one
+# derivation covers both.  A materially different surface needs re-deriving.
+#
+# `hot` and `sleet` sit at the sRGB gamut CEILING for this ground: a saturated
+# hue has less headroom against a lifted navy than a neutral (hot tops out at
+# dE 0.541 where cloud reaches 0.742), so light's 3.02x spread is about three
+# percent out of reach.  Total ratio error 3.52, in the reds and blues.  The
+# tint being lighter leaves those two marginally less headroom there than the
+# figure says -- 4 luma changes nothing today, but a future surface change
+# could, so the test names the ground and fails loudly rather than quietly.
 DARK = {
-    'sun':    '#F2B705',
-    'sunray': '#E0A800',
-    'moon':   '#C9D2E0',
-    'cloud':  '#C8D0DC',
-    'cloud2': '#97A3B5',
-    'cloudd': '#6D7A8D',
-    'rain':   '#5D9BD8',
-    'snow':   '#A8D4F0',
-    'sleet':  '#7FB0DE',
-    'bolt':   '#E0A800',
-    'fog':    '#A9B2C0',
-    'wind':   '#93A0B2',
-    'hot':    '#E05C4A',
-    'cold':   '#5D9BD8',
-    'dust':   '#C7A268',
-    'smoke':  '#A9B2C0',
-    'swirl':  '#93A0B2',
-    'swirl2': '#6E7A8B',
-    'swirl3': '#4C5666',
+    'sun':    '#F2B704',
+    'sunray': '#E1A904',
+    'moon':   '#A1AAB8',
+    'cloud':  '#525963',
+    'cloud2': '#85909E',
+    'cloudd': '#B0BCCB',
+    'rain':   '#7FBFFF',
+    'snow':   '#659ECD',
+    'sleet':  '#8DC4FE',
+    'bolt':   '#E1A904',
+    'fog':    '#A2AAB7',
+    'wind':   '#C5D3E5',
+    'hot':    '#FF7361',
+    'cold':   '#7FBFFF',
+    'dust':   '#CAA369',
+    'smoke':  '#A2AAB7',
+    'swirl':  '#C5D3E5',
+    'swirl2': '#9DA8B5',
+    'swirl3': '#7B838C',
     'eye':    'transparent',
 }
 

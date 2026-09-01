@@ -280,22 +280,90 @@ class TestPalette(unittest.TestCase):
         self.assertEqual(set(nwsicons.DARK), set(nwsicons.PALETTE))
         self.assertEqual(set(nwsicons.DARK_OPACITY), set(nwsicons.OPACITY))
 
-    def test_dark_cloud_ramp_stays_ordered_and_off_the_background(self):
-        # The ramp is the whole reason bkn and ovc are distinguishable; on a
-        # dark card it has to stay ordered AND stay clear of the ground.
-        def luma(h):
-            h = h.lstrip('#')
-            r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-            return 0.299 * r + 0.587 * g + 0.114 * b
-        ramp = [luma(nwsicons.DARK[k]) for k in ('cloud', 'cloud2', 'cloudd')]
-        self.assertTrue(ramp[0] > ramp[1] > ramp[2], ramp)
-        self.assertGreater(min(ramp) - luma('#111834'), 60, ramp)
-        for a, b in zip(ramp, ramp[1:]):
-            self.assertGreater(a - b, 20, ramp)   # a gap you can actually see
-        # The funnel fades toward the ground, so its ramp runs the other way
-        # on a dark page than on a light one.  Ordering is all that matters.
-        funnel = [luma(nwsicons.DARK[k]) for k in ('swirl', 'swirl2', 'swirl3')]
-        self.assertTrue(funnel[0] > funnel[1] > funnel[2], funnel)
+    # ---- prominence, the property both palettes share ------------------
+    #
+    # "Prominence" is how far a colour stands from the page it is drawn on.
+    # Stated that way the light and dark palettes are the SAME SHAPE, even
+    # though dark inverts the cloud ramp's absolute lightness -- so these
+    # rules are asserted over both, and light passing unchanged is the proof
+    # that they describe the real design rather than being fitted to the new
+    # dark numbers.
+    #
+    # The derivation used OKLab dE; this uses luma distance, which needs no
+    # dependency and agreed with dE on every check that mattered (it is what
+    # first caught the inversion bug).
+
+    LIGHT_GROUND = '#ffffff'
+    DARK_GROUND  = '#111834'          # named so a changed surface fails loudly
+
+    @staticmethod
+    def _luma(hexv):
+        h = hexv.lstrip('#')
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+        return 0.299 * r + 0.587 * g + 0.114 * b
+
+    @classmethod
+    def _prom(cls, hexv, ground):
+        return abs(cls._luma(hexv) - cls._luma(ground))
+
+    def _palettes(self):
+        light = {k: v for k, (p, v) in nwsicons.PALETTE.items()}
+        return (('light', light, self.LIGHT_GROUND),
+                ('dark', nwsicons.DARK, self.DARK_GROUND))
+
+    def test_severe_weather_outshouts_ordinary_sky(self):
+        """The constraint the first dark palette lost.
+
+        A cloud is the substrate; the weather is the signal.  If an overcast
+        cloud is louder than a tornado the hierarchy is inverted -- which is
+        exactly what shipped in the first cut of DARK, where the four leads
+        below ran 0.72x to 0.92x of cloud.
+        """
+        for name, pal, ground in self._palettes():
+            cloud = self._prom(pal['cloud'], ground)
+            for key, symbol in (('swirl', 'tornado/hurricane/tropical storm'),
+                                ('bolt', 'thunderstorm'),
+                                ('hot', 'extreme heat'),
+                                ('cold', 'extreme cold')):
+                ratio = self._prom(pal[key], ground) / cloud
+                self.assertGreaterEqual(
+                    ratio, 1.0,
+                    '%s palette: %s (%s) is only %.2fx as prominent as an '
+                    'ordinary cloud on %s' % (name, key, symbol, ratio, ground))
+
+    def test_ramps_keep_their_prominence_order(self):
+        """Both ramps run the same way in both palettes, in PROMINENCE.
+
+        Absolute lightness inverts between themes and that is fine; what may
+        not change is which end of a ramp is the loud one.  Two clouds at the
+        same prominence merge into one blob and bkn/ovc stop being tellable
+        apart, which is the whole reason the ramp exists.
+        """
+        for name, pal, ground in self._palettes():
+            cloud = [self._prom(pal[k], ground)
+                     for k in ('cloud', 'cloud2', 'cloudd')]
+            self.assertTrue(cloud[0] < cloud[1] < cloud[2],
+                            '%s: cloud ramp not ascending in prominence: %s'
+                            % (name, [round(x, 1) for x in cloud]))
+            funnel = [self._prom(pal[k], ground)
+                      for k in ('swirl', 'swirl2', 'swirl3')]
+            self.assertTrue(funnel[0] > funnel[1] > funnel[2],
+                            '%s: funnel ramp not descending in prominence: %s'
+                            % (name, [round(x, 1) for x in funnel]))
+            for step in (cloud, funnel):
+                for a, b in zip(step, step[1:]):
+                    self.assertGreater(abs(a - b), 20,
+                                       '%s: ramp step too small to see: %s'
+                                       % (name, [round(x, 1) for x in step]))
+
+    def test_nothing_vanishes_into_its_page(self):
+        for name, pal, ground in self._palettes():
+            for key, value in pal.items():
+                if value == 'transparent':      # the cyclone eye is a hole
+                    continue
+                self.assertGreater(
+                    self._prom(value, ground), 40,
+                    '%s: %s is too close to %s to see' % (name, key, ground))
 
     def test_dark_css_names_every_property(self):
         css = nwsicons.dark_css()

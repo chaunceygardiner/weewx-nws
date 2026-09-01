@@ -21,9 +21,16 @@ nws change history
   they did before.
 - Every colour in the drawn set is emitted as var(--wx-name, #default), so a
   skin can recolour any part of it and one that defines nothing renders the
-  shipped look.  A complete dark palette, chosen against a dark card and
-  checked at small sizes, ships as nwsicons.DARK with a dark_css() helper that
-  emits it as a paste-able rule; the Recipes page lists it in full.
+  shipped look.  A complete dark palette ships as nwsicons.DARK, with a
+  dark_css() helper that emits it as a paste-able rule; the Recipes page lists
+  it in full.  It is derived rather than hand-picked: it reproduces the light
+  palette's relative prominence structure on a dark ground, holding hue and
+  chroma so heat stays red and the sun stays gold.  The cloud ramp therefore
+  inverts -- on dark the front cloud is the darkest, because it is the least
+  prominent one in light -- which reads better at small sizes than what it
+  replaced.  Two tests assert the rules over BOTH palettes, stated in terms of
+  how far a colour stands from its page, so severe weather can never end up
+  quieter than an ordinary cloud again.
 - Fixed: the "overcast" symbol was a flat silhouette on a light page.  Its two
   cloud layers differed by 1.4 luma, because the back layer was drawn at 75%
   opacity rather than as a colour, and a translucent fill composites against

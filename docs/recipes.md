@@ -228,11 +228,11 @@ the icons follow your stylesheet:
 ```css
 @media (prefers-color-scheme: dark) {
   :root {
-    --wx-cloud:   #C8D0DC;
-    --wx-cloud-2: #97A3B5;
-    --wx-cloud-3: #6D7A8D;
-    --wx-moon:    #C9D2E0;
-    --wx-rain:    #5D9BD8;
+    --wx-cloud:   #525963;
+    --wx-cloud-2: #85909E;
+    --wx-cloud-3: #B0BCCB;
+    --wx-moon:    #A1AAB8;
+    --wx-rain:    #7FBFFF;
   }
 }
 ```
@@ -304,25 +304,25 @@ card and checked at small sizes, and `dark_css()` emits it as a rule:
 
 ```
 :root {
-  --wx-sun: #F2B705;
-  --wx-sunray: #E0A800;
-  --wx-moon: #C9D2E0;
-  --wx-cloud: #C8D0DC;
-  --wx-cloud-2: #97A3B5;
-  --wx-cloud-3: #6D7A8D;
-  --wx-rain: #5D9BD8;
-  --wx-snow: #A8D4F0;
-  --wx-sleet: #7FB0DE;
-  --wx-bolt: #E0A800;
-  --wx-fog: #A9B2C0;
-  --wx-wind: #93A0B2;
-  --wx-hot: #E05C4A;
-  --wx-cold: #5D9BD8;
-  --wx-dust: #C7A268;
-  --wx-smoke: #A9B2C0;
-  --wx-swirl: #93A0B2;
-  --wx-swirl-2: #6E7A8B;
-  --wx-swirl-3: #4C5666;
+  --wx-sun: #F2B704;
+  --wx-sunray: #E1A904;
+  --wx-moon: #A1AAB8;
+  --wx-cloud: #525963;
+  --wx-cloud-2: #85909E;
+  --wx-cloud-3: #B0BCCB;
+  --wx-rain: #7FBFFF;
+  --wx-snow: #659ECD;
+  --wx-sleet: #8DC4FE;
+  --wx-bolt: #E1A904;
+  --wx-fog: #A2AAB7;
+  --wx-wind: #C5D3E5;
+  --wx-hot: #FF7361;
+  --wx-cold: #7FBFFF;
+  --wx-dust: #CAA369;
+  --wx-smoke: #A2AAB7;
+  --wx-swirl: #C5D3E5;
+  --wx-swirl-2: #9DA8B5;
+  --wx-swirl-3: #7B838C;
   --wx-eye: transparent;
   --wx-op-band: .74;
   --wx-op-tube: .38;
@@ -330,9 +330,18 @@ card and checked at small sizes, and `dark_css()` emits it as a rule:
 ```
 
 Paste it into a `@media (prefers-color-scheme: dark)` block, or into your own
-`.theme-dark` class.  The blues and the moon are lifted hard on purpose: the default
-`#2F6EA8` rain is nearly invisible on a dark card, and both opacities are raised because a
-translucent fill composites toward the page and so reads weaker on a dark ground.
+`.theme-dark` class.
+
+It is derived rather than hand-picked.  Each colour keeps its hue and chroma — heat stays
+red, the sun stays gold — and only its lightness moves, chosen so that the palette
+reproduces the *relative* prominence the light set already has: how far each colour stands
+from the page it is drawn on, compared with the others.
+
+{: .important }
+The cloud ramp therefore **inverts**: on a dark ground `--wx-cloud` is the *darkest* step
+and `--wx-cloud-3` the lightest.  That is deliberate, not a transcription error.  In light
+mode the back cloud is the more prominent of the two, so on a dark ground it has to be the
+lighter one.  Keep the order as written; swapping it back flattens `bkn` and `ovc`.
 
 {: .note }
 `--wx-eye` needs no dark value.  A cyclone's eye is left unpainted, so whatever is behind
