@@ -99,17 +99,32 @@ def main() -> int:
     print('Rendering the sample skin to %s (kept for inspection).' % base_dir)
     html_files = render_scenarios(base_dir)
 
-    # One JVM run over all six pages; attribute the checker's messages (GNU
-    # format: "file:<path>":...) back to pages for the per-page report.
+    # The skin's stylesheet is checked TOO, and it has to be asked for
+    # separately: --also-check-css only reaches css embedded in the html, and
+    # the production check_weewx_html cron only globs *.html -- so an external
+    # stylesheet is otherwise never validated anywhere.
+    css_files = sorted(set(
+        os.path.join(os.path.dirname(f), 'css', 'nws.css') for f in html_files))
+    css_files = [f for f in css_files if os.path.isfile(f)]
+    if not css_files:
+        print('FAIL: the skin rendered no css/nws.css to validate.')
+        return 1
+
+    # One JVM run over every page; attribute the checker's messages (GNU
+    # format: "file:<path>":...) back to files for the per-file report.
     proc = subprocess.run(
         ['java', '-jar', options.vnu_jar, '--Werror', '--also-check-css'] + html_files,
         capture_output=True, text=True)
-    messages = proc.stdout + proc.stderr
+    css_proc = subprocess.run(
+        ['java', '-jar', options.vnu_jar, '--Werror', '--css'] + css_files,
+        capture_output=True, text=True)
+    messages = proc.stdout + proc.stderr + css_proc.stdout + css_proc.stderr
 
     results: List[Tuple[str, str, str]] = []
-    for html_file in html_files:
-        page = os.path.join(os.path.relpath(os.path.dirname(os.path.dirname(
-            os.path.dirname(html_file))), base_dir), os.path.basename(html_file))
+    for html_file in html_files + css_files:
+        # Relative to base_dir, so a css file under public_html/nws/css is
+        # named unambiguously rather than being folded onto a page's name.
+        page = os.path.relpath(html_file, base_dir)
         page_messages = [line for line in messages.splitlines() if html_file in line]
         if page_messages:
             results.append((page, 'FAIL', page_messages[0]))
@@ -121,13 +136,14 @@ def main() -> int:
     for name, status, detail in results:
         print('%-*s  %-4s  %s' % (width, name, status, detail))
     print()
-    if proc.returncode != 0 and fails == 0:
-        # Non-zero rc with no messages attributed to a page (e.g. a jar failure).
-        print('FAIL: vnu.jar exited %d:' % proc.returncode)
+    rc = proc.returncode or css_proc.returncode
+    if rc != 0 and fails == 0:
+        # Non-zero rc with no messages attributed to a file (e.g. a jar failure).
+        print('FAIL: vnu.jar exited %d:' % rc)
         print(messages.strip())
         return 1
     print('%d PASS, %d FAIL' % (len(results) - fails, fails))
-    return 1 if fails or proc.returncode != 0 else 0
+    return 1 if fails or rc != 0 else 0
 
 if __name__ == '__main__':
     sys.exit(main())

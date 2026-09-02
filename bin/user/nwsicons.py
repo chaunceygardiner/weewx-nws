@@ -20,7 +20,7 @@
 NWS gives each forecast period an `icon` URL naming one of 34 conditions
 (https://api.weather.gov/icons is the index) and serves a photograph for it.
 This module draws those 34 instead, day and night, as one <symbol> per icon on
-a shared 32x32 grid: crisp at any size, recolourable by the consuming skin,
+a shared 32x32 grid: crisp at any size, recolorable by the consuming skin,
 and free of the "X then Y" split composites the raster set produces, which read
 as rendering glitches at the size a forecast table uses.
 
@@ -39,18 +39,18 @@ and stylesheets, so none may change without a major version:
                  stands in when NWS itself has no icon
   * css custom properties  the --wx-* names in PALETTE below
 
-COLOUR.  Every fill and every opacity is emitted as var(--wx-NAME, default),
+COLOR.  Every fill and every opacity is emitted as var(--wx-NAME, default),
 so the defaults ARE the finished look: a skin that defines nothing gets the
 shipped icons, and a skin that wants a dark theme redefines what it cares
 about -- or pastes DARK below, which is a complete set chosen for a dark
 ground rather than eighteen guesses.  (Verified in Chromium and Firefox:
 var() resolves in SVG presentation attributes, including opacity, and a custom
 property set on the host <svg> inherits through <use> into the shadow tree, so
-one page can carry differently-coloured instances.)
+one page can carry differently-colored instances.)
 
 CONDITIONS WE HAVE NO SYMBOL FOR.  Coverage is complete as of this release --
 the drawn set, the names NWS publishes and the descriptions all match exactly,
-and a test holds them together.  So an unrecognised name means NWS has ADDED a
+and a test holds them together.  So an unrecognized name means NWS has ADDED a
 condition since, which is worth hearing about: it is logged once per weewxd
 run, and the period falls back to NWS's own hosted image so the reader still
 sees the right weather.  The fallback has to be the remote URL; a condition
@@ -76,15 +76,15 @@ log = logging.getLogger(__name__)
 
 # The palette, as (public css custom property, built-in default).  Every fill
 # is emitted as var(--wx-NAME, #default), so a skin that defines nothing gets
-# these exact colours and a skin that defines one gets its own.  The property
+# these exact colors and a skin that defines one gets its own.  The property
 # names are a contract; see the module docstring.
 PALETTE = {
     'sun':    ('--wx-sun',     '#F2B705'),
     'sunray': ('--wx-sunray',  '#E0A800'),
     'moon':   ('--wx-moon',    '#8A93A0'),
 
-    # THE CLOUD RAMP -- three steps of one ramp, not three separate colours.
-    # Two cloud shapes in the same grey merge into one blob, so every stacked
+    # THE CLOUD RAMP -- three steps of one ramp, not three separate colors.
+    # Two cloud shapes in the same gray merge into one blob, so every stacked
     # symbol paints its back cloud a step along from its front cloud; that gap
     # is the whole reason bkn and ovc are told apart at 34px.  The steps are
     # NOT named for depth (step 2 is the BACK cloud in bkn and the FRONT cloud
@@ -107,20 +107,20 @@ PALETTE = {
     'smoke':  ('--wx-smoke',   '#8B93A0'),
 
     # The tornado funnel is a ramp too, lightening toward the ground.  Its
-    # steps used to be one colour at three opacities; see TONE IS COLOUR below.
+    # steps used to be one color at three opacities; see TONE IS COLOR below.
     'swirl':  ('--wx-swirl',   '#6E7B8B'),
     'swirl2': ('--wx-swirl-2', '#8B95A2'),
     'swirl3': ('--wx-swirl-3', '#A5ADB7'),
 
-    # A cyclone's eye.  The centre is simply not painted, so the page -- whatever
-    # colour it is -- shows through, and the eye is right on every background
+    # A cyclone's eye.  The center is simply not painted, so the page -- whatever
+    # color it is -- shows through, and the eye is right on every background
     # without anyone setting anything.  Set this only to fill the eye instead.
     'eye':    ('--wx-eye',     'transparent'),
 }
 
-# TONE IS COLOUR, TRANSLUCENCY IS OPACITY.
+# TONE IS COLOR, TRANSLUCENCY IS OPACITY.
 #
-# A fill at partial opacity does not composite against a colour, it composites
+# A fill at partial opacity does not composite against a color, it composites
 # against THE PAGE, which no token can know.  Measured on the default palette:
 # ovc's back cloud (step 3 at .75) came out 1.4 luma LIGHTER than its front
 # cloud on white -- an invisible depth cue -- and 56 luma DARKER on a #111834
@@ -151,7 +151,7 @@ OPACITY = {
 # follows from the objective: in light the back cloud is the MORE prominent of
 # the two (cloudd 2.32x cloud), so on a dark ground it must be the lighter one.
 # Preserving absolute lightness order was never a decision anyone made; it was
-# an artefact of starting from the light palette and perturbing it.  Stated in
+# an artifact of starting from the light palette and perturbing it.  Stated in
 # PROMINENCE terms the two palettes are identical in shape -- cloud ramp
 # ascending, funnel descending -- which is how the tests assert both at once.
 # Measured at 34px in Chromium and Firefox the inverted ramp is MORE legible
@@ -251,7 +251,7 @@ def moon(cx=16.0, cy=13.0, r=6.6):
 
 
 def cloud(x=0.0, y=0.0, s=1.0, fill=None):
-    # No opacity parameter on purpose.  A cloud's tone is a step on the colour
+    # No opacity parameter on purpose.  A cloud's tone is a step on the color
     # ramp (see PALETTE); drawing one at partial opacity composites it against
     # the page instead, which is what made ovc invisible on white and reversed
     # the depth cue on a dark card.
@@ -306,33 +306,33 @@ def cyclone(heavy=True):
     """Two thick spiral bands curling round a hollow eye.
 
     What "reads as an S" meant: the first attempt drew two thin OPEN arcs in
-    one colour with a solid dot between them.  At 34px two 2.4-wide strokes
-    of the same colour, meeting head to tail, merge into one continuous
+    one color with a solid dot between them.  At 34px two 2.4-wide strokes
+    of the same color, meeting head to tail, merge into one continuous
     sinuous line -- there is nothing to say they are two separate masses --
-    and a filled centre dot reads as a full stop sitting on that line.  The
+    and a filled center dot reads as a full stop sitting on that line.  The
     eye is the whole symbol and it had been drawn as ink rather than as a
     hole.
 
     So: bands with MASS, tapering from thick at the rim to a point at the
-    centre (a taper is what says rotation), 180-degree rotational symmetry,
+    center (a taper is what says rotation), 180-degree rotational symmetry,
     and an eye you can see through.  Built numerically -- an outer edge swept
     at a constant radius and an inner edge swept back while its radius closes
     to meet it -- because hand-written cubics at this size are guesswork.
 
     THE EYE IS A HOLE, NOT PAINT.  It used to be a white disc drawn at the
-    centre.  Measure the geometry and that disc was covering NOTHING: the
+    center.  Measure the geometry and that disc was covering NOTHING: the
     bands sweep between radius r0 (5.4) and R (11.6) and never come within
-    3.6 of the centre, so the disc was painting white over bare background --
+    3.6 of the center, so the disc was painting white over bare background --
     invisible on a white page, a white blob on a tinted card or any dark
     theme, which is where the bug lived.  What actually draws the eye is the
-    stroked ring below.  So the centre is simply left unpainted and whatever
+    stroked ring below.  So the center is simply left unpainted and whatever
     is behind the icon shows through, correct on every background with
     nothing for a consumer to set.  --wx-eye survives as an escape hatch for
     someone who wants it filled after all, and defaults to transparent.
 
     (Cutting it with fill-rule="evenodd" was tried and is wrong for the same
-    reason: with no band ink at the centre to subtract from, an eye subpath
-    ADDS a filled disc.  Verified by sampling the centre pixel.)
+    reason: with no band ink at the center to subtract from, an eye subpath
+    ADDS a filled disc.  Verified by sampling the center pixel.)
     """
     col = C['swirl']
     cx = cy = 16.0
@@ -502,7 +502,7 @@ def sprite():
 UNKNOWN = set()
 
 # NWS's own "I have no icon for this period" name.  api.weather.gov answers 400
-# for the URL, so it is the one unrecognised name we must NOT hot-link.
+# for the URL, so it is the one unrecognized name we must NOT hot-link.
 NWS_HAS_NO_ICON = 'unknown'
 
 
@@ -513,7 +513,7 @@ def icon_name(icon_url):
     suffix, and a "sct/fog" two-condition composite -- the FIRST condition
     wins, because the period's own text already says "... then ...".
 
-    An unrecognised condition is reported as such rather than quietly
+    An unrecognized condition is reported as such rather than quietly
     becoming 'skc'.  Silently substituting fair weather for a name we do not
     know is the worst of the options: the page looks right, so nobody ever
     finds out an icon is missing.
@@ -524,7 +524,7 @@ def icon_name(icon_url):
     $nwsforecast.icon($alert.iconUrl) would otherwise put a sun over a tornado
     warning.  Nothing is logged for it: a blank URL on an alert is normal, and
     a line per alert would be noise.  NWS's own 'unknown' sentinel, which IS a
-    surprise, is logged where it is recognised below.
+    surprise, is logged where it is recognized below.
     """
     if not icon_url:
         return NWS_HAS_NO_ICON, False, False

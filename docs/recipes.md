@@ -115,47 +115,59 @@ The cheapest way to put "2 Active Alerts" at the top of a page that is not the a
 
 ## Alerts
 
-An alerts page has to handle four things: a missing `nwsHeadline`, multi-paragraph text,
-fields that can be `None` on a malformed alert, and the common case of no alerts at all.
+An alerts page has to handle four things: the order alerts should be read in, a missing
+`nwsHeadline`, multi-paragraph text that is not markup, and the common case of no alerts at
+all.  Three of the four are tags — see
+[Alert semantics](tags.md#alert-semantics) — so the template places rather than parses.
 
 ```
-#set $alert_count = 0
-#for $alert in $nwsforecast.alerts()
-#set $alert_count += 1
-  ## nwsHeadline is the banner NWS writes, but it is not always there.
+#set $alerts = $nwsforecast.ordered($nwsforecast.alerts())
+#for $alert in $alerts
+  ## nwsHeadline is the banner NWS writes, but it is not always there;
+  ## nice_caps keeps its acronyms upright while title-casing the rest.
   #if $alert.nwsHeadline is not None
-    #set $headline = $alert.nwsHeadline
+    <h2>$nwsforecast.nice_caps($alert.nwsHeadline)</h2>
   #else
-    #set $headline = $alert.headline
+    <h2>$alert.headline</h2>
   #end if
-  <h2>$headline</h2>
   <p>$alert.event, issued $alert.effective</p>
   <p>Severity: $alert.severity · Certainty: $alert.certainty · Urgency: $alert.urgency</p>
 
-  ## description and instructions are plain text with newlines in them.
-  #try
-    #set $desc = $alert.description.replace('\n\n', '<br/><br/>')
-    #set $desc = $desc.replace('\n', ' ')
-  #except
-    ## A malformed alert can leave description as None.
-    #set $desc = $alert.description
-  #end try
-  <p>$desc</p>
+  ## The description as real structure: labeled sections, paragraphs, bullets.
+  #for $block in $nwsforecast.parse_description($alert.description)
+    #if $block.label
+      <h3>$block.label</h3>
+    #end if
+    #for $p in $block.paragraphs
+      <p>$p</p>
+    #end for
+    #if $block.bullets
+      <ul>
+      #for $b in $block.bullets
+        <li>$b</li>
+      #end for
+      </ul>
+    #end if
+  #end for
 
   #if $alert.instructions is not None
-  <p><em>Instructions</em><br>$alert.instructions</p>
+  <p><em>What to do</em><br>$alert.instructions</p>
   #end if
 
   <p>In effect $alert.onset to $alert.ends.  Issued by $alert.senderName.</p>
 #end for
-#if $alert_count == 0
+#if not $alerts
   <p><em>No active National Weather Service alerts for this location.</em></p>
 #end if
 ```
 
+`ordered()` puts the alerts in effect first and then the most serious first, which is the
+order a reader needs and not the order the feed arrives in.  `parse_description()` takes
+`None` without raising, so a malformed alert costs you a section rather than the page.
+
 {: .important }
 Do not iterate `alerts()` twice to count them first — each call re-reads the database.
-Count as you loop, as above, or call `alert_count()`.
+Bind it once, as above, or call `alert_count()`.
 
 ## Bigger or smaller icons
 
@@ -185,7 +197,7 @@ icons now.)
 ## Drawn icons
 
 Since 5.2 the extension draws all 34 NWS conditions itself, day and night, as SVG.  Drawn
-icons stay crisp at any size, take their colours from your stylesheet, and avoid the split
+icons stay crisp at any size, take their colors from your stylesheet, and avoid the split
 "X then Y" pictures NWS produces for a two-condition period, which read as glitches at the
 size a forecast table uses.
 
@@ -201,7 +213,7 @@ $nwsforecast.icon_sprite
 #end for
 ```
 
-`icon()` returns a complete element, so size and colour it from your own stylesheet:
+`icon()` returns a complete element, so size and color it from your own stylesheet:
 
 ```css
 .wxi { width: 34px; height: 34px; }
@@ -219,9 +231,9 @@ The sprite must appear somewhere in the page, but it need not come first — an 
 resolves against a symbol defined anywhere in the document, so the end of `<body>` works
 just as well as the top.
 
-### Colouring them
+### Coloring them
 
-Every fill is emitted as `var(--wx-name, #default)`, so the built-in colours are simply
+Every fill is emitted as `var(--wx-name, #default)`, so the built-in colors are simply
 the defaults.  Define nothing and you get exactly the icons shown above; define one and
 the icons follow your stylesheet:
 
@@ -240,7 +252,7 @@ the icons follow your stylesheet:
 You do not have to choose those values yourself — a complete, checked dark palette ships
 with the extension.  See [A dark palette](#a-dark-palette) below.
 
-The twenty colour properties, and what each paints by default:
+The twenty color properties, and what each paints by default:
 
 | Property | Default | Paints |
 |---|---|---|
@@ -275,7 +287,7 @@ And two opacities, for the places where translucency — not tone — is the int
 ### About the ramps
 
 `--wx-cloud`, `-2` and `-3` are **three steps of one ramp**, not three different
-clouds.  Two overlapping cloud shapes in the same grey merge into one blob, so a stacked
+clouds.  Two overlapping cloud shapes in the same gray merge into one blob, so a stacked
 symbol paints its back cloud a step along from its front; that gap is the entire reason
 `bkn` and `ovc` are distinguishable at 34 px.
 
@@ -293,7 +305,7 @@ to one value is the one change that reliably breaks these icons: `few`, `sct`, `
 size.
 
 Because a custom property set on the `<svg>` itself inherits through `<use>`, one page can
-carry differently-coloured instances — set the properties on a container to theme just
+carry differently-colored instances — set the properties on a container to theme just
 that part of the page.
 
 ### A dark palette
@@ -332,9 +344,9 @@ card and checked at small sizes, and `dark_css()` emits it as a rule:
 Paste it into a `@media (prefers-color-scheme: dark)` block, or into your own
 `.theme-dark` class.
 
-It is derived rather than hand-picked.  Each colour keeps its hue and chroma — heat stays
+It is derived rather than hand-picked.  Each color keeps its hue and chroma — heat stays
 red, the sun stays gold — and only its lightness moves, chosen so that the palette
-reproduces the *relative* prominence the light set already has: how far each colour stands
+reproduces the *relative* prominence the light set already has: how far each color stands
 from the page it is drawn on, compared with the others.
 
 {: .important }
@@ -379,8 +391,8 @@ URL it returns the **first** condition — the period's own `shortForecast` alre
 
 ### The cyclone's eye
 
-`hurricane` and `tropical_storm` are drawn as two spiral bands around a hollow centre.  The
-centre is simply not painted, so the page shows through it, and the eye is right on a white
+`hurricane` and `tropical_storm` are drawn as two spiral bands around a hollow center.  The
+center is simply not painted, so the page shows through it, and the eye is right on a white
 page, a tinted card or a dark theme without your setting anything.
 
 (Through an early 5.2 draft it was a white disc, which was invisible on white and a white

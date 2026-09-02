@@ -26,7 +26,7 @@ At startup you should see the version, the binding, and — unless the URLs are 
 the gridpoint lookup:
 
 ```
-INFO user.nws: Service version is 5.1.
+INFO user.nws: Service version is 6.0.
 INFO user.nws: Using binding 'nws_binding' to database 'nws.sdb'
 INFO user.nws: request_urls: twelveHourForecastUrl: https://api.weather.gov/gridpoints/MTR/92,88/forecast
 ```
@@ -138,6 +138,38 @@ It should not, and mostly it does not: a download that finds no alerts clears th
 But an alert whose message expired is deliberately kept for up to a day, because NWS
 regularly lets one expire before issuing its replacement.  It goes for good once its `ends`
 time has passed.  See [How it works](how-it-works.md#alerts-come-and-go).
+
+## The pages look unstyled, or the day tabs do nothing
+
+The sample report's stylesheet and script are copied into `HTML_ROOT` by the skin's
+`CopyGenerator`, separately from the pages themselves.  If they did not arrive, the pages
+render as plain unstyled text, and the hourly page shows every day at once because nothing
+is binding the tabs.
+
+Check that both are there, next to the generated pages:
+
+```
+ls <HTML_ROOT>/nws/css/nws.css <HTML_ROOT>/nws/scripts/nws.js
+```
+
+If they are missing, the usual causes are a `skin.conf` whose `generator_list` lost
+`weewx.reportengine.CopyGenerator`, or a permissions problem on `HTML_ROOT` that the WeeWX
+log will have complained about.  Both files are copied fresh on every report cycle, so a
+restart is enough once the cause is fixed.
+
+{: .note }
+With javascript blocked or unavailable the pages are still readable: the first paint is
+correct, the hourly page shows its first day, and only the tab switching and the chart
+crosshair are lost.
+
+## Dark mode does not come on
+
+The pages follow `prefers-color-scheme`, which is the appearance setting on the *reader's*
+device — not a setting in `weewx.conf` and not something the station chooses.  There is
+deliberately no toggle on the page.  If a page stays light, the browser is reporting a
+light preference; set the device to dark, or to an automatic mode that switches at sunset,
+and reload.  If it stays light with the device set to dark, the stylesheet is probably the
+one missing above.
 
 ## The wind reads `$hour.windSpeed2` on the page
 

@@ -20,10 +20,14 @@ your station already reports — forecasts every thirty minutes, alerts every te
 what it gets in a small database of its own (`nws.sdb`).  Reports read it through the
 `$nwsforecast` tags: `$nwsforecast.twelve_hour_forecasts()`,
 `$nwsforecast.one_hour_forecasts()`, `$nwsforecast.alerts()` and `$nwsforecast.alert_count()`.
+Further tags group those periods by calendar day, order alerts the way a reader needs them,
+and turn a CAP description into structure — the parts of NWS's own semantics that are easy
+to get subtly wrong.
 
 Installing the extension also installs a **sample report** — three pages of forecasts and
-alerts, with weather icons, published to `<HTML_ROOT>/nws/`.  Forecasts appear on your site
-at the first report cycle after the install, before you write a line of template code.
+alerts, with drawn weather icons, charts, and light and dark themes, published to
+`<HTML_ROOT>/nws/`.  Forecasts appear on your site at the first report cycle after the
+install, before you write a line of template code.
 
 ![The sample report's seven-day page](images/sample-report-days.png)
 
@@ -37,7 +41,8 @@ at the first report cycle after the install, before you write a line of template
   gridpoint URLs to fetch.  The one option worth editing is `User-Agent`, which NWS's API
   rules ask you to set — see [Configuration](configuration.md).
 - **A sample report that works out of the box.**  A seven-day page, an hourly page and an
-  alerts page, with drawn weather icons.  Use it as it stands, or read it as worked
+  alerts page — responsive, with drawn weather icons, charts, and light and dark themes
+  that follow the reader's own setting.  Use it as it stands, or read it as worked
   examples for your own skin.  See [The sample report](sample-report.md).
 - **Alerts, handled properly.**  Test, exercise, system and draft alerts are ignored;
   superseded alerts are dropped; expired alerts are deleted; and when NWS reports no alerts

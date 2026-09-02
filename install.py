@@ -114,7 +114,7 @@ def loader():
 class NWSInstaller(ExtensionInstaller):
     def __init__(self):
         super(NWSInstaller, self).__init__(
-            version="5.2",
+            version="6.0",
             name='nws',
             description='Fetch NWS Hourly Forecast.',
             author="John A Kline",
@@ -122,14 +122,16 @@ class NWSInstaller(ExtensionInstaller):
             data_services='user.nws.NWS',
             config=nws_dict,
             files=[
-                ('bin/user', ['bin/user/nws.py', 'bin/user/nwsicons.py']),
+                ('bin/user', ['bin/user/nws.py', 'bin/user/nwsicons.py',
+                              'bin/user/nwsskin.py']),
                 ('skins/nws', [
                     'skins/nws/alerts.html.tmpl',
                     'skins/nws/hours.html.tmpl',
                     'skins/nws/index.html.tmpl',
                     'skins/nws/menubar.inc',
                     'skins/nws/skin.conf',
-                    'skins/nws/style.inc',
                 ]),
+                ('skins/nws/css', ['skins/nws/css/nws.css']),
+                ('skins/nws/scripts', ['skins/nws/scripts/nws.js']),
             ]
         )

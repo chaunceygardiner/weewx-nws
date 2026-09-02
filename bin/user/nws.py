@@ -24,6 +24,7 @@ import datetime
 import json
 import logging
 import os.path
+import re
 import requests
 import sys
 import threading
@@ -72,7 +73,7 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "5.2"
+WEEWX_NWS_VERSION = "6.0"
 
 def reraise_if_terminate(e: BaseException) -> None:
     """weewxd stops by raising Terminate from its SIGTERM signal handler --
@@ -1631,6 +1632,73 @@ class NWSPoller:
         else:
             return None
 
+# ---------------------------------------------------------------------------
+# The vocabulary the $nwsforecast reporting tags below are built on.  These
+# are NWS and CAP semantics -- how the feed names its periods, how its alert
+# products are ranked and punctuated -- rather than any one skin's taste, so
+# they live here where every skin gets the same answer.
+
+# NWS's own severity ranking, most serious first.  An unrecognized value
+# sorts last rather than raising: CAP permits values we have not seen.
+ALERT_SEVERITY_RANK: Dict[str, int] = {
+    'Extreme': 0, 'Severe': 1, 'Moderate': 2, 'Minor': 3, 'Unknown': 4}
+
+# The words nice_caps() must not touch.  NWS shouts its headlines, and
+# str.title() over shouted text gives "11 Am Pdt" and "Nws".
+ALERT_UPRIGHT_WORDS = frozenset([
+    'AM', 'PM', 'PDT', 'PST', 'EDT', 'EST', 'CDT', 'CST', 'MDT', 'MST',
+    'AKDT', 'AKST', 'HST', 'UTC', 'NWS', 'MPH', 'AQI', 'UV', 'II', 'III',
+    'N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW', 'NNE', 'NNW', 'SSE',
+    'SSW', 'ENE', 'ESE', 'WNW', 'WSW'])
+
+# A CAP description's section headers, which arrive in three shapes: the
+# common "* WHAT...", the colon form "* HEADER: text", and the tropical
+# products' "* LOCATIONS AFFECTED" alone on its line with the content
+# following as "- " sub-bullets.  Measured over an unfiltered national
+# snapshot of api.weather.gov/alerts/active: 403 of the first, 32 of the
+# second, and 874 sub-bullet lines.  Parsing is BY LINE and takes all three.
+#
+# The label set is NOT fixed -- the live feed also produces TIMING, WINDS,
+# RELATIVE HUMIDITY, AFFECTED AREA, CHANGES and OUTFLOW WINDS -- so nothing
+# here enumerates them.
+ALERT_STAR_RE = re.compile(
+    r"^\s*\*\s*([A-Z][A-Z0-9 ./&'-]{1,40}?)(?:\.\.\.|:\s+|\s+-\s+|\s*$)(.*)$")
+ALERT_SUB_RE = re.compile(r'^\s*-\s+(\S.*)$')
+
+# The same label shape WITHOUT the leading asterisk.  The severe-thunderstorm
+# and flash-flood products write HAZARD..., SOURCE... and IMPACT... bare, and
+# they are the three most useful lines in the alert: measured over an
+# unfiltered national snapshot, 34 of 371 active alerts carry them, 102 labels
+# in all, and no other bare label occurs.
+#
+# CONTENT AFTER THE ELLIPSIS IS REQUIRED, and that guard is the whole
+# difference between this working and mangling the feed.  A starred label may
+# be empty -- "* LOCATIONS AFFECTED" on its own line is legitimate, because
+# the asterisk is itself the signal.  Bare, an empty tail is far more likely
+# to be the END OF A WRAPPED SENTENCE: the same snapshot has a Red Flag
+# Warning whose headline wraps onto a line reading "NEVADA...", which without
+# this guard becomes a section heading in the middle of a sentence.  With it,
+# all 102 real labels are kept and both false positives go.
+ALERT_BARE_RE = re.compile(r"^([A-Z][A-Z0-9 ./&'-]{1,40}?)\.\.\.(\S.*)$")
+
+# A starred line whose label is NOT a shouted header.  These are bullets, not
+# sections: the warning products list their facts this way --
+#
+#     * Severe Thunderstorm Warning for...
+#     * Until 730 PM EDT.
+#     * At 651 PM EDT, a severe thunderstorm was located over Chatham...
+#
+# Before this they fell through to prose and the asterisk reached the page as
+# raw punctuation.  Measured over an unfiltered national snapshot of 388
+# active alerts, 38 carry such lines and 156 lines in all, led by Severe
+# Thunderstorm Warning and Flash Flood Warning -- the most common warnings in
+# the country, so this is among the most visible things on an alerts page.
+#
+# ALERT_STAR_RE is tried FIRST and still wins: "* WHAT...", "* CHANGES...None."
+# and "* LOCATIONS AFFECTED" are headers because their label is all-caps.  The
+# case split is the feed's own, not one we impose.
+ALERT_STARRED_BULLET_RE = re.compile(r'^\s*\*\s+(\S.*)$')
+
 class NWSForecastVariables(SearchList):
     def __init__(self, generator):
         SearchList.__init__(self, generator)
@@ -1708,6 +1776,317 @@ class NWSForecastVariables(SearchList):
 
     def alert_count(self) -> int:
         return len(self.getLatestForecastRows(ForecastType.ALERTS))
+
+    # ---- shaping the forecast feed for a report -------------------------
+    #
+    # These take the ValueHelper-wrapped records THIS class returns --
+    # one_hour_forecasts(), twelve_hour_forecasts() -- not raw database rows.
+    # They index p['startTime'].raw and p['outTemp'].raw, so a caller handing
+    # them rows straight out of the database gets an AttributeError.
+
+    @staticmethod
+    def days(periods: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Twelve-hour periods grouped by the CALENDAR DAY each one starts in.
+
+        Not by walking day/night pairs: at 05:35 the feed leads with
+        "Overnight" (01:00-06:00) followed by "Tuesday" (06:00-18:00), and a
+        pair-walk gives Overnight a row of its own -- so one date appears on
+        two consecutive rows and the leading one gets labeled "Tonight" at
+        dawn.  Grouping by start date is also how NWS itself reads: "Tuesday
+        Night" starts on Tuesday and belongs to Tuesday, though it ends on
+        Wednesday.
+
+        No slicing happens here.  How many rows to draw is a judgment about
+        the page, not a fact about the feed, so the caller takes [0:7] or
+        whatever suits it.  Note the last date the feed reaches often holds
+        only a night, with no high to show -- a caller that draws every date
+        it is given should expect `day` and `hi` to be None on that row.
+        """
+        by_date: Dict[Any, List[Dict[str, Any]]] = {}
+        for p in periods:
+            when = p['startTime'].raw
+            # Skipped, not grouped under a guessed date, and skipped for the
+            # same reason hour_days() and points() skip: a period with no
+            # start cannot be placed on a day at all, and this runs from a
+            # Cheetah #set, which #errorCatcher Echo does NOT catch -- so
+            # letting fromtimestamp(None) raise would take the whole page
+            # down rather than losing one row.
+            if when is None:
+                continue
+            by_date.setdefault(datetime.datetime.fromtimestamp(when).date(), []).append(p)
+        today = datetime.datetime.now().date()
+        out: List[Dict[str, Any]] = []
+        for d in sorted(by_date):
+            group = sorted(by_date[d], key=lambda p: p['startTime'].raw)
+            day = None
+            nights = []
+            for p in group:
+                if p['isDaytime']:
+                    if day is None:
+                        day = p
+                else:
+                    nights.append(p)
+            highs = [day['outTemp'].raw] if day is not None else []
+            # Filtered for the same reason points() and week_range() filter:
+            # one absent temperature makes min() raise, and a report tag
+            # called from a Cheetah #set directive raises THROUGH
+            # #errorCatcher Echo -- the page would not render at all.
+            lows = [p['outTemp'].raw for p in nights if p['outTemp'].raw is not None]
+            out.append({
+                'date': d,
+                'label': 'Today' if d == today else d.strftime('%A'),
+                'datestr': d.strftime('%b %-d'),
+                'group': group,
+                'day': day,
+                'nights': nights,
+                'hi': highs[0] if highs else None,
+                'lo': min(lows) if lows else None,
+            })
+        return out
+
+    @staticmethod
+    def hour_days(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """One-hour records grouped by the calendar day each hour starts in.
+
+        Calendar days, not a rolling 24-hour window, for the same reason
+        days() groups by date: a window puts one date under two headings.
+
+        Grouping only -- the plain numbers a chart needs are points(), called
+        separately on a day's `rows`.  Chart geometry does not belong in a
+        grouping function.
+        """
+        by_date: Dict[Any, List[Dict[str, Any]]] = {}
+        for r in records:
+            when = r['startTime'].raw
+            if when is None:
+                continue
+            by_date.setdefault(
+                datetime.datetime.fromtimestamp(when).date(), []).append(r)
+        today = datetime.datetime.now().date()
+        out: List[Dict[str, Any]] = []
+        for d in sorted(by_date):
+            rows = sorted(by_date[d], key=lambda r: r['startTime'].raw)
+            out.append({
+                'date': d,
+                'key': d.strftime('%Y-%m-%d'),
+                'label': 'Today' if d == today else d.strftime('%a'),
+                'datestr': d.strftime('%b %-d'),
+                'rows': rows,
+            })
+        return out
+
+    @staticmethod
+    def points(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Hourly records as the plain numbers a chart does arithmetic on.
+
+        Unwrapping the ValueHelpers ONCE here keeps `.raw` out of templates
+        and gives chart code one shape to expect.  An hour with no time or no
+        temperature cannot be plotted at all, so it is DROPPED rather than
+        left to break min()/max(); dew point and chance of rain are allowed
+        to be absent and every consumer must guard them.
+        """
+        out: List[Dict[str, Any]] = []
+        for r in records:
+            when = r['startTime'].raw
+            temp = r['outTemp'].raw
+            if when is None or temp is None:
+                continue
+            out.append({
+                'startTime': int(when),
+                'outTemp': temp,
+                'dewpoint': r['dewpoint'].raw,
+                'pop': r['pop'].raw,
+                'isDaytime': bool(r['isDaytime']),
+            })
+        return out
+
+    @staticmethod
+    def week_range(days: List[Dict[str, Any]]) -> Tuple[float, float]:
+        """(min, max) temperature across every period in the given days(),
+        so each day's bar can be positioned against one shared scale.
+
+        Hands back (0.0, 1.0) when there is nothing to measure.  That is a
+        placeholder, not a range: a caller must not caption it as one.
+        """
+        vals = [p['outTemp'].raw for d in days for p in d['group']
+                if p['outTemp'].raw is not None]
+        if not vals:
+            return 0.0, 1.0
+        return min(vals), max(vals)
+
+    @staticmethod
+    def line_label(period: Dict[str, Any]) -> str:
+        """NWS's own period name, kept only where it says something the row
+        does not.  On the Tuesday row "Tuesday Night" is just "Night";
+        "Overnight" is not, so it stays."""
+        if period['isDaytime']:
+            return 'Day'
+        name = period['name'] or ''
+        if name.endswith('Night') or name == 'Tonight':
+            return 'Night'
+        return name or 'Night'
+
+    # ---- alert semantics ------------------------------------------------
+
+    @staticmethod
+    def nice_caps(text: Optional[str]) -> str:
+        """Title case that survives NWS's acronyms.  NWS shouts its
+        headlines, and str.title() over shouted text gives "11 Am Pdt"."""
+        return ' '.join(
+            w if w.strip(".,;:()").upper() in ALERT_UPRIGHT_WORDS else w.title()
+            for w in (text or '').split())
+
+    @classmethod
+    def parse_description(cls, desc: Optional[str]) -> List[Dict[str, Any]]:
+        """A CAP description as [{'label', 'paragraphs', 'bullets'}, ...]; an
+        empty label is unlabeled prose, which is what three quarters of real
+        alerts are entirely.
+
+        Dicts rather than a 3-tuple deliberately: this is a public tag, and a
+        fixed-width tuple could never gain a field without breaking every
+        caller.  The live feed keeps producing shapes nobody predicted -- the
+        three separator forms, the tropical products' sub-bullets -- so three
+        fields is not safely the final answer.
+
+        A starred line is a HEADER when its label is shouted ("* WHAT...",
+        "* LOCATIONS AFFECTED") and a BULLET otherwise ("* Until 730 PM EDT.").
+        That split is the feed's own convention rather than one imposed here.
+
+        In this feed a single newline is ALWAYS teletype soft wrapping and a
+        blank line is ALWAYS a paragraph break, so text is always reflowed;
+        the only judgment left is the measure, which is a stylesheet's job.
+        """
+        if not desc:
+            return []
+        blocks: List[List[Any]] = []      # each: [label, [para, ...], [bullet, ...]]
+
+        def cur() -> List[Any]:
+            if not blocks:
+                blocks.append(['', [], []])
+            return blocks[-1]
+
+        mode = 'para'
+        for raw in desc.split('\n'):
+            line = raw.rstrip()
+            if not line.strip():
+                mode = 'break'
+                continue
+            m = ALERT_STAR_RE.match(line)
+            if m:
+                head = m.group(2).strip()
+                blocks.append([cls.nice_caps(m.group(1).strip()),
+                               [head] if head else [], []])
+                mode = 'para'
+                continue
+            m = ALERT_BARE_RE.match(line)
+            if m:
+                blocks.append([cls.nice_caps(m.group(1).strip()),
+                               [m.group(2).strip()], []])
+                mode = 'para'
+                continue
+            m = ALERT_SUB_RE.match(line) or ALERT_STARRED_BULLET_RE.match(line)
+            if m:
+                cur()[2].append(m.group(1).strip())
+                mode = 'bullet'
+                continue
+            block = cur()
+            if mode == 'bullet' and block[2]:
+                block[2][-1] += ' ' + line.strip()
+            elif mode == 'break' or not block[1]:
+                block[1].append(line.strip())
+                mode = 'para'
+            else:
+                block[1][-1] += ' ' + line.strip()
+
+        def unbanner(text: str) -> str:
+            """The tropical statements banner a line with double asterisks --
+            "**Tropical Storm Edouard Made Landfall**" -- and the banner can
+            wrap, so the closing pair lands on the next source line and only
+            meets the opening one after reflow.  Stripped here, once the
+            paragraph is whole, rather than per line where it is invisible."""
+            if len(text) > 4 and text.startswith('**') and text.endswith('**'):
+                return text[2:-2].strip()
+            return text
+
+        out: List[Dict[str, Any]] = []
+        for label, paras, bullets in blocks:
+            paras = [unbanner(' '.join(p.split())) for p in paras if p.strip()]
+            bullets = [' '.join(b.split()) for b in bullets if b.strip()]
+            if paras or bullets:
+                out.append({'label': label, 'paragraphs': paras, 'bullets': bullets})
+        return out
+
+    @staticmethod
+    def alert_window(alert: Dict[str, Any]) -> Tuple[Optional[float], Optional[float], bool]:
+        """(onset, finish, open_ended) in epoch seconds.
+
+        This extension never leaves endTime empty: where NWS gave no `ends`
+        it stores `expires`, so the two being EQUAL is what an open-ended
+        alert looks like by the time a skin sees it.  One alert in ten has no
+        end at all, so a caller drawing a progress bar must not divide by a
+        span that does not exist.
+        """
+        onset = alert['onset'].raw
+        expires = alert['expires'].raw
+        ends = alert['ends'].raw
+        open_ended = ends is None or ends == expires
+        return onset, (expires if open_ended else ends), open_ended
+
+    @classmethod
+    def is_active(cls, alert: Dict[str, Any], now: Optional[float] = None) -> bool:
+        """Whether the alert is in effect at `now` (default: this instant).
+
+        `now` is a parameter so a caller sorting or rendering a batch can
+        pass ONE instant to every call -- otherwise a card can change status
+        part way through a sort and the order stops being a total order.
+        """
+        now = datetime.datetime.now().timestamp() if now is None else now
+        onset, finish, _open = cls.alert_window(alert)
+        return (onset is not None and onset <= now
+                and (finish is None or now <= finish))
+
+    @classmethod
+    def alert_state(cls, alert: Dict[str, Any],
+                    now: Optional[float] = None) -> str:
+        """'active', 'upcoming' or 'ended' -- total and mutually exclusive.
+
+        THE MIDDLE RULE IS THE ONE THAT MATTERS, and it is stated here so that
+        every consumer, in any language, gets it the same way:
+
+          active    is_active() is true.
+          ended     `finish` is present and now is past it, WHATEVER THE
+                    ONSET SAYS.
+          upcoming  everything else.
+
+        Spelling `ended` as "started but not active" is the obvious way and it
+        is WRONG.  NWS does not always give an onset, and an alert with no
+        onset whose window has already closed is ended -- but `started` is
+        false for it, so that spelling files it as upcoming.  Two skins wrote
+        this classification independently and both got it wrong, from opposite
+        directions; that is why it is a tag rather than each skin's business.
+
+        `now` is a parameter for the same reason it is on is_active(): a
+        caller classifying a batch passes ONE instant, so an alert cannot
+        change category part way through the walk.
+        """
+        now = datetime.datetime.now().timestamp() if now is None else now
+        if cls.is_active(alert, now):
+            return 'active'
+        _onset, finish, _open = cls.alert_window(alert)
+        if finish is not None and now > finish:
+            return 'ended'
+        return 'upcoming'
+
+    @classmethod
+    def ordered(cls, alerts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """In effect first, then most serious first -- the order a reader
+        needs, which is not the order the feed arrives in.  One `now` for the
+        whole sort; see is_active()."""
+        now = datetime.datetime.now().timestamp()
+        return sorted(alerts, key=lambda a: (
+            0 if cls.is_active(a, now) else 1,
+            ALERT_SEVERITY_RANK.get(a['severity'], 9),
+            a['onset'].raw if a['onset'].raw is not None else now))
 
     def forecasts(self, forecast_type: ForecastType, max_forecasts:Optional[int]=None) -> List[Dict[str, Any]]:
         """Returns the latest forecast records of the given type."""

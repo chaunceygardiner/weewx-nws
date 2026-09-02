@@ -29,6 +29,7 @@ governs, and that the comments survive the merge.
 import collections
 import importlib
 import importlib.util
+import types
 import io
 import os
 import re
@@ -105,13 +106,25 @@ def install_module():
     """install.py, loaded as a module.  Loading it needs weecfg.extension
     imported first: that module aliases itself as 'setup' in sys.modules for
     installers written against the pre-5.0 name, which is what install.py's
-    own import resolves through."""
+    own import resolves through.
+
+    Compiled from the SOURCE TEXT rather than through
+    spec_from_file_location, which consults __pycache__.  Python's cache
+    check is the source's mtime at one-second resolution plus its size, so a
+    same-length edit landing in the same second -- exactly what sabotage
+    testing does -- can be served the stale bytecode instead.  A test that
+    silently exercises the previous version of the file proves nothing, and
+    the failure looks like the sabotage was not caught.  Reading the text
+    ourselves makes that unrepresentable rather than something a runner has
+    to remember to disable.
+    """
     importlib.import_module('weecfg.extension')  # registers the alias
-    spec = importlib.util.spec_from_file_location(
-        'nws_install', os.path.join(REPO_DIR, 'install.py'))
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    path = os.path.join(REPO_DIR, 'install.py')
+    with open(path) as f:
+        source = f.read()
+    module = types.ModuleType('nws_install')
+    module.__file__ = path
+    exec(compile(source, path, 'exec'), module.__dict__)
     return module
 
 def installer_config() -> configobj.ConfigObj:
@@ -248,7 +261,7 @@ class TestInstallerConfig:
         applies when the key is absent -- and nothing but nws.py governs it
         once the installer stops writing it live.
 
-        WHICH SIDE MOVES WHEN THIS FAILS IS A JUDGEMENT, NOT A FORMALITY.  Do
+        WHICH SIDE MOVES WHEN THIS FAILS IS A JUDGMENT, NOT A FORMALITY.  Do
         not make it pass by editing the commented-out assignment to match the
         code.  While the option was written live, the installer's value is
         what every fresh install has actually been running and the code's

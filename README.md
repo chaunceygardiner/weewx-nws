@@ -32,8 +32,9 @@ minutes and alerts every 10 minutes), saves the results to its own database (`nw
 and makes them available to every report as `$nwsforecast` tags.
 
 Installing it also installs a sample report (`NWSReport`) that publishes forecast and alert
-pages, with weather icons, to `<HTML_ROOT>/nws/` — so forecasts appear on your site at the
-first report cycle after the install, before you write a single line of template code.
+pages, with drawn weather icons, to `<HTML_ROOT>/nws/` — so forecasts appear on your site
+at the first report cycle after the install, before you write a single line of template
+code.  The pages are responsive and follow the reader's light or dark setting.
 
 ![The sample report's seven-day page](https://raw.githubusercontent.com/chaunceygardiner/weewx-nws/master/docs/images/sample-report-days.png)
 
@@ -43,18 +44,20 @@ its **7 Day**, **Hourly** and **Alerts** tabs are driven by these tags.
 
 ## What you get
 
-- **Four tags, no ceremony.**  `$nwsforecast.twelve_hour_forecasts()`,
+- **Four tags to get going.**  `$nwsforecast.twelve_hour_forecasts()`,
   `$nwsforecast.one_hour_forecasts()`, `$nwsforecast.alerts()` and
   `$nwsforecast.alert_count()`.  Times, temperatures, wind, dewpoint, humidity and
   probability of precipitation come back as WeeWX `ValueHelper`s: `.format('%.0f')`,
-  `.ordinal_compass`, `.degree_C` and `.raw` all work.
+  `.ordinal_compass`, `.degree_C` and `.raw` all work.  More tags are there when you want
+  them — grouping periods by calendar day, ordering alerts by severity, turning a CAP
+  description into labeled sections.
   → [Report tags](https://chaunceygardiner.github.io/weewx-nws/tags.html) ·
   [every field](https://chaunceygardiner.github.io/weewx-nws/fields.html) ·
   [recipes](https://chaunceygardiner.github.io/weewx-nws/recipes.html)
 
 - **A sample report that works out of the box.**  A seven-day page, an hourly page and an
-  alerts page, with drawn weather icons that need no request to NWS and take their colours
-  from your stylesheet.
+  alerts page — responsive, with drawn weather icons that need no request to NWS, charts,
+  and light and dark themes that follow the reader's own setting.
   → [The sample report](https://chaunceygardiner.github.io/weewx-nws/sample-report.html)
 
 - **Nothing to configure to get going.**  The station's latitude and longitude come from
@@ -173,13 +176,21 @@ PYTHONPATH=/usr/share/weewx python3 -m pytest tests
 The **live utilities built into nws.py** contact the real api.weather.gov.  Their job is
 catching changes in *what NWS serves* — which the hermetic tests, validating assumptions
 against saved responses, cannot see.  `tests/verify_cli.py` runs every one of them and
-reports PASS/FAIL per option; `tests/validate_skin_html.py` renders the sample skin in both
-alert states and validates the HTML with the
-[Nu Html Checker](https://validator.github.io/validator/) (it needs `java` and `vnu.jar`).
+reports PASS/FAIL per option.
+
+Two more checks are offline, but need something the test suite does not:
+
+- `tests/validate_skin_html.py` renders the sample skin in both alert states and validates
+  every page *and its stylesheet* with the
+  [Nu Html Checker](https://validator.github.io/validator/).  Needs `java` and `vnu.jar`.
+- `tests/verify_theme.py` drives the rendered pages in a real browser at both OS color
+  settings and reads the computed colors back — the only check that can catch a dark theme
+  that validates, tests clean, and never actually applies.  Needs Playwright.
 
 ```
 python tests/verify_cli.py          # --skip-multigrid skips the 50-city sweep
 python tests/validate_skin_html.py
+python tests/verify_theme.py
 ```
 
 Each utility is documented in

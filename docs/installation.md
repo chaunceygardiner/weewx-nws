@@ -98,7 +98,7 @@ sudo systemctl restart weewx
 The extension announces itself in the log at startup.  These are the lines to look for:
 
 ```
-INFO user.nws: Service version is 5.1.
+INFO user.nws: Service version is 6.0.
 INFO user.nws: Using binding 'nws_binding' to database 'nws.sdb'
 INFO user.nws: request_urls: twelveHourForecastUrl: https://api.weather.gov/gridpoints/MTR/92,88/forecast
 INFO user.nws: request_urls: oneHourForecastUrl: https://api.weather.gov/gridpoints/MTR/92,88/forecast/hourly

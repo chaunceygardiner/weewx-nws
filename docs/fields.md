@@ -120,18 +120,25 @@ replacement.  See [How it works](how-it-works.md#alerts-come-and-go).
 
 `description` and `instructions` are plain text with real newlines in them — paragraphs
 separated by blank lines.  Dropped into HTML as they stand they collapse into one run-on
-paragraph.  Turning the blank lines into breaks is the minimum:
+paragraph.
+
+Use `$nwsforecast.parse_description()` rather than converting them by hand.  It returns the
+description as labeled sections, paragraphs and bullets, and it handles all four shapes NWS
+sends — starred headers, bare `HAZARD.../SOURCE.../IMPACT...` labels, starred lines that
+are really bullets, and the free prose that three quarters of alerts are entirely.  It also
+takes `None` without raising, which a malformed alert really does produce.
 
 ```
-#try
-  #set $desc = $alert.description.replace('\n\n', '<br/>')
-  #set $desc = $desc.replace('\n', ' ')
-#except
-  ## A malformed alert can leave description as None.
-  #set $desc = $alert.description
-#end try
+#for $block in $nwsforecast.parse_description($alert.description)
+  #if $block.label
+    <h4>$block.label</h4>
+  #end if
+  #for $p in $block.paragraphs
+    <p>$p</p>
+  #end for
+#end for
 ```
 
-The `#try` matters: malformed alerts reach the tags with `None` in fields that are normally
-strings, and `None.replace(...)` raises.  [Recipes](recipes.md#alerts) has the fuller
-pattern the sample report uses.
+`instructions` is a single block of prose rather than a structured field; splitting it on
+blank lines is enough.  See [Alert semantics](tags.md#alert-semantics) and
+[Recipes](recipes.md#alerts).

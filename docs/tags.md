@@ -14,7 +14,8 @@ description: The $nwsforecast tags — twelve_hour_forecasts(), one_hour_forecas
 
 ---
 
-weewx-nws serves four tags, under `$nwsforecast`:
+Everything weewx-nws serves lives under `$nwsforecast`.  Four tags fetch the forecast
+itself:
 
 | Tag | Returns |
 |---|---|
@@ -25,6 +26,35 @@ weewx-nws serves four tags, under `$nwsforecast`:
 
 `max` is optional on the two forecast calls: `twelve_hour_forecasts(4)` returns the first
 four periods, `one_hour_forecasts(24)` the next day's worth.  Omit it to get all of them.
+
+Four more shape that forecast into what a page actually draws — see
+[Shaping the forecast](#shaping-the-forecast):
+
+| Tag | Returns |
+|---|---|
+| `$nwsforecast.days(periods)` | Twelve-hour periods grouped by the calendar day each one starts in |
+| `$nwsforecast.hour_days(records)` | One-hour records grouped the same way — the day tabs on an hourly page |
+| `$nwsforecast.points(records)` | Hourly records as plain numbers, for chart arithmetic |
+| `$nwsforecast.week_range(days)` | `(min, max)` temperature across every period on show |
+
+And seven carry the NWS and CAP semantics that are easy to get subtly wrong — see
+[Alert semantics](#alert-semantics):
+
+| Tag | Returns |
+|---|---|
+| `$nwsforecast.line_label(period)` | NWS's period name, kept only where it says something the row does not |
+| `$nwsforecast.ordered(alerts)` | Alerts in effect first, then most serious first |
+| `$nwsforecast.is_active(alert)` | Whether that alert is in effect now |
+| `$nwsforecast.alert_state(alert)` | `active`, `upcoming` or `ended` — the same question, told in full |
+| `$nwsforecast.alert_window(alert)` | `(onset, finish, open_ended)` — an alert with no end leans on its expiry |
+| `$nwsforecast.parse_description(desc)` | A CAP description as labeled sections, paragraphs and bullets |
+| `$nwsforecast.nice_caps(text)` | Title case that survives NWS's shouted acronyms |
+
+{: .note }
+These last eleven return **data**, not markup — the one deliberate exception is
+`icon()` below, which returns an `<svg>`.  They exist because they are facts about NWS's
+feed rather than anybody's taste in layout, so every skin gets the same answer instead of
+each re-deriving it.  How the result is *drawn* is yours.
 
 ## Enabling the tags
 
@@ -96,13 +126,25 @@ Four things are worth knowing about what comes back:
 #end for
 ```
 
-They come back newest first, by the time each alert was issued.  Two of the CAP fields are
-worth reading before you design a page around them: `nwsHeadline` is the upper-case banner
-NWS writes for the alert and **it can be missing**, in which case `headline` is the
-sentence to fall back on; and `description` and `instructions` are long, multi-paragraph
-plain text with newlines in them, which need converting to markup before they read
-properly.  [Recipes](recipes.md#alerts) has both patterns, and
-[Alert fields](fields.md#alert-fields) has the full list.
+They come back newest first, by the time each alert was issued — which is rarely the order
+a reader wants.  `ordered()` puts the ones in effect first and then the most serious first;
+see [Alert semantics](#alert-semantics).
+
+Two of the CAP fields are worth reading before you design a page around them.
+`nwsHeadline` is the upper-case banner NWS writes and **it can be missing**, in which case
+`headline` is the sentence to fall back on.  And `description` and `instructions` are long,
+multi-paragraph plain text with real newlines in them, which do not become markup on their
+own.
+
+{: .important }
+Do not hand-convert that text.  `$nwsforecast.parse_description()` turns a description into
+labeled sections, paragraphs and bullets, handling the four shapes NWS actually sends;
+`$nwsforecast.nice_caps()` title-cases the shouted headline without flattening its
+acronyms.  Both are covered in [Alert semantics](#alert-semantics), and the sample report
+uses them.  Replacing newlines by hand — which earlier versions of this manual showed —
+gets the common case and none of the others.
+
+[Alert fields](fields.md#alert-fields) has the full field list.
 
 `alert_count()` answers the same question as `len($nwsforecast.alerts())`, and is what a
 banner on another page wants:
@@ -153,13 +195,132 @@ Three sets of names are a contract, and will not change without a major version:
 ids, `wx-<condition>-<day|night>` (for example `wx-fog-night`); the css classes on the
 markup `icon()` emits — `wxi` on the `<svg>`, `wxi wxi-fallback` on the `<img>` used when a
 condition has no drawn symbol, and `wxi wxi-unknown` on the empty box used when NWS itself
-has no icon for a period; and the `--wx-*` custom properties that colour the drawings.
+has no icon for a period; and the `--wx-*` custom properties that color the drawings.
 Style those, and reference those ids, freely.
 
 The icons carry no width or height of their own — sizing is the skin's job, via `.wxi`.
-Every colour is emitted as `var(--wx-name, #default)`, so they render exactly as shown
+Every color is emitted as `var(--wx-name, #default)`, so they render exactly as shown
 until you redefine something; a complete dark palette ships with the extension.  Both are
 covered in [Drawn icons](recipes.md#drawn-icons).
+
+## Shaping the forecast
+
+NWS hands you a flat list of periods.  Almost every page wants them grouped by day, and
+that grouping has a trap in it, so it is done here rather than in each skin.
+
+`days()` groups twelve-hour periods by **the calendar day each one starts in** — not by
+walking day/night pairs.  At 05:35 the feed leads with `Overnight` (01:00–06:00) followed
+by `Tuesday` (06:00–18:00); a pair-walk gives `Overnight` a row of its own, so one date
+appears on two consecutive rows and the leading one gets labeled "Tonight" at dawn.
+Grouping by start date is also how NWS itself reads: `Tuesday Night` starts on Tuesday and
+belongs to Tuesday, though it ends on Wednesday.
+
+Each entry is a dict:
+
+| Key | What it is |
+|---|---|
+| `date` | A `datetime.date` |
+| `label` | `Today`, or the weekday name |
+| `datestr` | `Sep 1` |
+| `group` | Every period starting that day, in time order |
+| `day` | The first daytime period, or `None` |
+| `nights` | The non-daytime periods |
+| `hi` | The daytime period's temperature, or `None` |
+| `lo` | The coldest night temperature, or `None` |
+
+```
+#set $days = $nwsforecast.days($nwsforecast.twelve_hour_forecasts())
+#for $d in $days[0:7]
+  <h3>$d.label $d.datestr</h3>
+  #for $p in $d.group
+    $nwsforecast.line_label($p): $p.detailedForecast
+  #end for
+#end for
+```
+
+**No slicing happens in the tag.**  How many rows to draw is a judgment about your page,
+so take `[0:7]` or whatever suits.  Two ends of the feed degrade, and differently: an
+evening poll leads with `Tonight`, so the first date can hold only a night — `day` and
+`hi` are `None` — and the last date can hold only a day, where `nights` is empty and `lo`
+is `None`.  Guard both if you draw every date you are given.
+
+`hour_days()` does the same for one-hour records, adding a `key` (`2026-09-01`) suitable
+for a tab id, and `rows`.  It deliberately does **not** include chart points: call
+`points()` on a day's `rows` when you want them.  `points()` unwraps the ValueHelpers into
+plain numbers and drops any hour with no time or no temperature, since those cannot be
+plotted at all.
+
+`week_range()` takes the output of `days()` and returns the `(min, max)` across every
+period on show, so each day's bar can be positioned against one shared scale.  With
+nothing to measure it returns `(0.0, 1.0)` — that is a placeholder, not a range, so do not
+caption it as one.
+
+{: .note }
+All four take the ValueHelper-wrapped records `$nwsforecast` returns, not raw database
+rows.
+
+## Alert semantics
+
+`ordered()` sorts alerts the way a reader needs them — in effect first, then most serious
+first — which is not the order the feed arrives in.  `is_active()` answers the same
+question for one alert, and takes an optional instant so a page rendering a batch can pass
+one `now` to every call; without that an alert can be counted in effect and then rendered
+expired in the same pass.
+
+`alert_state()` tells the whole story rather than half of it, returning `active`,
+`upcoming` or `ended`.  The three are total and mutually exclusive:
+
+| State | When |
+|---|---|
+| `active` | `is_active()` is true |
+| `ended` | the alert's finish is known and now is past it — **whatever the onset says** |
+| `upcoming` | everything else |
+
+{: .note }
+That middle rule is worth reading twice.  The obvious way to write it is "started, but not
+active", and that is wrong: NWS does not always give an onset, and an alert with no onset
+whose window has already closed has *ended* — but it never "started", so the obvious
+spelling files it as upcoming.  Two skins wrote this classification independently and both
+got it wrong, from opposite directions, which is why it lives here now.
+
+`alert_window()` returns `(onset, finish, open_ended)`.  weewx-nws never leaves an alert's
+end time empty: where NWS gave no `ends` it stores `expires`, so **the two being equal is
+what an open-ended alert looks like** by the time a skin sees it.  About one alert in ten
+has no end at all, so anything drawing a progress bar must not divide by a span that does
+not exist.
+
+`parse_description()` turns a CAP description into structure — a list of dicts with
+`label`, `paragraphs` and `bullets`, where an empty label is unlabeled prose.  Three
+quarters of real alerts are nothing but unlabeled prose, so a layout that assumes a
+WHAT/WHERE/WHEN grid will be empty for most of them.
+
+It handles the shapes the live feed actually produces.  A starred line is a **header**
+when its label is shouted — `* WHAT...`, `* HEADER: text`, or `* LOCATIONS AFFECTED` alone
+on its line with `- ` sub-bullets under it — and a **bullet** otherwise, which is how the
+warning products list their facts (`* Until 730 PM EDT.`).  That split is the feed's own
+convention, not one imposed here.  Bare uppercase labels with no asterisk are headers too
+— `HAZARD...`, `SOURCE...`, `IMPACT...` — and the tropical statements' `**banner**` lines
+are unwrapped.  No asterisk reaches your page, whatever a line turns out to be.
+
+A single newline is always teletype wrapping and a blank line is always a paragraph break,
+so text is reflowed; the measure is your stylesheet's business.
+
+`nice_caps()` title-cases NWS's shouted headlines while leaving acronyms upright —
+`str.title()` alone gives "11 Am Pdt".
+
+```
+#for $alert in $nwsforecast.ordered($nwsforecast.alerts())
+  <h3>$alert.event</h3>
+  #for $block in $nwsforecast.parse_description($alert.description)
+    #if $block.label
+      <h4>$block.label</h4>
+    #end if
+    #for $p in $block.paragraphs
+      <p>$p</p>
+    #end for
+  #end for
+#end for
+```
 
 ## Values, and formatting them
 

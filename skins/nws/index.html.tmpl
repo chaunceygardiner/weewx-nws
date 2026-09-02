@@ -1,79 +1,167 @@
-## Copyright 2024 John A Kline
+## Copyright 2020-2026 John A Kline
 ## See LICENSE.txt for your rights
+##
+## The seven-day page: NWS's twelve-hour periods as a "Right now" card, a
+## sparkline of the week's rhythm, and one row per CALENDAR DAY carrying
+## that day's low-to-high bar, its daylight, and each of its periods as a
+## line with icon, chance of rain, prose and wind.
+##
+## The arithmetic is not here.  Grouping and the week's range are
+## $nwsforecast tags (NWS semantics, shared with every skin); the bar
+## geometry, the 15% rain threshold and the sparkline are $nwsskin
+## (this report's own presentation); the icons are $nwsforecast's drawn
+## set.  This file places what they return.
 #errorCatcher Echo
 #encoding UTF-8
+#import time
+## One fetch feeds the card, the day rows and the week's range.
+#set $periods = $nwsforecast.twelve_hour_forecasts()
+#set $all_days = $nwsforecast.days($periods)
+## An evening poll leads with Tonight, which puts a lone night on the first
+## date and a lone day on an eighth -- so the feed can reach eight dates.
+## Seven whole days is what this page shows.
+#set $days = $all_days[0:7]
+#set $trange = $nwsforecast.week_range($days)
+#set $tmin = $trange[0]
+#set $tmax = $trange[1]
+#set $hours = $nwsforecast.points($nwsforecast.one_hour_forecasts())
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>NWS Forecast</title>
-    <meta name="description" content="NWS 12-hour.">
-    #include "style.inc"
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NWS Seven Day Forecast</title>
+    <meta name="description" content="National Weather Service seven-day forecast for $station.location.">
+    <link rel="stylesheet" type="text/css" href="css/nws.css">
+    <script src="scripts/nws.js"></script>
   </head>
   <body>
     ## The <symbol> definitions every $nwsforecast.icon() below points at.
     ## Once per page: a <use> with no symbol to point at draws nothing.
     $nwsforecast.icon_sprite
-    #set global $selection = "days"
-    #include "menubar.inc"
-    <br>
-    <br>
-    <div style="text-align:center;">
-      <div style="display:inline-block;">
-        ## forecast days - Copyright 2020-2024 John A Kline
-        ## See LICENSE.txt for your rights
-        #errorCatcher Echo
-        #encoding UTF-8
-        <div>
-          <table style='width:97%;text-align:center;border-style:solid;padding:30px;border:1pt solid LightGray;'>
-            #set $title_font_size = 'large'
-            #set $forecast_generated_at = ''
-            #for $twelve_hour in $nwsforecast.twelve_hour_forecasts()
-            #set $forecast_generated_at = $twelve_hour.generatedTime ##.format('%a %l %p')
-            <tr>
-              <td>
-                ## ------------------------------------------------
-                ## |       |               |                       |
-                ## |       |     Temp      |     Memorial Day      |
-                ## |       |     78 F      |-----------------------|
-                ## | ICON  | rising slowly |  Partly cloudy with   |
-                ## |       |      Wind     |  high of 84.  Winds   |
-                ## |       |   1 mph NNW   |  between 1 and 9 mph  |
-                ## |       |               |                       |
-                ## -------------------------------------------------
-                <table style='width:100%;border-bottom:1pt solid LightGray;padding:15px;'>
-                  <tr>
-                    <td style='width:16%;'>$nwsforecast.icon($twelve_hour.iconUrl)</td>
-                    <td style='width:30%;'>
-                      <table style='width:100%;text-align:center;'>
-                        <tr style='width:100%;'><td>Temp</td></tr>
-                        <tr style='width:100%;'><td>$twelve_hour.outTemp.format('%.0f')$unit.label.outTemp $twelve_hour.outTempTrend </td></tr>
-                        <tr style='width:100%;'><td>Wind</td></tr>
-        #if $twelve_hour.windSpeed2 is None
-                        <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
-        #else
-                        <tr style='width:100%;'><td>$twelve_hour.windSpeed.format('%.0f') to $twelve_hour.windSpeed2.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</td></tr>
-        #end if
-                      </table>
-                    </td>
-                    <td style='width:54%;'>
-                      <table style='width:100%;text-align:center;'>
-                        <tr style='width:100%;'><td style='text-align:center;font-size:$title_font_size;font-weight:bold;border-bottom:1pt solid LightGray;'>$twelve_hour.name</td></tr>
-                        <tr style='width:100%;'><td>$twelve_hour.detailedForecast</td></tr>
-                      </table>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            #end for
-            #if $forecast_generated_at != ''
-            <tr>
-              <td style='text-align:center;font-style:italic;color:Gray;'>Forecast generated $forecast_generated_at.</td>
-            </tr>
-            #end if
-          </table>
+#set global $selection = "days"
+#include "menubar.inc"
+    <div class="fc">
+      <div class="fcwrap">
+
+        <div class="chead">
+          <h1 class="ctitle"><span class="over">NWS</span> 7&nbsp;Day Forecast</h1>
+          <div class="sub">$station.location
+#if $periods
+            &middot; issued $nwsskin.hm($periods[0].generatedTime, '%A %-I:%M %p')
+#end if
+          </div>
         </div>
+
+#if $periods
+#set $cur = $periods[0]
+        <section class="now">
+          <h2 class="eyebrow">Right now</h2>
+          <div class="nowgrid">
+            <div class="nowicon">$nwsforecast.icon($cur.iconUrl)</div>
+            <div class="nowtext">
+              <div class="nowname">$nwsskin.esc($cur.name)</div>
+              <p class="nowprose">$nwsskin.esc($cur.detailedForecast)</p>
+            </div>
+            <div class="nowstats">
+              ## num_cell, not .format() + &deg;: unlike the NWS feed's
+              ## ValueHelpers, the report's own \$day tags DO append the unit
+              ## label, so a degree sign here reads "67&deg;F&deg;".  On a
+              ## fresh install the archive is empty and both are em-dashes.
+              <div class="stat"><span class="sl">Today, observed</span>
+                <span class="sv"><b class="hival">$nwsskin.num_cell($day.outTemp.max)</b>
+                  / <b class="loval">$nwsskin.num_cell($day.outTemp.min)</b></span></div>
+              ## The one place a chance of rain is printed whatever it is: a
+              ## single labeled statistic is not a column to scan, so there
+              ## is no noise to suppress, and "Chance of rain -- nothing"
+              ## reads worse than "6%".
+              <div class="stat"><span class="sl">Chance of rain</span>
+                <span class="sv">$nwsskin.num_cell($cur.pop, '%')</span></div>
+              <div class="stat"><span class="sl">Wind</span>
+                <span class="sv">$nwsskin.wind_text($cur, $unit.label.windSpeed)</span></div>
+            </div>
+          </div>
+        </section>
+#end if
+
+        <section class="week">
+          <h2 class="eyebrow">The week ahead</h2>
+#if $hours
+          ## The rhythm only -- the range bars below already carry the highs
+          ## and the lows, so the sparkline adds the shape of the week and a
+          ## temperature scale to read it against.  The instrument version,
+          ## with dew point and the rain strip, is the hourly page's.
+          <div class="sparkwrap chartwrap">$nwsskin.sparkline($hours)<div class="readout" hidden></div>
+            <p class="sparkcap">Forecast temperature every hour of the week, night shaded.
+            <a href="hours.html">Hour by hour, with dew point and rain &rarr;</a></p>
+          </div>
+#end if
+#if $days
+          <div class="colhead">
+            <div></div>
+            <div>Low &ndash; high &amp; daylight</div>
+            ## No heading over the chance of rain: beside the icon, a droplet
+            ## on a number next to a weather symbol explains itself, and a
+            ## heading over a column that is empty most of the time only
+            ## announces the gap.  The caption below says what it is.
+            <div class="ch3"><div></div><div></div><div>Forecast</div>
+              <div class="chr">Wind</div></div>
+          </div>
+          <div class="days">
+#for $d in $days
+#set $noon = time.mktime(($d.date.year, $d.date.month, $d.date.day, 12, 0, 0, 0, 0, -1))
+#set $alm = $almanac(almanac_time=$noon)
+            <div class="day">
+              <div class="when"><span class="wd-name">$d.label</span><span class="wd-date">$d.datestr</span></div>
+              <div class="col2">
+                <div class="temps">$nwsskin.temp_bar($d, $tmin, $tmax)</div>
+                ## A day whose daylight period has already passed has no high
+                ## to show and no sunrise left to wait for.
+#if $d.day is None
+                <div class="sun">sunset $nwsskin.hm($alm.sunset)</div>
+#else
+                <div class="sun">daylight $nwsskin.hm($alm.sunrise) to $nwsskin.hm($alm.sunset)</div>
+#end if
+              </div>
+              <div class="lines">
+#for $p in $d.group
+                <div class="line">
+                  <div class="ic">$nwsforecast.icon($p.iconUrl)</div>
+                  ## The chance of rain sits beside the icon: NWS burns it
+                  ## into its own raster, so the two belong together -- but
+                  ## this is the forecast's own pop, not the icon URL's
+                  ## rounded copy, which disagrees with it almost always.
+                  <div class="chip chip-pop">$nwsskin.pop_cell($p)</div>
+                  <p class="prose"><b class="kind">$nwsforecast.line_label($p)&nbsp;&middot; </b>$nwsskin.esc($p.detailedForecast)</p>
+                  <div class="chip">$nwsskin.wind_cell($p, $unit.label.windSpeed)</div>
+                </div>
+#end for
+              </div>
+            </div>
+#end for
+          </div>
+          <p class="caption">Bars span each day&rsquo;s forecast low to high across the
+          week&rsquo;s range, $nwsskin.degrees($tmin)&ndash;$nwsskin.degrees($tmax).  The
+          <b>droplet</b> beside an icon is the National Weather Service chance of
+          measurable precipitation during that period &mdash; the day and the night are
+          forecast separately, and anything under 15% is left blank, as weather.gov does,
+          so no droplet means no meaningful chance.  Wind is the forecast range and the
+          direction it blows from.</p>
+#else
+          ## week_range() hands back its (0.0, 1.0) placeholder when there are
+          ## no periods, so the caption above would state a range of
+          ## 0&deg;-1&deg; over an empty list.  Say what is actually true.
+          <p class="caption">No forecast periods are available.  The National Weather
+          Service feed has not been read yet, or the last several polls failed.</p>
+#end if
+        </section>
+
+        <div class="cfoot">National Weather Service
+#if $periods
+          &middot; forecast issued $nwsskin.hm($periods[0].generatedTime, '%A %-I:%M %p')
+#end if
+        </div>
+
       </div>
     </div>
   </body>

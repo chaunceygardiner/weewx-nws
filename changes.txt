@@ -1,26 +1,122 @@
 nws change history
 ------------------
 
-5.2 (in progress)
+6.0 (in progress)
+- The sample report is rebuilt.  Its three pages -- seven day, hourly and
+  alerts -- are responsive, so one page serves a phone and a desktop, and they
+  follow the reader's own light or dark setting.  The seven-day page leads with
+  a "Right now" card and a sparkline of the week, then one row per CALENDAR DAY
+  carrying that day's low-to-high bar, its daylight, and each period's icon,
+  chance of rain, forecast and wind.  The hourly page gives the next twelve
+  hours at a glance, then a tab per day carrying that day's chart --
+  temperature, dew point and rain -- and its hour table, with the whole week as
+  one curve at the foot.  The alerts page gives each alert a card with a
+  severity-colored rail, a live status badge, a bar showing where now falls in
+  the alert's window, and the description's own sections as real structure.
+  The pages fetch nothing: no request to api.weather.gov, no font or script
+  from anywhere else, and no reloading of themselves.
+  Note for upgrades: reinstalling overwrites skins/nws/ as it always has, so
+  copy anything you customized before upgrading.  The skin gained css/nws.css
+  and scripts/nws.js and lost style.inc; weectl adds and overwrites but never
+  removes, so a stale skins/nws/style.inc is left behind.  Nothing reads it.
+- The charts can be driven from the keyboard.  Each carries tabindex="0", so
+  Tab reaches it; the arrow keys then walk the same crosshair a pointer
+  drives, Shift with an arrow moves six points at a time, Home and End jump
+  to the ends, and Escape clears the reading.  Arrow keys are only taken
+  while the chart has focus, so the page scrolls normally everywhere else.
+  This makes the charts OPERABLE without a mouse, which is a smaller claim
+  than making them accessible to a screen reader: no ARIA semantics were
+  changed, the day tabs were already keyboard-operable as ordinary buttons,
+  and the hour table remains a css grid rather than a real table.
+- Ten new $nwsforecast tags, all returning DATA rather than markup.  They carry
+  the NWS and CAP semantics that every skin would otherwise re-derive, and get
+  subtly wrong: days() and hour_days() group periods by the calendar day each
+  one STARTS in (walking day/night pairs instead puts one date on two rows and
+  labels the leading one "Tonight" at dawn); points() unwraps hourly records
+  into the plain numbers a chart needs; week_range() gives one shared
+  temperature scale; line_label() keeps NWS's period name only where it says
+  something the row does not; ordered(), is_active() and alert_window() rank
+  alerts and reckon an alert's window, including the one in ten that never
+  ends; parse_description() turns a CAP description into labeled sections; and
+  nice_caps() title-cases NWS's shouted headlines without flattening its
+  acronyms.  Nothing existing changed -- the tag surface only gained.  See the
+  Tags page.
+- parse_description() understands three more of the shapes NWS actually
+  sends, so alert text stops reaching the page as raw punctuation.
+  Starred lines whose label is not shouted are BULLETS, not prose: the warning
+  products list their facts as "* Until 730 PM EDT." and "* At 651 PM EDT, a
+  severe thunderstorm was located over...", and those were rendering with the
+  asterisk still in them.  38 of 388 active alerts in a national snapshot
+  carried such lines, 156 lines in all, led by Severe Thunderstorm Warning and
+  Flash Flood Warning -- the most common warnings in the country.  A starred
+  line whose label IS shouted is still a header, so "* WHAT...", "* CHANGES:"
+  and "* LOCATIONS AFFECTED" are unaffected; the case split is the feed's own.
+  Bare HAZARD..., SOURCE... and IMPACT... labels, with no asterisk at all, now
+  become sections too -- 34 alerts, 102 labels.  A bare label must carry
+  content after its ellipsis: without that guard a headline wrapping onto a
+  line reading "NEVADA..." becomes a heading in the middle of a sentence.
+  The tropical statements' **banner** lines are unwrapped.  They can wrap, so
+  the closing pair lands on the next line and only meets the opening one after
+  reflow, which is why it is stripped from the finished paragraph.
+  Swept over the whole national feed: 391 alerts, 697 labeled sections, 904
+  bullets, and no asterisk reaching a page.
+- The sample report's own charts, chips and alert cards move into a new
+  bin/user/nwsskin.py, reached from templates as $nwsskin.  It is presentation,
+  it is explicitly NOT an API, and nothing in it is promised to survive a
+  release -- copy what you like from it, but write your skin against
+  $nwsforecast.
+- Light and dark are derived from one written objective rather than picked:
+  each color reproduces its light counterpart's prominence against the ground
+  it actually sits on, holding hue and chroma.  Every rule is asserted over
+  BOTH palettes and light must pass unchanged, which is what shows the rules
+  describe the design rather than having been fitted to the new numbers -- and
+  is how a live contrast failure in LIGHT mode was found and fixed.  There is
+  deliberately no theme toggle: a toggle needs javascript, storage and a
+  visible control, and everyone copying the skin would inherit a widget they
+  may not want.
+- Fixed: the alerts page could head its cards with a count they disproved --
+  "3 alerts in effect" above a card reading EXPIRED.  The count is now
+  recomputed in the browser alongside the badges, and an alert that has ENDED
+  is counted as neither in effect nor beginning later, which it never was.
+- New tag: $nwsforecast.alert_state() returns 'active', 'upcoming' or 'ended'
+  for one alert -- the whole of the question is_active() answers half of.  The
+  three are total and mutually exclusive, and the middle rule is the one that
+  matters: an alert has ENDED when its finish is known and now is past it,
+  WHATEVER the onset says.  Writing that as "started but not active" is the
+  obvious way and it is wrong, because NWS does not always give an onset and
+  an alert without one whose window has closed never "started".  Two skins
+  wrote this classification separately and both got it wrong, from opposite
+  directions, which is the argument for it being a tag.
+  Fixed with it: an alert with no onset whose window had closed was described
+  three different ways by the same page -- counted as upcoming, badged "Not
+  yet begun", and skipped entirely by the page script, which selected only
+  cards carrying an onset attribute.  All three now share one classification,
+  and the python and javascript were driven over every shape the feed can
+  produce and compared character for character.
+  Worth knowing where the ended state actually arises: a freshly generated
+  page never holds an ended alert, because rows whose endTime has passed are
+  dropped as the tags read them.  It arises from the CLOCK -- a tab left open
+  crosses an alert's end -- which is why the page script recomputes rather
+  than trusting what generation baked.
 - weewx-nws now draws its own weather icons.  $nwsforecast.icon() turns a
   forecast period's icon URL into an <svg> naming one of 68 drawn symbols (34
   NWS conditions, day and night), $nwsforecast.icon_sprite emits the symbol
   definitions those refer to, and $nwsforecast.icon_name() hands back the
   (condition, is_night, known) parsed out of the URL for a skin that would
-  rather draw its own.  Drawn icons stay crisp at any size, take their colours
+  rather draw its own.  Drawn icons stay crisp at any size, take their colors
   from your stylesheet, and avoid the split "X then Y" composites the
   photographs produce, which read as rendering glitches at the size a forecast
   table uses.
   Three sets of names are a contract and will not change without a major
   version: the symbol ids (wx-<condition>-<day|night>), the css classes on the
   emitted markup (wxi, wxi-fallback, wxi-unknown) and the --wx-* custom
-  properties that colour the drawings.  See the Tags and Recipes pages.
+  properties that color the drawings.  See the Tags and Recipes pages.
 - The sample report draws its icons instead of hot-linking api.weather.gov.
-  Its pages now make no request to NWS at all.  skins/nws/style.inc sizes them
-  at 86px, what NWS's ?size=medium raster measured, so the pages lay out as
-  they did before.
-- Every colour in the drawn set is emitted as var(--wx-name, #default), so a
-  skin can recolour any part of it and one that defines nothing renders the
+  Its pages now make no request to NWS at all.  css/nws.css sizes them per
+  context -- 96px on the "Right now" card, 40px on a day row, 34px in the hour
+  table.
+- Every color in the drawn set is emitted as var(--wx-name, #default), so a
+  skin can recolor any part of it and one that defines nothing renders the
   shipped look.  A complete dark palette ships as nwsicons.DARK, with a
   dark_css() helper that emits it as a paste-able rule; the Recipes page lists
   it in full.  It is derived rather than hand-picked: it reproduces the light
@@ -29,16 +125,16 @@ nws change history
   inverts -- on dark the front cloud is the darkest, because it is the least
   prominent one in light -- which reads better at small sizes than what it
   replaced.  Two tests assert the rules over BOTH palettes, stated in terms of
-  how far a colour stands from its page, so severe weather can never end up
+  how far a color stands from its page, so severe weather can never end up
   quieter than an ordinary cloud again.
 - Fixed: the "overcast" symbol was a flat silhouette on a light page.  Its two
   cloud layers differed by 1.4 luma, because the back layer was drawn at 75%
-  opacity rather than as a colour, and a translucent fill composites against
-  the page rather than against a colour.  Those tonal opacities are solid ramp
+  opacity rather than as a color, and a translucent fill composites against
+  the page rather than against a color.  Those tonal opacities are solid ramp
   steps now (measured 28 luma apart, on any background); genuine translucency
   is kept and tunable via --wx-op-band and --wx-op-tube.
 - Fixed: a hurricane's or tropical storm's eye was painted white, so it showed
-  as a white blob on any page that was not white.  The centre is simply left
+  as a white blob on any page that was not white.  The center is simply left
   unpainted now and the page shows through.
 - A forecast period with a blank icon URL renders the empty icon box rather
   than a clear-sky icon.  Alert records carry no icon, so a skin calling

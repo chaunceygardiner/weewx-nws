@@ -53,7 +53,7 @@ class TestModuleIdentity(unittest.TestCase):
     importable and as the flat `nwsicons` otherwise.  A PYTHONPATH naming the
     parent of an installed WeeWX `user` package -- which docs/utilities.md
     tells users to export -- makes those two DIFFERENT module objects in one
-    process, each with its own UNKNOWN set and its own memoised sprite.  Then
+    process, each with its own UNKNOWN set and its own memoized sprite.  Then
     nws.py renders through /home/weewx/bin/user/nwsicons.py while this file
     tests the repo's, and the suite reports on a file it never exercised.
 
@@ -206,18 +206,18 @@ class TestIconSet(unittest.TestCase):
 
 
 class TestPalette(unittest.TestCase):
-    """Colour is a contract too: the custom-property names are public, and the
-    defaults must render byte-for-byte what the untokenised module rendered."""
+    """Color is a contract too: the custom-property names are public, and the
+    defaults must render byte-for-byte what the untokenized module rendered."""
 
     def test_every_fill_is_an_overridable_token(self):
         sprite = nwsicons.sprite()
-        # No bare hex may survive anywhere in the drawn output; every colour
+        # No bare hex may survive anywhere in the drawn output; every color
         # has to come through var(--wx-*, #default) or a skin cannot theme it.
         bare = re.findall(r'(?:fill|stroke)="(#[0-9A-Fa-f]{3,8})"', sprite)
-        self.assertEqual(bare, [], 'un-tokenised colours: %s' % sorted(set(bare)))
+        self.assertEqual(bare, [], 'un-tokenized colors: %s' % sorted(set(bare)))
 
     def test_defaults_are_the_shipped_look(self):
-        # A skin that defines nothing must get exactly these colours; changing
+        # A skin that defines nothing must get exactly these colors; changing
         # a default is a visible change to every consumer, not a refactor.
         self.assertEqual(nwsicons.PALETTE['sun'], ('--wx-sun', '#F2B705'))
         self.assertEqual(nwsicons.PALETTE['moon'], ('--wx-moon', '#8A93A0'))
@@ -230,7 +230,7 @@ class TestPalette(unittest.TestCase):
 
     def test_the_eye_defaults_to_transparent(self):
         # Not white.  A painted eye is only ever right on one background.
-        # The centre is simply LEFT UNPAINTED -- the bands never reach it, so
+        # The center is simply LEFT UNPAINTED -- the bands never reach it, so
         # there is nothing to cut and fill-rule=evenodd is wrong here (it adds
         # a filled disc; this was tried and measured).  The token exists only
         # for someone who wants the eye painted after all.
@@ -251,21 +251,21 @@ class TestPalette(unittest.TestCase):
             {'--wx-op-band', '--wx-op-tube'})
 
     def test_no_cloud_or_funnel_is_drawn_at_partial_opacity(self):
-        # Tone is colour.  A fill at partial opacity composites against the
+        # Tone is color.  A fill at partial opacity composites against the
         # PAGE, so the depth cue it encodes reverses between a light and a
         # dark theme -- measured at 1.4 luma on white and -56 on #111834 for
-        # ovc.  Those steps are solid ramp colours now; only genuine
+        # ovc.  Those steps are solid ramp colors now; only genuine
         # translucency (the two --wx-op-* tokens) may set opacity.
         sprite = nwsicons.sprite()
         literal = re.findall(r'opacity="(?!var\()([^"]*)"', sprite)
         self.assertEqual(set(literal), {'1'},
-                         'un-tokenised opacity survives: %s' % sorted(set(literal)))
+                         'un-tokenized opacity survives: %s' % sorted(set(literal)))
 
     def test_the_cyclone_eye_is_left_unpainted(self):
-        # The bands never reach the centre (they sweep r0=5.4..R=11.6 around a
+        # The bands never reach the center (they sweep r0=5.4..R=11.6 around a
         # 3.6 eye), so the old white disc was painting over bare background --
         # invisible on white, a white blob anywhere else.  Nothing may paint
-        # the centre opaque now.
+        # the center opaque now.
         for name in ('hurricane', 'tropical_storm'):
             markup = nwsicons.build(name, False)
             self.assertNotIn('#ffffff', markup, name)
@@ -275,14 +275,14 @@ class TestPalette(unittest.TestCase):
 
     def test_dark_palette_mirrors_the_light_one(self):
         # A dark value for every token, and no orphans: if someone adds a
-        # colour and forgets its dark counterpart, the icons theme half-way,
+        # color and forgets its dark counterpart, the icons theme half-way,
         # which looks like a rendering bug rather than a missing entry.
         self.assertEqual(set(nwsicons.DARK), set(nwsicons.PALETTE))
         self.assertEqual(set(nwsicons.DARK_OPACITY), set(nwsicons.OPACITY))
 
     # ---- prominence, the property both palettes share ------------------
     #
-    # "Prominence" is how far a colour stands from the page it is drawn on.
+    # "Prominence" is how far a color stands from the page it is drawn on.
     # Stated that way the light and dark palettes are the SAME SHAPE, even
     # though dark inverts the cloud ramp's absolute lightness -- so these
     # rules are asserted over both, and light passing unchanged is the proof

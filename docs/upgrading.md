@@ -79,6 +79,17 @@ consequences:
 
 ## Notable changes for existing stations
 
+**6.0** — the sample report was rebuilt.  The three pages are responsive, they follow your
+reader's light or dark setting, and they carry charts, day tabs and severity-colored
+alert cards.  Nothing you have written against the tags changes: the tag surface only
+gained methods.  Two things to know if you had customized the skin.  First, reinstalling
+overwrites `skins/nws/` as it always has, so copy anything you want to keep before
+upgrading — see [Making it your own](sample-report.md#making-it-your-own).  Second, the
+skin gained `css/nws.css` and `scripts/nws.js` and lost `style.inc`; `weectl` copies the
+new files but does not remove the old one, so a stale `skins/nws/style.inc` may be left
+behind.  Nothing references it and it is harmless; delete it if you like a tidy skin
+directory.
+
 **5.1** — WeeWX could fail to shut down when the SIGTERM that stops weewxd landed while the
 main thread was inside weewx-nws's startup or end-of-archive-period code.  Those paths now
 pass the shutdown through.
