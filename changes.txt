@@ -1,7 +1,7 @@
 nws change history
 ------------------
 
-6.0 (in progress)
+6.0 09/01/2026
 - The sample report is rebuilt.  Its three pages -- seven day, hourly and
   alerts -- are responsive, so one page serves a phone and a desktop, and they
   follow the reader's own light or dark setting.  The seven-day page leads with
