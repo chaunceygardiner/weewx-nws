@@ -211,12 +211,26 @@ class TestAxisGutter:
     """
 
     def test_the_gutter_fits_the_widest_label_at_the_largest_type(self):
+        """The widest label is THREE digits and a degree sign -- "100&deg;",
+        an ordinary summer afternoon -- not the "-10&deg;" the first version
+        of this test assumed.  A hundred is wider than a minus sign and two
+        digits, and sizing for the wrong worst case clipped the leading 1 off
+        a real render.
+
+        2.40 is measured, not estimated: at a 26-unit font Chromium reports
+        62.5 user units for "100&deg;" and 46.0 for "72&deg;".  Plus the 6
+        units the labels are drawn clear of the plot.
+        """
         biggest = max(_css_sizes('ylab'))
-        # "-10&deg;": two digits at about 0.55em, a hyphen at 0.33, a degree
-        # sign at 0.4 -- plus the 6 units the labels are drawn clear of the
-        # plot.  Deliberately an estimate against a bound, not a measurement:
-        # what must not happen is the gutter tracking the desktop size.
-        assert NWSSkin.PADL >= biggest * (2 * 0.55 + 0.33 + 0.4) + 6
+        needed = biggest * 2.40 + 6
+        assert NWSSkin.PADL >= needed
+        # And with HEADROOM, because 2.40 is DejaVu Sans -- the font this
+        # machine substitutes for the Open Sans the stylesheet asks for and
+        # does not have.  A reader's machine may substitute something wider.
+        # A gutter that merely FITS the font in front of us is one font away
+        # from clipping again.
+        assert NWSSkin.PADL >= needed * 1.10, (
+            'no headroom for a wider substitute font')
 
     def test_every_chart_uses_it(self):
         """Three charts, one gutter: a fix that reached only the chart the
@@ -371,9 +385,15 @@ class TestTwoWeekSparkline:
 
     @staticmethod
     def _seam_x(svg):
-        m = re.search(r'<line x1="([\d.]+)" y1="\d+" x2="[\d.]+" y2="\d+" class="seam"/>',
-                      svg)
+        m = re.search(r'<line x1="([\d.]+)" y1="(-?\d+)" x2="[\d.]+" y2="(-?\d+)" '
+                      r'class="seam"/>', svg)
         return float(m.group(1)) if m else None
+
+    @staticmethod
+    def _seam_ys(svg):
+        m = re.search(r'<line x1="[\d.]+" y1="(-?\d+)" x2="[\d.]+" y2="(-?\d+)" '
+                      r'class="seam"/>', svg)
+        return (int(m.group(1)), int(m.group(2))) if m else None
 
     @staticmethod
     def _spec(svg):
@@ -417,14 +437,42 @@ class TestTwoWeekSparkline:
         assert 'class="seam"' in svg
         assert '>Observed</text>' in svg and '>Forecast</text>' in svg
 
-    def test_the_seam_falls_where_the_forecast_begins(self):
-        """The join is at the forecast's first hour, which is the only place
-        it can be drawn honestly."""
+    def test_the_seam_falls_BETWEEN_the_two_halves(self):
+        """Not ON the first forecast point.  Drawn there the rule touches the
+        forecast curve while standing a full hour clear of the last observed
+        one, and the gap then reads as a mistake on one side only.  The
+        boundary is between the last reading and the first prediction."""
         past = week_of_obs(48)
         svg = NWSSkin.sparkline(day_of_points(), past)
         x0, x1 = float(NWSSkin.PADL), 1040 - 8
         n = 48 + 24 - 1
-        assert abs(self._seam_x(svg) - (x0 + (x1 - x0) * 48 / n)) < 0.1
+        step = (x1 - x0) / n
+        last_observed = x0 + step * 47
+        first_forecast = x0 + step * 48
+        sx = self._seam_x(svg)
+        assert abs(sx - (last_observed + first_forecast) / 2) < 0.1
+        # Equidistant from both, which is the whole point.  The tolerance is
+        # 0.11 rather than 0, because the coordinate is emitted to one decimal
+        # -- up to 0.05 of rounding, which this difference sees twice.
+        assert abs((sx - last_observed) - (first_forecast - sx)) < 0.11
+
+    def test_the_seam_rule_divides_the_two_labels(self):
+        """It runs the FULL height, label band included.  Stopped at the top
+        of the plot it left the two words side by side with nothing between
+        them, and at this size they read as one phrase -- "OBSERVED FORECAST"
+        -- which is worse than the bare line they were added to explain."""
+        svg = NWSSkin.sparkline(day_of_points(), week_of_obs(48))
+        top, bottom = self._seam_ys(svg)
+        spec = json.loads(re.search(r"data-chart='([^']*)'", svg).group(1))
+        baseline = float(re.search(
+            r'<text x="[\d.]+" y="(\d+)" class="striplab seamlab"', svg).group(1))
+        biggest = max(_css_sizes('striplab'))
+        # Starts above the tallest letters the stylesheet ever draws...
+        assert top <= baseline - biggest
+        # ...and still on the canvas, which LY - 22 was not until the band
+        # was deepened to hold it.
+        assert top >= 0
+        assert bottom == spec['y1']
 
     def test_the_two_halves_are_separate_strokes_that_are_not_joined(self):
         """NWS forecasts a grid square and the station measures its own back
@@ -434,7 +482,7 @@ class TestTwoWeekSparkline:
         svg = NWSSkin.sparkline(day_of_points(), week_of_obs(48))
         sx = self._seam_x(svg)
         assert self._last_xy(self._d(svg, 'aline'))[0] < sx
-        assert abs(self._first_xy(self._d(svg, 'tline'))[0] - sx) < 0.1
+        assert self._first_xy(self._d(svg, 'tline'))[0] > sx
 
     def test_each_half_is_drawn_from_its_own_rows(self):
         """A stroke built from the wrong slice would still draw a plausible

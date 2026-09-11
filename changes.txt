@@ -1,6 +1,31 @@
 nws change history
 ------------------
 
+6.1.1 09/10/2026
+- The seven-day chart's dividing rule is drawn where the boundary actually
+  is: BETWEEN the last reading and the first forecast hour, clear of both by
+  the same amount.  Drawn on the first forecast point it touched one curve
+  while standing a full hour from the other, so the gap read as a mistake on
+  one side only.  The rule now also runs the full height of the chart, label
+  band included -- stopped at the top of the plot it left OBSERVED and
+  FORECAST side by side with nothing between them, reading as one phrase.
+- Fixed: the chart's top temperature could lose its leading digit on a
+  phone, showing ".00" for 100 degrees.  The gutter reserved for the axis
+  labels was sized for a two-digit reading plus a minus sign; three digits
+  are wider, and a hundred-degree afternoon is not unusual.  Measured in a
+  browser this time rather than estimated -- and then given room to spare,
+  because the measurement is of whatever font the machine doing the
+  measuring substitutes, and a reader's machine may substitute a wider one.
+- weewx-nws needs a SQLite database, and now says so instead of failing with
+  a MySQL syntax error.  The schema declares STRING columns, which weedb
+  passes to the database verbatim and MySQL has no such type -- so pointing
+  [NWS] data_binding at a MySQL database made the very first CREATE TABLE a
+  syntax error, and because that happens while the service is starting it
+  took weewxd down with it: the whole station stopped, not just this
+  extension.  The binding's driver is now checked first.  A station whose
+  binding is SQLite, which is what the installer writes and what every
+  working station has, sees no change at all.
+
 6.1 09/10/2026
 - ACTION REQUIRED for any skin of your own that prints these tags.  DELETE
   THE "$unit.label..." YOU APPEND AFTER .format().  Until 6.1 the tags carried

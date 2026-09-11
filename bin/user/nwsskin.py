@@ -436,14 +436,33 @@ class NWSSkin(SearchList):
     # Room to the left of the plot for the y-axis labels, and it is set by the
     # NARROWEST screen, not the widest.  SVG text is in USER UNITS, so the
     # stylesheet scales the axis labels UP as the chart is squeezed -- to 26
-    # units below 620px -- and at that size "-10&deg;" is about 46 units wide
-    # against the 6 units of clearance the labels are drawn with.  A gutter
-    # sized for the desktop's 10-unit type does not clip the label, it clips
-    # the DIGITS: a phone showed "0&deg;, 7&deg;, 5&deg;" for an axis reading
-    # 90, 67 and 45, which is not a cosmetic failure but a wrong chart.  The
-    # rain strip's "100%" is wider still and would want 66 -- but the
-    # stylesheet hides those below 620px, and above it they are 17 units.
-    PADL = 56
+    # units below 620px.  A gutter sized for the desktop's 10-unit type does
+    # not clip the label, it clips the DIGITS: a phone showed "0&deg;, 7&deg;,
+    # 5&deg;" for an axis reading 90, 67 and 45, which is not a cosmetic
+    # failure but a wrong chart.
+    #
+    # MEASURED in a browser at 26 units rather than estimated, because the
+    # estimate was wrong twice: two digits and a degree sign come to 46.0
+    # units, THREE digits to 62.5.  The governing label is "100&deg;" -- an
+    # ordinary summer afternoon here -- not the "-10&deg;" the first fix sized
+    # for; a hundred is wider than a minus sign and two digits.  A three-digit
+    # NEGATIVE would want more still, and is not reachable: the lowest
+    # temperature ever recorded in the United States is -80F.
+    #
+    # The rain strip's "100%" is the same width, and the stylesheet hides it
+    # below 620px; above that it is 17 units and fits easily.
+    #
+    # 76 rather than the 68.5 that measurement alone calls for, and the extra
+    # is NOT slack for antialiasing.  62.5 was measured in DejaVu Sans, which
+    # is what this machine substitutes -- the stylesheet asks for Open Sans
+    # first and does not have it.  A reader's machine may substitute something
+    # else, and the glyph advances differ by more than a rounding error
+    # between the candidates (DejaVu's digits are the widest of the usual
+    # three, Arial's the narrowest).  So the margin is absorbing a DIFFERENT
+    # TYPEFACE, not a fraction of a pixel, and 76 leaves 7.5 units -- room for
+    # a substitute 12% wider than the one measured here.  It costs 6 units of
+    # plot width out of 1040.
+    PADL = 76
 
     @staticmethod
     def _geom(hours: List[Dict[str, Any]], x0: float, x1: float):
@@ -612,10 +631,25 @@ class NWSSkin(SearchList):
 
     # A seam label is only drawn with this much plot on its side of the seam.
     # A station two hours old still gets its seam LINE; what it does not get
-    # is the word "Observed" hanging off the left edge of the chart.  Sized,
-    # like PADL above, for the largest type the stylesheet ever gives it: at
-    # 22 units "OBSERVED" runs about 125 units wide with its letter-spacing.
+    # is the word "Observed" hanging off the edge of the chart.
+    #
+    # MEASURED, like PADL: at the phone's 22 units "Observed" advances 135.5
+    # and "Forecast" 132.6.  An earlier comment here estimated 125, which was
+    # 10 short -- the same guess-instead-of-measure that clipped the axis.
+    #
+    # 132 is nonetheless the right threshold, and not by luck: it is measured
+    # from x0, while the label may extend on past it into the GUTTER, which at
+    # the label band's height is empty (the axis labels sit lower, inside the
+    # plot).  At the limit the label's far edge lands at x0 + 132 - 14 - 135.5,
+    # which is 58 -- comfortably on the canvas.  The test is conservative by
+    # this much, so a label is sometimes dropped that would have fitted; that
+    # is the safe direction and not worth the arithmetic to reclaim.
     SEAM_LABEL_ROOM = 132
+
+    # Clearance between the rule and each label.  14, not 6: the rule now runs
+    # up THROUGH the label band (see sparkline), and it can only divide the two
+    # words if there is room for it to be seen between them.
+    SEAM_LABEL_GAP = 14
 
     @staticmethod
     def sparkline(hours: List[Dict[str, Any]],
@@ -648,11 +682,14 @@ class NWSSkin(SearchList):
         seam_i = len(past)
         W = 1040
         # The label band above the plot exists only when there is a seam to
-        # label, so the degraded chart keeps its old proportions exactly.  Its
-        # depth is the seam labels' own: at 22 units their ascenders reach 16
-        # above the baseline, which a shallower band would clip off the top of
-        # the viewBox.
-        LY, H, y0 = 20, (150 if seam_i else 132), (30 if seam_i else 12)
+        # label, so the degraded chart keeps its old proportions exactly.
+        #
+        # Its depth is set by the seam RULE, not by the letters: the rule
+        # starts a full label-height (22, the phone's size) above the
+        # baseline so that it clears the tops of the letters it divides, so
+        # LY must be at least 22 or the rule begins off the top of the
+        # viewBox.  LY 24 puts its top at 2.
+        LY, H, y0 = 24, (154 if seam_i else 132), (34 if seam_i else 12)
         x0, x1, y1 = NWSSkin.PADL, W - 8, y0 + 88
         px = NWSSkin._geom(series, x0, x1)
         # Observed hours can be empty; forecast hours cannot (points() drops
@@ -679,15 +716,33 @@ class NWSSkin(SearchList):
                               % (px(i), H - 6, lt.strftime('%a')))
         seam = ''
         if seam_i:
-            sx = px(seam_i)
+            # BETWEEN the two points, not on one of them.  Drawn at px(seam_i)
+            # the rule touches the first forecast point while standing a full
+            # hour clear of the last observed one, so the gap reads as a
+            # mistake on one side only.  The boundary is between the last
+            # reading and the first prediction; the line belongs between them,
+            # clear of both by the same amount.
+            sx = (px(seam_i - 1) + px(seam_i)) / 2.0
+            # THE RULE RUNS THE FULL HEIGHT, label band included.  Stopped at
+            # the top of the plot it left the two words side by side with
+            # nothing between them, and at this size they read as one phrase --
+            # "OBSERVED FORECAST" -- which is worse than the bare line they
+            # were added to explain.  The line is what makes them two labels.
+            #
+            # The top is sized by the PHONE's 22-unit labels, not the desktop's
+            # 10: sized by the smaller one the rule starts below the top of the
+            # phone's letters and stops dividing them.  Same rule as PADL above
+            # -- geometry in user units is sized by the LARGEST type the
+            # stylesheet ever gives it, not by the one in front of you.
             seam = ('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" class="seam"/>'
-                    % (sx, y0, sx, y1))
+                    % (sx, LY - 22, sx, y1))
+            gap = NWSSkin.SEAM_LABEL_GAP
             if sx - x0 >= NWSSkin.SEAM_LABEL_ROOM:
                 seam += ('<text x="%.1f" y="%d" class="striplab seamlab" '
-                         'text-anchor="end">Observed</text>' % (sx - 6, LY))
+                         'text-anchor="end">Observed</text>' % (sx - gap, LY))
             if x1 - sx >= NWSSkin.SEAM_LABEL_ROOM:
                 seam += ('<text x="%.1f" y="%d" class="striplab seamlab">Forecast</text>'
-                         % (sx + 6, LY))
+                         % (sx + gap, LY))
         # Emitted only when there is something to draw: an empty d= would put
         # a <path> that draws nothing into every fresh install's page.
         recorded = NWSSkin._path(past, px, py, 'outTemp', gaps=True)

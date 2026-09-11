@@ -109,6 +109,22 @@ INFO user.nws: request_urls: 404, Data Unavailable For Requested Point, ...
   source that asks too often — which is also why a `User-Agent` that identifies you is
   worth setting, since it gives them someone to contact instead.
 
+## `weewx-nws needs a SQLite database`
+
+```
+ERROR user.nws: weewx-nws needs a SQLite database, but binding 'nws_binding' uses weedb.mysql.  Point [NWS] data_binding at a SQLite database …
+```
+
+weewx-nws stores its forecasts in a SQLite database of its own and cannot use any
+other kind: its schema declares `STRING` columns, which WeeWX passes to the database
+verbatim and MySQL has no such type.  Point `[NWS] data_binding` back at a SQLite
+binding — the `nws_binding` / `nws_sqlite` entries the installer writes are one — and
+restart.
+
+The extension does nothing until then, but WeeWX itself goes on running.  Before
+6.1.1 this surfaced as a raw MySQL syntax error while the service was starting, which
+stopped weewxd altogether.
+
 ## `The nws database has an old schema; rebuilding it`
 
 ```

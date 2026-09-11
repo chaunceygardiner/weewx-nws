@@ -74,7 +74,7 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "6.1"
+WEEWX_NWS_VERSION = "6.1.1"
 
 def reraise_if_terminate(e: BaseException) -> None:
     """weewxd stops by raising Terminate from its SIGTERM signal handler --
@@ -266,6 +266,27 @@ class NWS(StdService):
             self.config_dict['DataBindings'],
             self.config_dict['Databases'],
             self.data_binding)
+
+        # SQLite only, and said HERE so the failure names its cause.
+        #
+        # This schema declares eighteen STRING columns, and weedb emits a
+        # declared type verbatim -- weedb.mysql has no create_table of its own
+        # -- so on MySQL the very first CREATE TABLE is a syntax error on a
+        # type MySQL does not have.  (WeeWX's own schemas never say STRING,
+        # which is why nothing else trips over this.)  Without this check the
+        # operator gets that raw syntax error, and because a service
+        # constructor that raises takes weewxd down with it, their whole
+        # station stops rather than just this extension.
+        #
+        # So: refuse early, say what to do, and leave weewxd running.
+        driver = self.dbm_dict.get('database_dict', {}).get('driver')
+        if driver != 'weedb.sqlite':
+            log.error("weewx-nws needs a SQLite database, but binding '%s' uses "
+                      "%s.  Point [NWS] data_binding at a SQLite database (the "
+                      "installer's nws_binding/nws_sqlite entries are one).  "
+                      "The extension is doing nothing until then."
+                      % (self.data_binding, driver or 'an unknown driver'))
+            return
 
         # [possibly] initialize the database
         dbmanager = engine.db_binder.get_manager(data_binding=self.data_binding, initialize=True)

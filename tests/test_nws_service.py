@@ -393,6 +393,48 @@ class TestStaleSchema:
         assert db_count(nws, ForecastType.ALERTS) == 1, 'the rows were destroyed'
 
 
+class TestNonSqliteBinding:
+    """weewx-nws is SQLite-only, and says so where the failure happens.
+
+    This schema declares eighteen STRING columns and weedb emits a declared
+    type verbatim (weedb.mysql has no create_table of its own), so on MySQL
+    the first CREATE TABLE is a syntax error on a type MySQL does not have.
+    WeeWX's own schemas never say STRING, which is why nothing else trips over
+    it.  Before the check the operator got that raw syntax error -- and since
+    a service constructor that raises takes weewxd with it, their whole
+    station stopped rather than just this extension.
+    """
+
+    def _config(self, tmp_path, driver):
+        read_dir = str(tmp_path / 'forecasts')
+        os.mkdir(read_dir)
+        write_forecast_files(read_dir, alerts=make_alerts_json(make_alert()))
+        config = make_config(str(tmp_path / 'nws.sdb'), read_dir)
+        config['DatabaseTypes']['SQLite']['driver'] = driver
+        return config
+
+    def test_a_non_sqlite_binding_is_refused_by_name(self, tmp_path, caplog):
+        config = self._config(tmp_path, 'weedb.mysql')
+        with caplog.at_level(logging.ERROR):
+            nws = NWS(StdEngine(config), config)
+        assert 'needs a SQLite database' in caplog.text
+        assert 'weedb.mysql' in caplog.text
+        assert 'data_binding' in caplog.text          # says what to change
+        # Inert, not fatal: weewxd goes on running the station.
+        assert not hasattr(nws, 'cfg')
+
+    def test_it_does_not_reach_the_create(self, tmp_path):
+        """The point of checking early: no table, no cryptic syntax error."""
+        config = self._config(tmp_path, 'weedb.mysql')
+        NWS(StdEngine(config), config)
+        assert not os.path.exists(str(tmp_path / 'nws.sdb'))
+
+    def test_sqlite_is_unaffected(self, tmp_path):
+        config = self._config(tmp_path, 'weedb.sqlite')
+        nws = NWS(StdEngine(config), config)
+        assert nws.cfg is not None
+
+
 class TestReadFromDir:
     """Fleet mode reads forecasts from a directory instead of from NWS, and
     since 6.1 they get the same sanity check a reply from NWS gets.

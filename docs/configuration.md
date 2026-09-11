@@ -120,7 +120,7 @@ down.  Set it to `0` to keep everything for ever.
 
 ## The database
 
-weewx-nws keeps its forecasts in `nws.sdb`, a sqlite database of its own, next to the
+weewx-nws keeps its forecasts in `nws.sdb`, a **SQLite** database of its own, next to the
 weather archive.  The installer writes both halves:
 
 ```ini

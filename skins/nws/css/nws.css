@@ -208,7 +208,10 @@
 .fc svg.chart .aline{fill:none;stroke:var(--fc-muted);stroke-width:1.6;
                      stroke-linejoin:round;stroke-linecap:round}
 .fc svg.chart .adot{fill:var(--fc-muted)}
-.fc svg.chart .seam{stroke:var(--fc-line);stroke-width:1.5}
+/* --fc-axis, not --fc-line: the rule runs the full height of the chart
+   including the label band, which reads strongly enough without the
+   weight of the page's most prominent structural line. */
+.fc svg.chart .seam{stroke:var(--fc-axis);stroke-width:1.5}
 .fc svg.chart .dline{fill:none;stroke:var(--fc-dew);stroke-width:1.6;
                      stroke-dasharray:4 3;stroke-linejoin:round}
 .fc svg.chart .parea{fill:var(--fc-rain);opacity:.8}
