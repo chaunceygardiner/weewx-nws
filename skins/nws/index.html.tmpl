@@ -94,7 +94,10 @@
         ## forecast highs and lows, so the chart's job is the SHAPE -- what
         ## the week just did, what the coming one is expected to do, and one
         ## temperature scale to read both against.  The instrument version,
-        ## with dew point and the rain strip, is the hourly page's.
+        ## with dew point and the rain strip, is the hourly page's -- reached
+        ## from the menubar, like every other page; the caption does not link
+        ## to it, because a link in a chart's caption reads as a claim about
+        ## that chart.
         <section class="twoweek">
 ## Named by what the chart IS, not by how much of it there is: a station
 ## running for two hours draws two hours, and a heading claiming two weeks
@@ -106,17 +109,12 @@
 #end if
           <div class="sparkwrap chartwrap">$nwsskin.sparkline($hours, $past)<div class="readout" hidden></div>
 #if $past
-            <p class="sparkcap">Every hour: what this station recorded, up to the marked
-            hour, and what the National Weather Service forecasts from it.  Night is
-            shaded.  The two curves are deliberately not joined &mdash; NWS forecasts a
-            grid square and your station measures its own back yard, so they seldom meet
-            exactly at the seam.
-            <a href="hours.html">Hour by hour, with dew point and rain &rarr;</a></p>
+            <p class="sparkcap">The week this station recorded, then the week the
+            Weather Service forecasts, on one temperature scale.  Night shaded.</p>
 #else
             <p class="sparkcap">Forecast temperature every hour of the week, night shaded.
             Once this station has archive records behind it, the week it recorded is drawn
-            here too.
-            <a href="hours.html">Hour by hour, with dew point and rain &rarr;</a></p>
+            here too.</p>
 #end if
           </div>
         </section>

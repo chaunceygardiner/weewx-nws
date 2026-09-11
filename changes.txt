@@ -1,6 +1,16 @@
 nws change history
 ------------------
 
+6.1.2 (in progress)
+- The caption under the 7 Day page's temperature chart no longer promises dew
+  point and rain.  It ended with a link reading "Hour by hour, with dew point
+  and rain", meaning the Hourly page -- but sitting at the end of a paragraph
+  about the chart above it, it read as a claim about that chart.  That chart
+  draws temperature, and nothing else.  The link is gone entirely: the menubar
+  has carried Hourly on every page all along, and this was the only inline
+  cross-page link in the skin.  The caption is now one sentence naming what
+  the two halves of the chart are.
+
 6.1.1 09/10/2026
 - The seven-day chart's dividing rule is drawn where the boundary actually
   is: BETWEEN the last reading and the first forecast hour, clear of both by
