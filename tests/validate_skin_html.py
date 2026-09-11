@@ -14,13 +14,16 @@
 """Validate the sample skin's rendered HTML with the Nu Html Checker.
 
 Renders the skin through WeeWX's report engine (reusing the render-test
-harness) in two scenarios -- one with an active alert, one with no alerts and
-ranged wind speeds -- and runs vnu.jar over every generated page.  Rendering
-both scenarios matters: the alerts page emits completely different markup
-depending on whether an alert is active, so validating a live site only checks
-whichever branch the weather happens to be in that day (a one-column spacer
-row in the alert details table shipped in 2024 and was not flagged until an
-alert was active while a warning-strict checker was watching).
+harness) in two scenarios -- one with an active alert and no station archive,
+one with no alerts, ranged wind speeds and a station archive behind it --
+and runs vnu.jar over every generated page.  Rendering both scenarios matters:
+these pages emit completely different markup depending on the day.  The alerts
+page turns over entirely on whether an alert is active, so validating a live
+site only checks whichever branch the weather happens to be in that day (a
+one-column spacer row in the alert details table shipped in 2024 and was not
+flagged until an alert was active while a warning-strict checker was
+watching); and the 7 Day chart grows a seam, two labels and a second stroke
+once the station has an archive to draw.
 
 Requires java and vnu.jar (in addition to the test suite's requirements).
 The jar is looked for at ~/software/vnu/vnu.jar; override with --vnu-jar or
@@ -51,7 +54,7 @@ from typing import List, Tuple
 
 from test_nws import load_fixture, make_alert, make_alerts_json
 from test_nws_service import freshen
-from test_nws_skin import LONG_NWS_HEADLINE, render_skin
+from test_nws_skin import LONG_NWS_HEADLINE, archive_records, render_skin
 
 def render_scenarios(base_dir: str) -> List[str]:
     """Render both skin scenarios under base_dir; return the html files."""
@@ -71,7 +74,13 @@ def render_scenarios(base_dir: str) -> List[str]:
             period['windSpeed'] = '2 to 9 mph'
     no_alert = pathlib.Path(base_dir) / 'no_alert'
     no_alert.mkdir()
-    render_skin(no_alert, ranged_one_hour, ranged_twelve_hour, make_alerts_json())
+    # And this one has a STATION ARCHIVE behind it, so the 7 Day chart draws
+    # its observed half -- the seam, the two labels naming it and the broken
+    # stroke over the outage are markup the other scenario never emits.  Same
+    # argument as the alerts page: a branch nobody validates is a branch that
+    # ships broken.
+    render_skin(no_alert, ranged_one_hour, ranged_twelve_hour, make_alerts_json(),
+                archive=archive_records(18, gap=(10, 11, 12)))
 
     html_files = sorted(glob.glob(os.path.join(base_dir, '*', 'public_html', 'nws', '*.html')))
     assert len(html_files) == 6, 'expected 6 rendered pages, found %d' % len(html_files)

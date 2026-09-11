@@ -166,10 +166,33 @@ class TestComposeForecastRecords:
         record = compose(one_hour_json, ForecastType.ONE_HOUR)[0]
         assert record.iconUrl == 'https://api.weather.gov/icons/land/day/bkn?size=small'
 
-    def test_metric_units(self, one_hour_json):
-        one_hour_json['properties']['units'] = 'si'
+    def test_records_are_always_us(self, one_hour_json):
+        """One unit system in this database, and no branch to get out of
+        step with it.  Everything downstream takes the stored numbers to be
+        US: the schema, the dewpoint conversion here, and the ValueHelpers
+        the tags hand out."""
         record = compose(one_hour_json, ForecastType.ONE_HOUR)[0]
-        assert record.usUnits == weewx.METRIC
+        assert record.usUnits == weewx.US
+
+    def test_a_non_us_reply_is_rejected_rather_than_mislabeled(self, one_hour_json):
+        """Until 6.1 a reply saying 'si' was composed into records stamped
+        weewx.METRIC, which nothing downstream read -- so Celsius would have
+        been served as Fahrenheit.  It cannot arrive by accident (nws.py
+        sends no units parameter), but a user CAN paste a gridpoint URL
+        carrying ?units=si into one_hour_forecast_url, so the reply is
+        refused and the log line says what to change."""
+        one_hour_json['properties']['units'] = 'si'
+        err = sanity_check(one_hour_json, ForecastType.ONE_HOUR)
+        assert err is not None
+        assert '?units=si' in err
+
+    def test_composing_a_non_us_forecast_raises(self, one_hour_json):
+        """The sanity check is not the only way in: --insert-forecast
+        composes a saved json file straight into a database without it, so the
+        invariant is checked where the records are actually built."""
+        one_hour_json['properties']['units'] = 'si'
+        with pytest.raises(ValueError, match='US units'):
+            compose(one_hour_json, ForecastType.ONE_HOUR)
 
 
 class TestTranslateWindDir:
@@ -443,10 +466,45 @@ class TestComposeAlertRecords:
             j = make_alerts_json(make_alert(status=status))
             assert compose_alerts(j) == [], 'status %s should be skipped' % status
 
-    def test_null_ends_falls_back_to_expires(self):
-        alert = make_alert(ends=None)
-        record = compose_alerts(make_alerts_json(alert))[0]
-        assert record.endTime == parse(alert['properties']['expires'], tzinfos=UTC).timestamp()
+    def test_absent_event_times_are_stored_as_nothing(self):
+        """NWS always says when it SPOKE -- sent, effective, expires: 356 of
+        356 in a national sample -- and not always when the WEATHER starts or
+        stops (onset null in 3, ends in 23).  Those are stored as the nothing
+        it sent.
+
+        Through 6.0 endTime took `expires` instead, which alert_window() then
+        had to guess back out by testing equality, and onset had no fallback
+        at all -- so an alert without one could not be stored, and the sanity
+        check threw away the whole reply rather than find out.
+        """
+        record = compose_alerts(make_alerts_json(make_alert(ends=None)))[0]
+        assert record.endTime is None
+        record = compose_alerts(make_alerts_json(make_alert(onset=None)))[0]
+        assert record.startTime is None
+        # The pair NWS actually sends together (all 3 null-onset alerts in the
+        # sample also had a null ends).
+        record = compose_alerts(make_alerts_json(
+            make_alert(onset=None, ends=None)))[0]
+        assert record.startTime is None and record.endTime is None
+        # The message times are still required, and still real.
+        assert record.generatedTime is not None and record.expirationTime is not None
+
+    def test_an_alert_with_no_onset_passes_the_sanity_check(self):
+        """The bug this release fixes: one such alert used to fail the whole
+        reply, so a station saw NO alerts at all until NWS sent a batch
+        without one.  Two of the three in the national sample were Evacuation
+        Immediate."""
+        assert sanity_check(make_alerts_json(make_alert(onset=None)),
+                            ForecastType.ALERTS) is None
+        assert sanity_check(make_alerts_json(make_alert(onset=None, ends=None)),
+                            ForecastType.ALERTS) is None
+
+    def test_the_message_times_are_still_required(self):
+        """Nullable is a claim about the EVENT fields only.  A reply with no
+        effective or no expires is malformed, and pruning leans on expires."""
+        for field in ('effective', 'expires'):
+            j = make_alerts_json(make_alert(**{field: None}))
+            assert sanity_check(j, ForecastType.ALERTS) is not None, field
 
     def test_recently_expired_alert_still_shown(self):
         # Alerts are kept for 24 hours past expiration because NWS is slow to

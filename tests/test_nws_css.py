@@ -69,6 +69,15 @@ GROUNDS = {
     '--fc-ok':        [('--fc-surface', 3.0)],
     '--fc-on-accent': [('--fc-accent', 4.5), ('--fc-sev-severe', 4.5)],
     '--fc-rain':      [('--fc-surface', 4.5), ('--fc-tint', 4.5)],
+    # The severity colors became TEXT in 6.1 -- the named chip on an alert
+    # card -- so they need a contrast bar and not just the prominence ORDER
+    # below.  Until then they were used only as a rail and a bare dot, which
+    # is exactly the color-only encoding the chip exists to retire.
+    '--fc-sev-extreme':  [('--fc-surface', 4.5)],
+    '--fc-sev-severe':   [('--fc-surface', 4.5)],
+    '--fc-sev-moderate': [('--fc-surface', 4.5)],
+    '--fc-sev-minor':    [('--fc-surface', 4.5)],
+    '--fc-sev-unknown':  [('--fc-surface', 4.5)],
     # These two render only in states a walk of one day's pages does not
     # produce: the readout is empty until a pointer touches a chart, and the
     # "begins later" badge needs an alert that has not started.  They are here

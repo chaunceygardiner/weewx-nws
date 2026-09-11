@@ -49,8 +49,9 @@ unreadable and slow.  The templates ask for a finished <svg> and place it.
 Three slices of one code path, because a week of hourly data and a day of it
 answer different questions:
 
-  sparkline()  ~150 h, no rain strip -- the week's RHYTHM, heading the 7 Day
-               list, whose range bars already carry the highs and the lows.
+  sparkline()  two weeks, no rain strip -- the week the station RECORDED
+               beside the week NWS forecasts, heading the 7 Day list, whose
+               range bars already carry the forecast highs and lows.
   week_chart() ~150 h, full furniture: temperature, dew point and rain.
   day_chart()    24 h, same furniture, with hour labels that can be read and a
                dew-point spread that is actually visible -- which is exactly
@@ -60,12 +61,18 @@ answer different questions:
 import datetime
 import html
 import json
+import logging
 import math
 import re
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import weewx.almanac
+import weewx.units
 
 from weewx.cheetahgenerator import SearchList
+
+log = logging.getLogger(__name__)
 
 # Same dual-arm import as nws.py's for nwsicons, and for the same reason:
 # under weewxd this module is `user.nwsskin` with WEEWX_ROOT/bin on the path,
@@ -80,7 +87,12 @@ except ImportError:
 class NWSSkin(SearchList):
     """$nwsskin -- the sample report's charts, chips and alert cards."""
 
+    # The report engine hands a search list a timespan and a database lookup;
+    # this one KEEPS the lookup, because observations() below reads the
+    # station's own archive -- the one thing on these pages that does not come
+    # from NWS.  Everything else here is a static function of what it is given.
     def get_extension_list(self, timespan, db_lookup) -> List[Dict[str, 'NWSSkin']]:
+        self.db_lookup = db_lookup
         return [{'nwsskin': self}]
 
     # ---- small formatting helpers ---------------------------------------
@@ -227,7 +239,211 @@ class NWSSkin(SearchList):
                 '<span class="hi">%d&deg;</span>'
                 % (lo_txt, left, width, round(hi)))
 
+    # ---- the station's own past ------------------------------------------
+    #
+    # The 7 Day page's chart is two weeks: the week the STATION RECORDED, then
+    # the week NWS FORECASTS.  Everything here is what it takes to put the
+    # first half on the same axis as the second.
+
+    # One week of hourly SLOTS.  Slots, not records: the archive is sampled
+    # every few minutes and the forecast is hourly, so the two only share an
+    # axis once the archive has been averaged onto the forecast's own grid.
+    PAST_HOURS = 168
+
+    # Whether the archive could be read at all is worth exactly ONE line per
+    # weewxd run.  The report regenerates every archive interval, so an
+    # unreadable binding would otherwise write the same line every few minutes
+    # for as long as weewxd runs.  Module state, like nwsicons.UNKNOWN.
+    _READ_FAILED = False
+
+    def _forecast_temp_unit(self) -> str:
+        """The unit the forecast half of the curve is plotted in: this
+        report's own target unit for outTemp.
+
+        $nwsforecast builds its ValueHelpers with this report's converter, so
+        points() hands the chart numbers that are ALREADY in the report's
+        unit.  The observed half arrives from the station's archive in
+        whatever the station records in, and has to be brought to that same
+        one -- 20 C and 68 F are the same afternoon, and plotted on one axis
+        unconverted they land 48 degrees apart.
+
+        Asking the converter, rather than assuming US, is what keeps the two
+        halves together when the report is set to metric.
+        """
+        return self.generator.converter.getTargetUnit('outTemp')[0]
+
+    def observations(self, forecast: List[Dict[str, Any]],
+                     back: Optional[int] = None) -> List[Dict[str, Any]]:
+        """The station's OWN hourly temperature for the week before the
+        forecast begins, in the shape $nwsforecast.points() returns.
+
+        The seam is the forecast's FIRST hour, not the wall clock: it is where
+        the forecast curve begins, so it is the only place the join can be
+        drawn honestly.  (Periods that have already ended are dropped on read,
+        so that first hour is the current one.)
+
+        One row per hour, INCLUDING the hours with nothing in them -- a
+        station that was down for a day must leave a hole in the line rather
+        than a confident stroke across it, and the crosshair indexes this list
+        by position, so a missing hour has to keep its place.  Leading empty
+        hours are dropped instead: a station three days old gets three days of
+        chart, not a week four sevenths of which is a lie.  Trailing ones are
+        NOT dropped -- a gap between the last reading and the forecast is
+        exactly the news that weewxd stopped.
+
+        Returns [] when there is no forecast to hang it from, when the archive
+        holds nothing yet, or when it cannot be read at all.  The chart then
+        degrades to the forecast week alone, which is what a fresh install
+        sees.
+        """
+        back = NWSSkin.PAST_HOURS if back is None else back
+        if not forecast:
+            return []
+        seam = int(forecast[0]['startTime'])
+        start = seam - back * 3600
+        readings = self._hourly_means(start, seam)
+        # Before the almanac, not after: with nothing to plot there is nothing
+        # to shade, and the fresh-install path is the common one.
+        if not readings:
+            return []
+        is_day = self._daytime(start, seam)
+        return NWSSkin._from_first_reading(
+            [{'startTime': t,
+              'outTemp': readings.get(t),
+              # The sparkline plots temperature alone, but the shape has to
+              # match points() -- one list of both halves goes to the night
+              # bands and to the crosshair.
+              'dewpoint': None,
+              'pop': None,
+              'isDaytime': is_day(t)}
+             for t in range(start, seam, 3600)])
+
+    @staticmethod
+    def _from_first_reading(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """`rows` from its first hour that HAS a reading -- the data-driven
+        width.  Everything, if the first hour has one; nothing, if none has."""
+        for i, r in enumerate(rows):
+            if r['outTemp'] is not None:
+                return rows[i:]
+        return []
+
+    def _hourly_means(self, start: int, stop: int) -> Dict[int, float]:
+        """{hour start -> mean temperature}, on ABSOLUTE hourly boundaries and
+        converted to the unit the forecast is plotted in.  Hours the archive
+        has nothing for are simply absent from the mapping.
+
+        NOT weewx.xtypes.get_series(..., 'avg', 3600), which would otherwise
+        be the obvious way to ask.  Its intervals come from
+        weeutil.intervalgen, whose boundaries are constant in LOCAL time, and
+        this chart's x axis is absolute time -- the forecast half is hourly in
+        absolute time and the two halves share one geometry.  They agree on an
+        ordinary day and at the spring change; they do NOT agree at the fall
+        change, where the hour the clock repeats gets no interval of its own
+        and its neighbor's interval runs two hours instead of one.  The result
+        would be a one-hour hole in the recorded week every November, next to
+        an hour whose mean silently covered two -- and it would appear on the
+        day nobody thinks to re-check.
+
+        Two lesser reasons, both real: one query instead of one per hour, and
+        the unit question settled per RECORD rather than per series, so a
+        station that changed unit system mid-week still averages correctly
+        (get_series refuses that case outright).
+
+        A binding that cannot be read costs the chart, never the page.  This
+        runs on the report thread, so there is no Terminate to let through,
+        and a sample report whose 7 Day page vanishes because an archive is
+        misconfigured is worse than one drawn without its observed half.  The
+        CONVERSION is inside that guard too, and not by accident: WeeWX knows
+        three unit systems, and getStandardUnitType() raises KeyError for any
+        other value -- so one corrupt or hand-edited archive row carrying a
+        usUnits of 0 or 3 would otherwise take the whole page down, which is
+        the exact failure this guard exists to prevent.
+        """
+        try:
+            target = self._forecast_temp_unit()
+            manager = self.db_lookup()
+            rows = manager.genSql(
+                'SELECT dateTime, usUnits, outTemp FROM %s WHERE dateTime > ? '
+                'AND dateTime <= ? AND outTemp IS NOT NULL' % manager.table_name,
+                (start, stop))
+            # (slot, usUnits) -> [sum, count].  Split by unit system as well as
+            # by hour: raw values from two systems cannot be added together,
+            # and the conversion has to happen before they meet.
+            buckets: Dict[Tuple[int, int], List[float]] = {}
+            for when, units, value in rows:
+                # weewx stamps a record at the END of its interval, so the
+                # window is (start, stop] and a reading landing exactly on an
+                # hour belongs to the hour BEFORE it.
+                slot = start + ((int(when) - start - 1) // 3600) * 3600
+                acc = buckets.setdefault((slot, int(units)), [0.0, 0.0])
+                acc[0] += float(value)
+                acc[1] += 1
+            totals: Dict[int, List[float]] = {}
+            for (slot, units), (total, count) in buckets.items():
+                unit, group = weewx.units.getStandardUnitType(units, 'outTemp')
+                mean = weewx.units.convert(
+                    weewx.units.ValueTuple(total / count, unit, group), target)[0]
+                got = totals.setdefault(slot, [0.0, 0.0])
+                got[0] += mean * count
+                got[1] += count
+            return {slot: total / count for slot, (total, count) in totals.items()}
+        except Exception as e:
+            if not NWSSkin._READ_FAILED:
+                NWSSkin._READ_FAILED = True
+                log.info('nwsskin: cannot read the station archive for the '
+                         "7 Day chart's observed week (%s); drawing the "
+                         'forecast alone.' % e)
+            return {}
+
+    def _daytime(self, first_ts: int, last_ts: int) -> Callable[[int], bool]:
+        """Is this instant daylight at the station?  One sunrise/sunset pair
+        per calendar day, looked up once and closed over.
+
+        The forecast half of the chart gets isDaytime from NWS itself.  The
+        observed half has to be reckoned here, and the two must agree across
+        the seam -- night shading that stops dead at the join would read as
+        two charts pasted together.
+
+        A day the almanac will not answer for -- a polar summer, a polar
+        winter, an almanac that raises -- is left UNSHADED rather than
+        guessed.  A band is a claim about where the sun was; no band claims
+        nothing.
+        """
+        lat = self.generator.stn_info.latitude_f
+        lon = self.generator.stn_info.longitude_f
+        windows: Dict[Any, Tuple[Optional[float], Optional[float]]] = {}
+        day = datetime.date.fromtimestamp(first_ts)
+        end = datetime.date.fromtimestamp(last_ts)
+        while day <= end:
+            noon = datetime.datetime(day.year, day.month, day.day, 12).timestamp()
+            try:
+                alm = weewx.almanac.Almanac(noon, lat, lon)
+                windows[day] = (alm.sunrise.raw, alm.sunset.raw)
+            except Exception:
+                windows[day] = (None, None)
+            day += datetime.timedelta(days=1)
+
+        def is_day(when: int) -> bool:
+            rise, set_ = windows.get(datetime.date.fromtimestamp(when), (None, None))
+            if rise is None or set_ is None:
+                return True
+            return bool(rise <= when < set_)
+
+        return is_day
+
     # ---- chart primitives -------------------------------------------------
+
+    # Room to the left of the plot for the y-axis labels, and it is set by the
+    # NARROWEST screen, not the widest.  SVG text is in USER UNITS, so the
+    # stylesheet scales the axis labels UP as the chart is squeezed -- to 26
+    # units below 620px -- and at that size "-10&deg;" is about 46 units wide
+    # against the 6 units of clearance the labels are drawn with.  A gutter
+    # sized for the desktop's 10-unit type does not clip the label, it clips
+    # the DIGITS: a phone showed "0&deg;, 7&deg;, 5&deg;" for an axis reading
+    # 90, 67 and 45, which is not a cosmetic failure but a wrong chart.  The
+    # rain strip's "100%" is wider still and would want 66 -- but the
+    # stylesheet hides those below 620px, and above it they are 17 units.
+    PADL = 56
 
     @staticmethod
     def _geom(hours: List[Dict[str, Any]], x0: float, x1: float):
@@ -261,19 +477,76 @@ class NWSSkin(SearchList):
         return lo_ax, hi_ax, max(hi_ax - lo_ax, 1)
 
     @staticmethod
-    def _path(hours: List[Dict[str, Any]], px, py, key: str) -> str:
+    def _path(hours: List[Dict[str, Any]], px, py, key: str,
+              offset: int = 0, gaps: bool = False) -> str:
+        """One series as a path.
+
+        `offset` shifts every point along the x geometry, so a SLICE of a
+        longer series can be drawn as its own stroke -- which is how the
+        observed week and the forecast week end up as two strokes on one set
+        of coordinates.
+
+        `gaps` decides what a missing value MEANS, and the two answers are
+        both right.  In a forecast series a hole is one of two curves missing
+        a reading the other has -- an hour with no dew point between two that
+        have one -- and joining across it is the truth.  In the OBSERVED
+        series it means the station recorded nothing at all, and joining
+        across it would draw a confident line through an outage.  So that
+        stroke BREAKS and starts again; see _orphans() for what survives a
+        break alone.
+        """
         pts = [(i, h[key]) for i, h in enumerate(hours) if h.get(key) is not None]
         if not pts:
             return ''
-        return 'M ' + ' L '.join('%.1f %.1f' % (px(i), py(v)) for i, v in pts)
+        if not gaps:
+            return 'M ' + ' L '.join('%.1f %.1f' % (px(offset + i), py(v))
+                                     for i, v in pts)
+        out, prev = [], None
+        for i, v in pts:
+            out.append('%s %.1f %.1f' % ('L' if prev == i - 1 else 'M',
+                                         px(offset + i), py(v)))
+            prev = i
+        return ' '.join(out)
+
+    @staticmethod
+    def _orphans(hours: List[Dict[str, Any]], px, py, key: str,
+                 offset: int = 0) -> str:
+        """A dot for every reading whose neighbors are both missing.
+
+        A broken stroke draws NOTHING for a lone point: a subpath of one
+        moveto has no length.  So an hour the station caught between two
+        outages would vanish from a chart whose whole job is to say what was
+        recorded -- and vanish silently, which is the failure this file's
+        tests exist for.
+        """
+        have = [h.get(key) is not None for h in hours]
+        return ''.join(
+            '<circle cx="%.1f" cy="%.1f" r="1.8" class="adot"/>'
+            % (px(offset + i), py(hours[i][key]))
+            for i in range(len(have))
+            if have[i]
+            and not (i and have[i - 1])
+            and not (i + 1 < len(have) and have[i + 1]))
 
     @staticmethod
     def _series(hours: List[Dict[str, Any]], x0: float, x1: float,
                 ty0: int, ty1: int, lo_ax: int, span: int,
-                with_dew_and_rain: bool = True) -> str:
+                with_dew_and_rain: bool = True, past_n: int = 0) -> str:
         """The points the crosshair reads, plus the geometry it needs to
         invert a pointer position into an index.  Carried on the <svg> as
         data-chart so one small script drives every chart on the page.
+
+        EVERY slot goes in, including an observed hour with no reading, and
+        its `T` is then null.  The script turns a pointer position into an
+        INDEX by dividing the plot width by the number of points, so a list
+        that quietly left the empty hours out would put every crosshair
+        reading on the wrong hour.  The script draws no dot and says "no
+        reading" for those.
+
+        `past_n` marks how many of the leading points are the station's own
+        record rather than a forecast, so the readout can say which it is
+        showing.  A chart must not present a measurement and a prediction in
+        the same words.
 
         `with_dew_and_rain` is FALSE for the sparkline, and that is not a
         tidiness argument.  The crosshair positions the dew-point dot with
@@ -283,17 +556,23 @@ class NWSSkin(SearchList):
         the readout announced a dew point and a chance of rain for two series
         the sparkline does not draw.  A chart may only report what it plots.
         """
+        points = []
+        for i, h in enumerate(hours):
+            point: Dict[str, Any] = {
+                't': datetime.datetime.fromtimestamp(h['startTime'])
+                     .strftime('%a %-I %p').replace('AM', 'am').replace('PM', 'pm'),
+                'T': round(h['outTemp']) if h['outTemp'] is not None else None,
+            }
+            if with_dew_and_rain:
+                point['d'] = round(h['dewpoint']) if h['dewpoint'] is not None else None
+                point['r'] = h['pop'] or 0
+            if i < past_n:
+                point['o'] = 1
+            points.append(point)
         return json.dumps({
             'x0': x0, 'x1': x1, 'y0': ty0, 'y1': ty1,
             'lo': lo_ax, 'span': span,
-            'p': [dict({
-                't': datetime.datetime.fromtimestamp(h['startTime'])
-                     .strftime('%a %-I %p').replace('AM', 'am').replace('PM', 'pm'),
-                'T': round(h['outTemp']),
-            }, **({
-                'd': round(h['dewpoint']) if h['dewpoint'] is not None else None,
-                'r': h['pop'] or 0,
-            } if with_dew_and_rain else {})) for h in hours],
+            'p': points,
         }, separators=(',', ':'))
 
     # `off`, not the html `hidden` attribute: hidden is an HTML thing and is
@@ -331,22 +610,55 @@ class NWSSkin(SearchList):
 
     # ---- the three charts -------------------------------------------------
 
-    @staticmethod
-    def sparkline(hours: List[Dict[str, Any]]) -> str:
-        """The week's rhythm, WITH a temperature scale.
+    # A seam label is only drawn with this much plot on its side of the seam.
+    # A station two hours old still gets its seam LINE; what it does not get
+    # is the word "Observed" hanging off the left edge of the chart.  Sized,
+    # like PADL above, for the largest type the stylesheet ever gives it: at
+    # 22 units "OBSERVED" runs about 125 units wide with its letter-spacing.
+    SEAM_LABEL_ROOM = 132
 
-        Without a scale it says only "it cools at night" -- true, and worth
-        nothing: you cannot tell how warm the afternoons get, how cold the
-        nights get, or whether the week is trending.  Three labeled
+    @staticmethod
+    def sparkline(hours: List[Dict[str, Any]],
+                  past: Optional[List[Dict[str, Any]]] = None) -> str:
+        """Two weeks on one scale: the week the station RECORDED, then the
+        week NWS forecasts, with the seam between them named.
+
+        One axis, deliberately.  A cold snap last week rescales the forecast
+        half, and that is the point -- "warm for the week" and "warm for the
+        fortnight" are different claims, and only a shared scale can tell them
+        apart.  The two halves are drawn as SEPARATE strokes and are not
+        joined across the seam: the last reading and the first forecast hour
+        rarely agree, because NWS forecasts a grid square and the station
+        measures its own back yard, and that step is worth seeing rather than
+        smoothing away.
+
+        Without a scale the curve says only "it cools at night" -- true, and
+        worth nothing: you cannot tell how warm the afternoons get, how cold
+        the nights get, or whether the fortnight is trending.  Three labeled
         gridlines cost 20px and answer all three.  The instrument version,
         with dew point and the rain strip, is week_chart().
+
+        With no `past` -- a fresh install, an archive that cannot be read --
+        this is EXACTLY the one-week chart it has always been: same viewBox,
+        same plot, no seam, no label band.  Nothing about the empty case is
+        announced on the chart itself; the caption below it says what it is.
         """
-        W, H = 1040, 132
-        PADL = 34
-        x0, x1, y0, y1 = PADL, W - 8, 12, 100
-        px = NWSSkin._geom(hours, x0, x1)
-        lo_ax, hi_ax, span = NWSSkin._axis(min(h['outTemp'] for h in hours),
-                                           max(h['outTemp'] for h in hours))
+        past = list(past or [])
+        series = past + list(hours)
+        seam_i = len(past)
+        W = 1040
+        # The label band above the plot exists only when there is a seam to
+        # label, so the degraded chart keeps its old proportions exactly.  Its
+        # depth is the seam labels' own: at 22 units their ascenders reach 16
+        # above the baseline, which a shallower band would clip off the top of
+        # the viewBox.
+        LY, H, y0 = 20, (150 if seam_i else 132), (30 if seam_i else 12)
+        x0, x1, y1 = NWSSkin.PADL, W - 8, y0 + 88
+        px = NWSSkin._geom(series, x0, x1)
+        # Observed hours can be empty; forecast hours cannot (points() drops
+        # an hour it could not plot), so there is always something to scale.
+        temps = [h['outTemp'] for h in series if h['outTemp'] is not None]
+        lo_ax, hi_ax, span = NWSSkin._axis(min(temps), max(temps))
 
         def py(t):
             return y1 - (y1 - y0) * (t - lo_ax) / span
@@ -357,7 +669,7 @@ class NWSSkin(SearchList):
                         % (x0, py(t), x1, py(t)))
             ylab.append('<text x="%d" y="%.1f" class="ylab">%d&deg;</text>'
                         % (x0 - 6, py(t) + 4, t))
-        for i, h in enumerate(hours):
+        for i, h in enumerate(series):
             lt = datetime.datetime.fromtimestamp(h['startTime'])
             if lt.hour == 0 and i:
                 ticks.append('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" class="vgrid"/>'
@@ -365,22 +677,44 @@ class NWSSkin(SearchList):
             if lt.hour == 12:
                 labels.append('<text x="%.1f" y="%d" class="xlab">%s</text>'
                               % (px(i), H - 6, lt.strftime('%a')))
+        seam = ''
+        if seam_i:
+            sx = px(seam_i)
+            seam = ('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" class="seam"/>'
+                    % (sx, y0, sx, y1))
+            if sx - x0 >= NWSSkin.SEAM_LABEL_ROOM:
+                seam += ('<text x="%.1f" y="%d" class="striplab seamlab" '
+                         'text-anchor="end">Observed</text>' % (sx - 6, LY))
+            if x1 - sx >= NWSSkin.SEAM_LABEL_ROOM:
+                seam += ('<text x="%.1f" y="%d" class="striplab seamlab">Forecast</text>'
+                         % (sx + 6, LY))
+        # Emitted only when there is something to draw: an empty d= would put
+        # a <path> that draws nothing into every fresh install's page.
+        recorded = NWSSkin._path(past, px, py, 'outTemp', gaps=True)
+        if recorded:
+            recorded = ('<path d="%s" class="aline"/>%s'
+                        % (recorded, NWSSkin._orphans(past, px, py, 'outTemp')))
         return ('<svg viewBox="0 0 %d %d" class="sparkcurve chart" data-chart=\'%s\' '
-                'tabindex="0" role="img" aria-label="Forecast temperature every hour across the week, '
-                'night shaded">%s%s%s%s<path d="%s" class="tline"/>%s%s</svg>'
-                % (W, H, NWSSkin._series(hours, x0, x1, y0, y1, lo_ax, span,
-                                          with_dew_and_rain=False),
-                   NWSSkin._night_bands(hours, px, y0, y1), ''.join(grid), ''.join(ticks),
-                   ''.join(ylab), NWSSkin._path(hours, px, py, 'outTemp'),
+                'tabindex="0" role="img" aria-label="%s">%s%s%s%s%s%s'
+                '<path d="%s" class="tline"/>%s%s</svg>'
+                % (W, H, NWSSkin._series(series, x0, x1, y0, y1, lo_ax, span,
+                                         with_dew_and_rain=False, past_n=seam_i),
+                   ('Temperature every hour: the week this station recorded, then the '
+                    'week the National Weather Service forecasts, night shaded'
+                    if seam_i else
+                    'Forecast temperature every hour across the week, night shaded'),
+                   NWSSkin._night_bands(series, px, y0, y1), ''.join(grid),
+                   ''.join(ticks), ''.join(ylab), seam, recorded,
+                   NWSSkin._path(hours, px, py, 'outTemp', offset=seam_i),
                    NWSSkin.CROSS, ''.join(labels)))
 
     @staticmethod
     def week_chart(hours: List[Dict[str, Any]]) -> str:
         """Every hour the feed carries, for the trend rather than the detail."""
         W, H = 1040, 306
-        PADL, PADR = 48, 16
+        PADR = 16
         TY0, TY1, RY0, RY1 = 18, 208, 238, 278
-        x0, x1 = PADL, W - PADR
+        x0, x1 = NWSSkin.PADL, W - PADR
         px = NWSSkin._geom(hours, x0, x1)
         # `is not None`, not truthiness: a dew point of exactly 0 is a real
         # reading, and _path plots it, so the axis has to contain it.  This
@@ -426,9 +760,9 @@ class NWSSkin(SearchList):
         spread is readable.  That gap closing is the fog the forecast text
         keeps mentioning, and it is exactly what the week chart destroys."""
         W, H = 1040, 236
-        PADL, PADR = 48, 16
+        PADR = 16
         TY0, TY1, RY0, RY1 = 18, 146, 176, 208
-        x0, x1 = PADL, W - PADR
+        x0, x1 = NWSSkin.PADL, W - PADR
         px = NWSSkin._geom(hours, x0, x1)
         # See week_chart(): `is not None`, and the same line in both places.
         vals = ([h['outTemp'] for h in hours]
@@ -665,18 +999,28 @@ class NWSSkin(SearchList):
 
         return (
             '<section class="alert sev-%s"%s>'
-            '<h2 class="ahead"><span class="sevdot"></span>'
+            '<h2 class="ahead"><span class="sevchip">%s</span>'
             '<span class="aevent">%s</span>'
             '<span class="badge %s">%s</span>'
             '<span class="anote" data-ends-text="%s">%s</span></h2>'
             '<p class="aline">%s</p>%s%s'
             '<div class="asecs">%s</div>%s'
-            '<p class="ameta">%s &middot; %s &middot; %s severity &middot; '
-            '%s certainty &middot; %s urgency &middot; issued %s</p>'
+            '<p class="ameta">%s &middot; %s &middot; %s certainty &middot; '
+            '%s urgency &middot; issued %s</p>'
             '</section>'
-            % (NWSSkin.esc(severity.lower()), attrs, NWSSkin.esc(alert['event']),
+            # The severity is NAMED, in the slot where it was a bare colored
+            # dot -- so it is no longer carried by color alone, which a
+            # colorblind reader gets nothing from and which is a WCAG 1.4.1
+            # failure.  It mattered more here than the rule suggests: these
+            # cards are SORTED by severity and the count line above them says
+            # "most serious first", so the page announced that the order means
+            # something while keeping the key in eight-point gray at the foot
+            # of each card.  The footer no longer repeats it; certainty and
+            # urgency stay there, being genuinely secondary.
+            % (NWSSkin.esc(severity.lower()), attrs, NWSSkin.esc(severity),
+               NWSSkin.esc(alert['event']),
                badge_cls, badge, ends_text, note, headline, sub, window,
                body, todo, NWSSkin.esc(alert['senderName']),
-               NWSSkin.esc(alert['messageType']), NWSSkin.esc(severity),
+               NWSSkin.esc(alert['messageType']),
                NWSSkin.esc(alert['certainty']), NWSSkin.esc(alert['urgency']),
                NWSSkin.stamp(alert['effective'])))

@@ -37,6 +37,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+import weedb
 import weewx
 import weewx.units
 import weeutil.rsyncupload
@@ -73,7 +74,7 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "6.0"
+WEEWX_NWS_VERSION = "6.1"
 
 def reraise_if_terminate(e: BaseException) -> None:
     """weewxd stops by raising Terminate from its SIGTERM signal handler --
@@ -105,10 +106,19 @@ table = [
                                               # For alerts, holds effective (issued)
     ('number',           'INTEGER NOT NULL'),
     ('name',             'STRING'),           # For alerts, holds event name (e.g., Heat Advisory)
-    ('startTime',        'FLOAT NOT NULL'),   # For alerts, holds onset
+    ('startTime',        'FLOAT'),            # For alerts, holds onset -- NULLABLE, because
+                                              # NWS does not always say when an event begins
+                                              # (see endTime).  Always set on a forecast.
     ('expirationTime',   'FLOAT'),            # For alerts, null for others.
     ('id',               'STRING'),           # For alerts, holds the id of the alert, null for others
-    ('endTime',          'FLOAT NOT NULL'),   # For alerts, holds ends
+    ('endTime',          'FLOAT'),            # For alerts, holds ends -- NULLABLE for the same
+                                              # reason as startTime.  NWS always says when it
+                                              # SPOKE (sent/effective/expires: 356 of 356 in a
+                                              # national sample) and not always when the WEATHER
+                                              # starts or stops (onset null in 3, ends in 23).
+                                              # Those are stored as the nothing it sent, never
+                                              # as a message time wearing an event's name.
+                                              # Always set on a forecast.
     ('isDaytime',        'INTEGER NOT NULL'),
     ('outTemp',          'FLOAT NOT NULL'),   # Needs to be converted.  NWS temperature
                                               # missing NWS temperatureUnit, which is always "F"
@@ -153,10 +163,12 @@ class Forecast:
     generatedTime   : int # When forecast was generated.  For alerts hold effective.
     number          : int # For alerts, numbered from 0 as parsed from the XML
     name            : Optional[str] # For alerts, holds event name (e.g., Heat Advisory)
-    startTime       : float  # For alerts, holds onset
+    # Optional, and only ever None on an ALERT: NWS need not say when an event
+    # begins or ends.  Always set on a forecast.  See the schema comments.
+    startTime       : Optional[float]  # For alerts, holds onset
     expirationTime  : Optional[float]  # Only for alerts, null for others.
     id              : Optional[str]    # Only for alerts, null for others.
-    endTime         : float  # For alerts, holds ends
+    endTime         : Optional[float]  # For alerts, holds ends
     isDaytime       : int
     outTemp         : float
     outTempTrend    : Optional[str]
@@ -259,13 +271,32 @@ class NWS(StdService):
         dbmanager = engine.db_binder.get_manager(data_binding=self.data_binding, initialize=True)
         log.info("Using binding '%s' to database '%s'" % (self.data_binding, dbmanager.database_name))
 
-        # Check that schema matches
-        dbcol = dbmanager.connection.columnsOf(dbmanager.table_name)
-        memcol = [x[0] for x in self.dbm_dict['schema']['table']]
+        # Check that the schema matches -- column NAMES and NULLABILITY, both.
+        #
+        # Names alone are not enough, and that is not theoretical: 6.1 relaxed
+        # NOT NULL on startTime and endTime so an alert with no onset and no
+        # end can be stored as the nothing NWS sent.  That leaves the column
+        # NAMES identical, so a names-only check passes an old table -- and
+        # then the first such alert fails its INSERT against the old
+        # constraint, once per archive period, in the log, with nothing on the
+        # page to say so.  A staleness check that cannot see the change it is
+        # guarding is worse than none: it reports all clear.
+        #
+        # NULLABILITY only, never the declared TYPE.  A declared type does not
+        # survive the round trip intact -- weedb's drivers normalize what they
+        # report, each in their own way -- so a type comparison would fail on
+        # a database that is perfectly good.  Nullability is reported the same
+        # way by every driver, and it is the half this check needs.
+        # genSchemaOf yields (number, name, type, can_be_null, default,
+        # is_primary).
+        dbcol = NWS.schema_pairs(dbmanager)
+        memcol = self.expected_schema_pairs()
         if dbcol != memcol:
-            # raise Exception('nws schema mismatch: %s != %s' % (dbcol, memcol))
-            log.error('You must delete the nws.sdb database and restart weewx.  It contains an old schema!')
-            return
+            log.info('The nws database has an old schema (%s); rebuilding it.'
+                     % NWS.describe_schema_mismatch(dbcol, memcol))
+            dbmanager = self.rebuild_stale_database(dbmanager)
+            if dbmanager is None:
+                return
 
         rsync_spec_dict = self.nws_config_dict.get('RsyncSpec', {})
 
@@ -451,6 +482,113 @@ class NWS(StdService):
             log.error('forecast_in_db(%s, %d) failed with %s (%s).' % (forecast_type, generatedTime, e, type(e)))
             weeutil.logger.log_traceback(log.error, "    ****  ")
             raise Exception('forecast_in_db(%s, %d) failed with %s (%s).' % (forecast_type, generatedTime, e, type(e)))
+
+    @staticmethod
+    def schema_pairs(dbmanager) -> List[Any]:
+        """(column name, is nullable) for the table as it exists."""
+        return [(row[1], row[3]) for row
+                in dbmanager.connection.genSchemaOf(dbmanager.table_name)]
+
+    def expected_schema_pairs(self) -> List[Any]:
+        """(column name, is nullable) for the table this version declares."""
+        return [(name, 'NOT NULL' not in spec)
+                for name, spec in self.dbm_dict['schema']['table']]
+
+    def rebuild_stale_database(self, dbmanager) -> Any:
+        """Drop the table and let weewx recreate it from this version's
+        schema.  Returns the new manager, or None if it could not be done.
+
+        This database is a CACHE, not a record.  Nothing on any page reads a
+        row older than the current forecast -- fetch_records_internal selects
+        the latest generatedTime and nothing else -- and the three pollers
+        repopulate it within seconds of a restart.  So a schema change costs
+        one poll cycle, and there is nothing here worth asking a user to
+        preserve.
+
+        Through 6.0 this logged 'you must delete nws.sdb' and carried on doing
+        nothing at all -- no polling, no saving, no tags -- so an operator who
+        never read the log ran on with an extension that had quietly stopped.
+        Rebuilding is the same act, done where the information is.
+        """
+        table = dbmanager.table_name
+        try:
+            # drop_table lives on weedb's CURSOR, not its connection, and
+            # weewx's own schema surgery (Manager.add_column) reaches it
+            # through a Transaction -- so this does too.
+            with weedb.Transaction(dbmanager.connection) as cursor:
+                cursor.drop_table(table)
+        except Exception as e:
+            reraise_if_terminate(e)
+            log.error('Could not drop table %s to rebuild it: %s (%s).  '
+                      'Delete the nws database by hand and restart weewx.'
+                      % (table, e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
+            return None
+        # Everything from here is guarded too, and that is the important part:
+        # the table is already GONE.  A service constructor that raises takes
+        # weewxd with it -- StdEngine.loadServices shuts the started services
+        # down and re-raises -- so if the recreate fails (a read-only or full
+        # filesystem, a permissions change) an unguarded call would leave the
+        # operator with no forecast table AND no WeeWX.  Failing back to a
+        # logged error and an inert extension is what 6.0 did in the same
+        # situation, and it is the right answer here as well.
+        #
+        # The binder caches one manager per binding, and a manager reads its
+        # column list when it opens -- so the cached one must not go on to
+        # write rows against a table it has never seen.  manager_cache is a
+        # plain attribute of DBBinder; evicting just this binding leaves every
+        # other service's manager alone, which db_binder.close() would not.
+        try:
+            stale = self.engine.db_binder.manager_cache.pop(self.data_binding, None)
+            if stale is not None:
+                stale.close()
+            dbmanager = self.engine.db_binder.get_manager(
+                data_binding=self.data_binding, initialize=True)
+        except Exception as e:
+            reraise_if_terminate(e)
+            log.error('Dropped table %s but could not recreate it: %s (%s).  '
+                      'The nws database is now empty; restart weewx once the '
+                      'cause is fixed and it will be rebuilt.'
+                      % (table, e, type(e)))
+            weeutil.logger.log_traceback(log.error, "    ****  ")
+            return None
+        # Did it take?  If the freshly created table STILL does not match what
+        # we declared, the disagreement is between this check and the database
+        # backend, not between versions -- and without saying so, every
+        # restart would silently drop and recreate the table for ever.  Say it
+        # once, loudly, and carry on with a usable database rather than
+        # looping.  (sqlite is covered by a test; this is the guard for a
+        # backend whose nullability reporting we cannot exercise here.)
+        after = NWS.schema_pairs(dbmanager)
+        if after != self.expected_schema_pairs():
+            log.error('Rebuilt %s but it still does not match this version: %s.  '
+                      'This is a bug in weewx-nws, not in your database; the '
+                      'extension will go on working, but please report it.'
+                      % (table, NWS.describe_schema_mismatch(
+                          after, self.expected_schema_pairs())))
+            return dbmanager
+        log.info('Rebuilt %s with the current schema.  The next poll of each '
+                 'forecast type will repopulate it.' % table)
+        return dbmanager
+
+    @staticmethod
+    def describe_schema_mismatch(dbcol: List[Any], memcol: List[Any]) -> str:
+        """What differs, in the words a user can act on.  The old message
+        said only that the schema was old, which tells someone staring at a
+        log nothing about whether it is their database or our bug."""
+        found, expected = dict(dbcol), dict(memcol)
+        diffs = []
+        for name, nullable in memcol:
+            if name not in found:
+                diffs.append('%s is missing' % name)
+            elif found[name] != nullable:
+                diffs.append('%s is %s and should be %s'
+                             % (name, 'NOT NULL' if not found[name] else 'nullable',
+                                'nullable' if nullable else 'NOT NULL'))
+        for name, _ in dbcol:
+            if name not in expected:
+                diffs.append('%s is not part of this version' % name)
+        return ', '.join(diffs) or 'the columns are in a different order'
 
     def delete_expired_alerts(self) -> None:
         try:
@@ -965,35 +1103,63 @@ class NWSPoller:
             return False
 
     @staticmethod
+    def read_forecast_file(path: str, forecast_type: ForecastType) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """A forecast read from a directory instead of from NWS -- fleet mode --
+        checked exactly the way a reply from NWS is.
+
+        It was not, through 6.0, and the difference grew teeth once compose
+        started refusing a non-US forecast outright: populate_forecast clears
+        the in-memory bucket BEFORE composing and catches only KeyError, so
+        anything else raised there unwinds to poll_nws's broad handler.  One
+        bad file left the bucket empty and threw a stack trace naming nothing,
+        every retry_wait_secs, for as long as the file sat there.  json.loads
+        has the same shape: a malformed file raises JSONDecodeError, which IS
+        a ValueError.
+
+        Returning (retry, None) is what the network path does with a rejected
+        reply, and retrying is right here too -- the fetching machine rsyncs a
+        replacement over this file.
+        """
+        log.info('Reading %s forecasts from file: %s.' % (forecast_type, path))
+        try:
+            with open(path) as f:
+                contents: str = f.read()
+            j = json.loads(contents)
+        except Exception as e:
+            log.info('read_forecast_file(%s): could not read %s: %s (%s).'
+                     % (forecast_type, path, e, type(e)))
+            return True, None
+        err = NWSPoller.sanity_check_json(contents, j, forecast_type)
+        if err:
+            log.info('read_forecast_file(%s): sanity check failed(%s): %s.'
+                     % (forecast_type, path, err))
+            return True, None
+        return False, j
+
+    @staticmethod
     def request_forecast(cfg, forecast_type: ForecastType)->Tuple[bool, Optional[Dict[str, Any]]]: # retry, json
         log.debug('request_forecast(%s): start' % forecast_type)
         with cfg.lock:
             if forecast_type == ForecastType.ONE_HOUR:
                 if cfg.read_from_dir is not None and os.path.exists('%s/ONE_HOUR' % cfg.read_from_dir):
-                    log.info('Reading %s forecasts from file: %s/ONE_HOUR.' % (forecast_type, cfg.read_from_dir))
-                    f = open('%s/ONE_HOUR' % cfg.read_from_dir)
-                    one_hour_contents: str = f.read()
-                    return False, json.loads(one_hour_contents)
+                    return NWSPoller.read_forecast_file(
+                        '%s/ONE_HOUR' % cfg.read_from_dir, forecast_type)
                 if cfg.hardCodedOneHourForecastUrl is not None:
                     forecastUrl = cfg.hardCodedOneHourForecastUrl
                 else:
                     forecastUrl = cfg.oneHourForecastUrl
             elif forecast_type == ForecastType.TWELVE_HOUR:
                 if cfg.read_from_dir is not None and os.path.exists('%s/TWELVE_HOUR' % cfg.read_from_dir):
-                    log.info('Reading %s forecasts from file: %s/TWELVE_HOUR.' % (forecast_type, cfg.read_from_dir))
-                    f = open('%s/TWELVE_HOUR' % cfg.read_from_dir)
-                    twelve_hour_contents: str = f.read()
-                    return False, json.loads(twelve_hour_contents)
+                    return NWSPoller.read_forecast_file(
+                        '%s/TWELVE_HOUR' % cfg.read_from_dir, forecast_type)
                 if cfg.hardCodedTwelveHourForecastUrl is not None:
                     forecastUrl = cfg.hardCodedTwelveHourForecastUrl
                 else:
                     forecastUrl = cfg.twelveHourForecastUrl
             else:
                 if cfg.read_from_dir is not None and os.path.exists('%s/ALERTS' % cfg.read_from_dir):
-                    log.info('Reading ForecastType.ALERTS forecasts from file: %s/ALERTS.' % cfg.read_from_dir)
-                    f = open('%s/ALERTS' % cfg.read_from_dir)
-                    alerts_contents: str = f.read()
-                    return False, json.loads(alerts_contents)
+                    return NWSPoller.read_forecast_file(
+                        '%s/ALERTS' % cfg.read_from_dir, forecast_type)
                 forecastUrl = cfg.alertsUrl
         log.debug('request_forecast(%s): forecastUrl %s' % (forecast_type, forecastUrl))
         if forecastUrl == None:
@@ -1118,12 +1284,14 @@ class NWSPoller:
                 id        = alert['id']
                 effective = parse(alert['effective'], tzinfos=tzinfos).timestamp()
                 expires   = parse(alert['expires'], tzinfos=tzinfos).timestamp()
-                onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp()
-                if alert['ends'] is not None:
-                    ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp()
-                else:
-                    # Sometimes alert['ends'] is None, use expires instead.
-                    ends      = parse(alert['expires'], tzinfos=tzinfos).timestamp()
+                # Stored as the nothing NWS sent.  Substituting a message
+                # time here is what forced alert_window() to guess the
+                # substitution back out again -- and what made an alert with
+                # no onset impossible to store at all.
+                onset     = parse(alert['onset'], tzinfos=tzinfos).timestamp() \
+                    if alert['onset'] is not None else None
+                ends      = parse(alert['ends'], tzinfos=tzinfos).timestamp() \
+                    if alert['ends'] is not None else None
                 if id in expired_ids:
                     log.info('found expired alert (skipping): %s' % id)
                 elif expires <= (time.time() - 24.0 * 60.0 * 60.0):  # Don't be so quick to stop showing expired alerts.  NWS doesn't reissue them quickly enough.
@@ -1342,15 +1510,25 @@ class NWSPoller:
             err = NWSPoller.check_for_str_entries(response_text, feature, [['properties','instruction']], True)
             if err:
                 return err
+            # The MESSAGE times.  NWS always says when it spoke, when the
+            # message takes effect and when it goes stale -- 356 of 356 in a
+            # national sample -- so a reply missing one is malformed.
             err = NWSPoller.check_for_date_entries(response_text, feature, [
                     ['properties','effective'],
                     ['properties','expires'],
-                    ['properties','onset'],
                     ])
             if err:
                 return err
-            # Ends must be there, but it might be None
-            err = NWSPoller.check_for_date_entries(response_text, feature, [['properties','ends']], True)
+            # The EVENT times.  Both must be PRESENT and either may be NULL:
+            # an alert need not say when the weather starts, or when it stops.
+            # Through 6.0 onset was in the list above, so one such alert threw
+            # away the whole reply -- every alert for that station, until NWS
+            # sent a batch without one.  In the sample that was 3 alerts of
+            # 356, two of them Evacuation Immediate.
+            err = NWSPoller.check_for_date_entries(response_text, feature, [
+                    ['properties','onset'],
+                    ['properties','ends'],
+                    ], True)
             if err:
                 return err
         return None
@@ -1382,6 +1560,21 @@ class NWSPoller:
                 ])
         if err:
             return err
+
+        # THE unit invariant for this whole extension, asserted in the one
+        # place that can act on it: everything downstream -- the schema, the
+        # dewpoint conversion at compose time, the ValueHelpers the tags hand
+        # out -- takes the stored numbers to be US.  api.weather.gov answers
+        # 'us' unless a URL asks otherwise, and a user CAN ask otherwise, by
+        # pasting a gridpoint URL carrying ?units=si into
+        # one_hour_forecast_url / twelve_hour_forecast_url.  Rejecting the
+        # reply is right: a forecast we would silently mislabel is worse than
+        # no new forecast, and the log line says exactly what to change.
+        units = j['properties']['units']
+        if units != 'us':
+            return ('%s: Expecting US units from NWS but the reply says %r.  If a '
+                    'forecast url in weewx.conf carries "?units=si", remove it.'
+                    % (forecast_type, units))
 
         err = NWSPoller.check_for_list_entries(response_text, j, [
                 ['properties','periods'],
@@ -1530,11 +1723,19 @@ class NWSPoller:
         updateTime = parse(j['properties']['updateTime'], tzinfos=tzinfos).timestamp()
         log.debug('compose_forecast_records(%s): updateTime: %s' % (forecast_type, timestamp_to_string(updateTime)))
 
-        units = j['properties']['units']
-        if units == 'us':
-            units = weewx.US
-        else:
-            units = weewx.METRIC
+        # Always US, and checked HERE rather than trusted, because the
+        # sanity check is not the only way in: --insert-forecast composes a
+        # saved json file straight into a database without it.  One unit
+        # system in this database, one place that says so, and no branch to
+        # get out of step with it.  The polling path rejects such a reply
+        # earlier and more politely; this is the backstop for every other
+        # caller.
+        if j['properties']['units'] != 'us':
+            raise ValueError(
+                'Expecting US units from NWS but this forecast says %r; refusing to '
+                'compose records that would be stored as US.'
+                % j['properties']['units'])
+        units = weewx.US
 
         for period in j['properties']['periods']:
             windSpeedStr = period['windSpeed']
@@ -1748,20 +1949,21 @@ class NWSForecastVariables(SearchList):
         rows = []
         for raw_row in raw_rows:
             row = {}
-            time_group = weewx.units.obs_group_dict['dateTime']
-            time_units = weewx.units.USUnits[time_group]
             row['latitude']    = raw_row['latitude']
             row['longitude']   = raw_row['longitude']
-            row['effective']   = weewx.units.ValueHelper((raw_row['generatedTime'], time_units, time_group))
-            row['onset']       = weewx.units.ValueHelper((raw_row['startTime'], time_units, time_group))
-            row['expires']     = weewx.units.ValueHelper((raw_row['expirationTime'], time_units, time_group))
+            # Times, so the converter has nothing to do -- but see _wrap():
+            # the FORMATTER is this report's, which is what makes an alert's
+            # instants print the way the rest of the report's times print.
+            row['effective']   = self._wrap(raw_row['generatedTime'], 'dateTime')
+            row['onset']       = self._wrap(raw_row['startTime'], 'dateTime')
+            row['expires']     = self._wrap(raw_row['expirationTime'], 'dateTime')
             row['id']          = raw_row['id']
-            row['ends']        = weewx.units.ValueHelper((raw_row['endTime'], time_units, time_group))
+            row['ends']        = self._wrap(raw_row['endTime'], 'dateTime')
             row['event']       = raw_row['name']
             row['headline']    = raw_row['shortForecast']
             row['description'] = raw_row['detailedForecast']
             row['instructions'] = raw_row['instruction']
-            row['sent']        = weewx.units.ValueHelper((raw_row['sent'], time_units, time_group))
+            row['sent']        = self._wrap(raw_row['sent'], 'dateTime')
             row['status']      = raw_row['status']
             row['messageType'] = raw_row['messageType']
             row['category']    = raw_row['category']
@@ -2020,17 +2222,39 @@ class NWSForecastVariables(SearchList):
     def alert_window(alert: Dict[str, Any]) -> Tuple[Optional[float], Optional[float], bool]:
         """(onset, finish, open_ended) in epoch seconds.
 
-        This extension never leaves endTime empty: where NWS gave no `ends`
-        it stores `expires`, so the two being EQUAL is what an open-ended
-        alert looks like by the time a skin sees it.  One alert in ten has no
-        end at all, so a caller drawing a progress bar must not divide by a
-        span that does not exist.
+        EITHER EVENT TIME MAY BE ABSENT, and each falls back to the message
+        time that answers the same question.  NWS says when it SPOKE on every
+        alert -- effective and expires -- and does not always say when the
+        WEATHER starts or stops.  So:
+
+          onset  absent -> `effective`, which is CAP's own reading: an alert
+                 that does not say when the event begins is in effect from the
+                 moment the message is.
+          finish absent -> `expires`, and `open_ended` says so, because about
+                 one alert in ten has no end and a caller drawing a progress
+                 bar must not divide by a span that does not exist.
+
+        The fallbacks live HERE, not in the database, which stores the nothing
+        NWS sent.  This is the function whose job is to reckon the window, so
+        it is the place that resolves an absence; storing a message time under
+        an event time's name is what 6.0 did, and it cost alert_window() a
+        guess (open-ended INFERRED from `ends` equalling `expires`, with a
+        false positive on an alert that genuinely ends when its message does).
+
+        Getting the onset fallback wrong is not cosmetic: without it
+        is_active() is false for every alert that has no onset, so
+        alert_state() files an Evacuation Immediate that is in effect RIGHT
+        NOW under `upcoming`.  Two of the three null-onset alerts in a
+        national sample were exactly that.
         """
         onset = alert['onset'].raw
+        effective = alert['effective'].raw
         expires = alert['expires'].raw
         ends = alert['ends'].raw
-        open_ended = ends is None or ends == expires
-        return onset, (expires if open_ended else ends), open_ended
+        open_ended = ends is None
+        return (onset if onset is not None else effective,
+                expires if open_ended else ends,
+                open_ended)
 
     @classmethod
     def is_active(cls, alert: Dict[str, Any], now: Optional[float] = None) -> bool:
@@ -2086,49 +2310,65 @@ class NWSForecastVariables(SearchList):
         return sorted(alerts, key=lambda a: (
             0 if cls.is_active(a, now) else 1,
             ALERT_SEVERITY_RANK.get(a['severity'], 9),
-            a['onset'].raw if a['onset'].raw is not None else now))
+            # The same instant alert_window() reports, so the order a reader
+            # sees agrees with the window each card draws.  An alert with no
+            # onset began when its message took effect; ranking it at `now`
+            # instead would float it to the wrong end of its severity group.
+            cls.alert_window(a)[0] if a['onset'].raw is None else a['onset'].raw))
+
+    def _wrap(self, value: Any, obs: str) -> weewx.units.ValueHelper:
+        """One stored value as a ValueHelper in THIS REPORT's units.
+
+        The stored value is always in US units, and that is enforced rather
+        than assumed: sanity_check_forecast_json rejects any reply whose
+        properties.units is not 'us' (nws.py never sends a units parameter --
+        it uses the gridpoint URLs NWS's /points endpoint hands back -- so a
+        non-US reply means a user pasted ?units=si into a forecast url).
+        Dewpoint, the one field NWS sends in Celsius even in a US reply, is
+        converted at parse.  So US is the SOURCE.
+
+        The report's converter is what makes it the TARGET, and passing it
+        here is the whole of it, because a ValueHelper converts ONCE, when it
+        is constructed, and never again.  Built without one -- as these were
+        through 6.0 -- the helper holds degree_F for life: a skin set to
+        metric got Fahrenheit out of .raw, and .format() did not save it
+        either, since that formats whatever unit the helper is holding and
+        labels it degF.  That is why the bug did not look like a units bug
+        from inside a skin, and why the fix is not to stop reading .raw.
+
+        The formatter goes in for the same reason: it carries this report's
+        own [Units] formats and labels, so a time prints the way the rest of
+        the report's times print.
+        """
+        group = weewx.units.obs_group_dict[obs]
+        return weewx.units.ValueHelper(
+            (value, weewx.units.USUnits[group], group),
+            formatter=self.generator.formatter,
+            converter=self.generator.converter)
 
     def forecasts(self, forecast_type: ForecastType, max_forecasts:Optional[int]=None) -> List[Dict[str, Any]]:
         """Returns the latest forecast records of the given type."""
         rows = self.getLatestForecastRows(forecast_type, max_forecasts)
         for row in rows:
-            time_group = weewx.units.obs_group_dict['dateTime']
-            time_units = weewx.units.USUnits[time_group]
-
-            temp_group = weewx.units.obs_group_dict['outTemp']
-            temp_units = weewx.units.USUnits[temp_group]
-
-            pop_group = weewx.units.obs_group_dict['pop']
-            pop_units = weewx.units.USUnits[pop_group]
-
-            dewpoint_group = weewx.units.obs_group_dict['dewpoint']
-            dewpoint_units = weewx.units.USUnits[dewpoint_group]
-
-            outHumidity_group = weewx.units.obs_group_dict['outHumidity']
-            outHumidity_units = weewx.units.USUnits[outHumidity_group]
-
-            wind_speed_group = weewx.units.obs_group_dict['windSpeed']
-            wind_speed_units = weewx.units.USUnits[wind_speed_group]
-
-            wind_dir_group = weewx.units.obs_group_dict['windDir']
-            wind_dir_units = weewx.units.USUnits[wind_dir_group]
-
-            row['dateTime'] = weewx.units.ValueHelper((row['dateTime'], time_units, time_group))
-            row['generatedTime'] = weewx.units.ValueHelper((row['generatedTime'], time_units, time_group))
-            row['startTime'] = weewx.units.ValueHelper((row['startTime'], time_units, time_group))
+            row['dateTime'] = self._wrap(row['dateTime'], 'dateTime')
+            row['generatedTime'] = self._wrap(row['generatedTime'], 'dateTime')
+            row['startTime'] = self._wrap(row['startTime'], 'dateTime')
+            # Left as None rather than wrapped when absent: skins test the
+            # SLOT (`if row['windSpeed2'] is not None`), not the value inside
+            # it, so wrapping an absent one would change what they see.
             if row['expirationTime'] is not None:
-                row['expirationTime'] = weewx.units.ValueHelper((row['expirationTime'], time_units, time_group))
-            row['endTime'] = weewx.units.ValueHelper((row['endTime'], time_units, time_group))
-            row['outTemp'] = weewx.units.ValueHelper((row['outTemp'], temp_units, temp_group))
-            row['pop'] = weewx.units.ValueHelper((row['pop'], pop_units, pop_group))
-            row['dewpoint'] = weewx.units.ValueHelper((row['dewpoint'], dewpoint_units, dewpoint_group))
-            row['outHumidity'] = weewx.units.ValueHelper((row['outHumidity'], outHumidity_units, outHumidity_group))
-            row['windSpeed'] = weewx.units.ValueHelper((row['windSpeed'], wind_speed_units, wind_speed_group))
+                row['expirationTime'] = self._wrap(row['expirationTime'], 'dateTime')
+            row['endTime'] = self._wrap(row['endTime'], 'dateTime')
+            row['outTemp'] = self._wrap(row['outTemp'], 'outTemp')
+            row['pop'] = self._wrap(row['pop'], 'pop')
+            row['dewpoint'] = self._wrap(row['dewpoint'], 'dewpoint')
+            row['outHumidity'] = self._wrap(row['outHumidity'], 'outHumidity')
+            row['windSpeed'] = self._wrap(row['windSpeed'], 'windSpeed')
             if row['windSpeed2'] is not None:
-                row['windSpeed2'] = weewx.units.ValueHelper((row['windSpeed2'], wind_speed_units, wind_speed_group))
-            row['windDir'] = weewx.units.ValueHelper((row['windDir'], wind_dir_units, wind_dir_group))
+                row['windSpeed2'] = self._wrap(row['windSpeed2'], 'windSpeed')
+            row['windDir'] = self._wrap(row['windDir'], 'windDir')
             if row['sent'] is not None:
-                row['sent'] = weewx.units.ValueHelper((row['sent'], time_units, time_group))
+                row['sent'] = self._wrap(row['sent'], 'dateTime')
         return rows
 
     def getLatestForecastRows(self, forecast_type: ForecastType, max_forecasts: Optional[int]=None) -> List[Dict[str, Any]]:
@@ -2182,9 +2422,17 @@ class NWSForecastVariables(SearchList):
         for row in dbm.genSql(select):
             EXP_TIME = 9
             END_TIME = 11
-            # Only include if record hasn't expired (row[END_TIME] is endTime) and, for alerts, expiration_time has not been hit) and max_forecasts hasn't been exceeded.
-            # Don't be so strict with expiration time.  NWS likes to have alerts expire without issuing new ones in time.
-            if time.time() < row[END_TIME] and (row[EXP_TIME] is None or row[EXP_TIME] > (time.time() - 24.0 * 60.0 * 60.0)) and (max_forecasts is None or forecast_count < max_forecasts):
+            # Only include if the record hasn't expired and, for alerts,
+            # expiration_time has not been hit, and max_forecasts hasn't been
+            # exceeded.  Don't be so strict with expiration time: NWS likes to
+            # have alerts expire without issuing new ones in time.
+            #
+            # endTime is NULL for an alert NWS gave no end for, and its
+            # message expiry is then the only bound there is -- which is what
+            # this used to fake by storing expires in endTime at compose time.
+            # A forecast always has an endTime, so this falls through to it.
+            finish = row[END_TIME] if row[END_TIME] is not None else row[EXP_TIME]
+            if finish is not None and time.time() < finish and (row[EXP_TIME] is None or row[EXP_TIME] > (time.time() - 24.0 * 60.0 * 60.0)) and (max_forecasts is None or forecast_count < max_forecasts):
                 forecast_count += 1
                 record = {}
 

@@ -18,10 +18,10 @@ weewx-nws requires Python 3.9 or later, WeeWX 5, and the python
 [dateutil](https://dateutil.readthedocs.io/) packages.  Neither is a WeeWX requirement
 (WeeWX 5.4 needs neither), which is why they are installed here.
 
-{: .important }
-Upgrading from a release earlier than 4.5.4?  The database schema has changed since then,
-and there is no migration: delete `nws.sdb` before restarting WeeWX.  See
-[Upgrading](upgrading.md).
+{: .note }
+Upgrading from an earlier release?  There is nothing to do about the database.  The schema
+has changed several times and there is no migration, but since 6.1 weewx-nws notices an old
+one at startup and rebuilds it — the next poll refills it.  See [Upgrading](upgrading.md).
 
 ## 1. Install the prerequisites
 

@@ -40,7 +40,8 @@ install, before you write a line of template code.
   `[Station]` in `weewx.conf`, and NWS's own `/points` endpoint turns them into the
   gridpoint URLs to fetch.  The one option worth editing is `User-Agent`, which NWS's API
   rules ask you to set — see [Configuration](configuration.md).
-- **A sample report that works out of the box.**  A seven-day page, an hourly page and an
+- **A sample report that works out of the box.**  A seven-day page whose chart draws the
+  week your own station recorded beside the week NWS forecasts, an hourly page and an
   alerts page — responsive, with drawn weather icons, charts, and light and dark themes
   that follow the reader's own setting.  Use it as it stands, or read it as worked
   examples for your own skin.  See [The sample report](sample-report.md).

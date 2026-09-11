@@ -30,10 +30,25 @@ from anywhere else, and the page does not reload itself.
 
 `index.html` — NWS's twelve-hour periods.  A **Right now** card leads with the current
 period's icon and forecast beside your station's own observed high and low for today.
-Below it, a sparkline of the whole week's temperature with night shaded, then one row per
-**calendar day**: the day's low-to-high bar positioned across the week's range, its
-daylight hours, and each of that day's periods as a line carrying the icon, the chance of
-rain, NWS's own sentence, and the wind.
+
+Below it, **two weeks of temperature** on one scale: every hour your station recorded for
+the past week, then every hour NWS forecasts for the week ahead, with night shaded.  One
+scale for both is the point — a cold snap last week rescales the forecast half, and *warm
+for the week* and *warm for the fortnight* are different claims.  The join is marked and
+labeled, and the two curves are deliberately not connected across it: NWS forecasts a grid
+square and your station measures its own back yard, so the last reading and the first
+forecast hour seldom agree, and that step is worth seeing.  Point at the chart to read any
+hour; the reading says whether it is observed or forecast.
+
+If your station has not been running for a week you get exactly the history you have —
+three days of archive draw three days of chart — and if it has no archive at all, which is
+every fresh install, the chart is the forecast week alone.  An hour your station recorded
+nothing in leaves a gap in the line rather than a confident stroke across it, so an outage
+reads as an outage.
+
+Then one row per **calendar day**: the day's low-to-high bar positioned across the week's
+range, its daylight hours, and each of that day's periods as a line carrying the icon, the
+chance of rain, NWS's own sentence, and the wind.
 
 ![The sample report's seven-day page](images/sample-report-days.png)
 
@@ -54,7 +69,9 @@ moves six at a time, Home and End jump to the ends, and Escape clears the readin
 ## The alerts page
 
 `alerts.html` — every active NWS alert for the station's location, in effect first and
-then most serious first.  Each alert is a card with a severity-colored rail, a status
+then most serious first.  Each alert is a card whose severity is **named** in a chip
+beside the event — `SEVERE`, `MODERATE` — and echoed by the colored rail down its edge, with
+a status
 badge, a bar showing where now falls between the alert's onset and its end, the
 description's own sections as real structure, and any instructions called out.
 
@@ -128,7 +145,9 @@ The two extensions are different in kind, and the difference matters if you buil
   it is stable.  See [Tags](tags.md).
 - **`user.nwsskin.NWSSkin`** is `$nwsskin`: *this* report's charts, chips and alert cards.
   It is presentation, it is not an API, and nothing in it is promised to survive a
-  release.  Copy what you like from it; do not depend on it.
+  release.  Copy what you like from it; do not depend on it.  It is also the one piece of
+  the report that reads something other than NWS: the seven-day chart's observed week
+  comes from your own weather archive, through the report's own `data_binding`.
 
 `copy_always` rather than `copy_once` is deliberate: the stylesheet and the script change
 from release to release, and `copy_once` writes a file only if it is not already there, so

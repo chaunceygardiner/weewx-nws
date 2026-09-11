@@ -2,7 +2,7 @@
 title: Upgrading
 layout: default
 nav_order: 4
-description: What existing weewx-nws stations need to know — when to delete nws.sdb, why weewx.conf is never rewritten, the WeeWX 5 requirement, and the hard-coded gridpoint URLs to remove.
+description: What existing weewx-nws stations need to know — the database rebuilds itself, why weewx.conf is never rewritten, the WeeWX 5 requirement, and the hard-coded gridpoint URLs to remove.
 ---
 
 # Upgrading
@@ -19,29 +19,27 @@ checking before you restart.
 
 ## Do you need to delete `nws.sdb`?
 
-The database schema has changed several times, and **there is no migration**.  Deleting the
-database is the whole of the fix, and it costs nothing: the next poll refills it, and
-nothing but old forecasts is lost.
-
-| Coming from | Action |
-|---|---|
-| 4.5.4 or later | Nothing to do |
-| Earlier than 4.5.4 | Delete `nws.sdb` after installing, before restarting WeeWX |
-
-If you skip it, weewx-nws logs this at startup and then does nothing at all — no
-polling, no saving, no tags.  WeeWX itself carries on:
+**No — not since 6.1.**  The database schema has changed several times over the extension's
+life and there is no migration, but weewx-nws now notices an old one at startup and rebuilds
+the table itself:
 
 ```
-ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
+INFO user.nws: The nws database has an old schema (startTime is NOT NULL and should be nullable, endTime is NOT NULL and should be nullable); rebuilding it.
+INFO user.nws: Rebuilt archive with the current schema.  The next poll of each forecast type will repopulate it.
 ```
 
-The database sits with the weather archive, in the directory `SQLITE_ROOT` names under
-`[DatabaseTypes]` in `weewx.conf` — `/var/lib/weewx` on a package install,
-`~/weewx-data/archive` on a pip one:
+Nothing is lost that the next poll does not replace.  The database holds the current
+forecast and the current alerts; no page ever reads a row older than that, and the three
+pollers refill it within seconds of a restart.
 
-```
-rm /var/lib/weewx/nws.sdb
-```
+Before 6.1 this was your job.  weewx-nws logged `You must delete the nws.sdb database and
+restart weewx` and then did nothing at all — no polling, no saving, no tags — until you
+deleted the file by hand.
+
+{: .note }
+If you are upgrading *to* 6.1 from any earlier release, there is still nothing to do: 6.1's
+own startup does the rebuild.  Should the drop ever fail — a permissions problem, say — it
+says so and names the database, and deleting it by hand remains the fallback.
 
 ## WeeWX 5 and Python 3.9
 
@@ -78,6 +76,29 @@ consequences:
   or delete a line to hand the choice back to the extension.
 
 ## Notable changes for existing stations
+
+**6.1** — three things.
+
+**If you print these tags in a skin of your own, delete any `$unit.label.…` you append
+after `.format()`.**  Until 6.1 the tags carried no formatter, so `.format('%.0f')` gave a
+bare `71` and every example here told you to add the label yourself; it now gives `71°F`,
+and the old idiom prints `71°F°F`.  For a range, suppress the first label instead of the
+second: `$hour.windSpeed.format('%.0f', add_label=False) to $hour.windSpeed2.format('%.0f')`.
+The sample skin never used that idiom, so an unmodified `NWSReport` needs nothing.
+
+The `$nwsforecast` tags now return values in **your report's own units**.  Until 6.1 they
+came back in the units NWS served — °F and mph — whatever `[Units]` said, so a report set
+to metric printed a Fahrenheit number beside a °C label.  If you run in US units nothing
+changes.  If you run in metric, your pages are now right, and a skin that worked around the
+old behavior needs attention: asking explicitly (`$hour.outTemp.degree_C`) is still
+correct and harmless, but a hard-coded °F label, or your own arithmetic on `.raw`, will now
+convert twice.
+
+The sample report's seven-day page now draws two weeks of temperature: the week your
+station recorded, read from your own weather archive, then the week NWS forecasts.  Nothing
+to configure.  A station with a short archive gets a short observed half and one with no
+archive gets the forecast week alone, so there is nothing to do on an upgrade beyond the
+usual: reinstalling overwrites `skins/nws/`, so copy anything you customized first.
 
 **6.0** — the sample report was rebuilt.  The three pages are responsive, they follow your
 reader's light or dark setting, and they carry charts, day tabs and severity-colored

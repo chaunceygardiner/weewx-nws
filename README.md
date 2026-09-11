@@ -57,7 +57,8 @@ its **7 Day**, **Hourly** and **Alerts** tabs are driven by these tags.
 
 - **A sample report that works out of the box.**  A seven-day page, an hourly page and an
   alerts page — responsive, with drawn weather icons that need no request to NWS, charts,
-  and light and dark themes that follow the reader's own setting.
+  and light and dark themes that follow the reader's own setting.  The seven-day page
+  draws the week your own station recorded beside the week NWS forecasts, on one scale.
   → [The sample report](https://chaunceygardiner.github.io/weewx-nws/sample-report.html)
 
 - **Nothing to configure to get going.**  The station's latitude and longitude come from

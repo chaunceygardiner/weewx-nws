@@ -46,7 +46,7 @@ And seven carry the NWS and CAP semantics that are easy to get subtly wrong — 
 | `$nwsforecast.ordered(alerts)` | Alerts in effect first, then most serious first |
 | `$nwsforecast.is_active(alert)` | Whether that alert is in effect now |
 | `$nwsforecast.alert_state(alert)` | `active`, `upcoming` or `ended` — the same question, told in full |
-| `$nwsforecast.alert_window(alert)` | `(onset, finish, open_ended)` — an alert with no end leans on its expiry |
+| `$nwsforecast.alert_window(alert)` | `(onset, finish, open_ended)` — an absent onset leans on `effective`, an absent end on `expires` |
 | `$nwsforecast.parse_description(desc)` | A CAP description as labeled sections, paragraphs and bullets |
 | `$nwsforecast.nice_caps(text)` | Title case that survives NWS's shouted acronyms |
 
@@ -283,11 +283,31 @@ whose window has already closed has *ended* — but it never "started", so the o
 spelling files it as upcoming.  Two skins wrote this classification independently and both
 got it wrong, from opposite directions, which is why it lives here now.
 
-`alert_window()` returns `(onset, finish, open_ended)`.  weewx-nws never leaves an alert's
-end time empty: where NWS gave no `ends` it stores `expires`, so **the two being equal is
-what an open-ended alert looks like** by the time a skin sees it.  About one alert in ten
-has no end at all, so anything drawing a progress bar must not divide by a span that does
-not exist.
+`alert_window()` returns `(onset, finish, open_ended)`, and **either event time may be
+absent from the feed** — so each falls back to the message time that answers the same
+question.  NWS says when it *spoke* on every alert (`effective`, `expires`) and does not
+always say when the *weather* starts or stops.
+
+| Absent | Falls back to | Because |
+|---|---|---|
+| `onset` | `effective` | CAP's reading: an alert that does not say when the event begins is in effect from the moment the message is.  Without this an alert with no onset would never read as active. |
+| `ends` | `expires`, with `open_ended` true | It is the only bound there is.  About one alert in ten has no end, so anything drawing a progress bar must not divide by a span that does not exist. |
+
+The fallbacks happen here, not in the database, which stores exactly what NWS sent.
+
+{: .important }
+**Test `.raw`, not the tag.**  Every alert time is always a `ValueHelper`, even when NWS
+sent nothing — so `$alert.ends` is never Python `None` and `#if $alert.ends is not None` is
+*always* true.  Ask `#if $alert.ends.raw is not None`, or take `open_ended` from
+`alert_window()` and skip the question.  Printing one bare gives `N/A`.  (Forecast fields
+differ: `windSpeed2` genuinely *is* left as `None` when NWS sent no range, so there you do
+test the tag itself.)
+
+{: .note }
+Before 6.1 the database stored `expires` in the end-time column whenever NWS gave no end,
+and `alert_window()` had to infer the open-ended case from the two being **equal** — which
+was a false positive for an alert that genuinely ends when its message expires.  A skin
+that tested for that equality itself should use `open_ended` instead.
 
 `parse_description()` turns a CAP description into structure — a list of dicts with
 `label`, `paragraphs` and `bullets`, where an empty label is unlabeled prose.  Three
@@ -329,25 +349,35 @@ precipitation come back as WeeWX `ValueHelper`s, so the helper methods a skin al
 all work:
 
 ```
-$hour.outTemp.format('%.0f')$unit.label.outTemp    ## 71°F
-$hour.startTime.format('%a %l %p')                 ## Mon  4 PM
+$hour.outTemp                                      ## 71.0°F
+$hour.outTemp.format('%.0f')                       ## 71°F
+$hour.windSpeed.format('%.0f')                     ## 9 mph
+$hour.startTime.format('%a %l %p')                 ## Thu  2 PM
 $hour.windDir.ordinal_compass                      ## WNW
-$hour.pop.format('%.0f')$unit.label.pop            ## 3%
-$hour.outTemp.degree_C.format('%.1f')              ## 21.7
+$hour.pop.format('%.0f')                           ## 3%
+$hour.outTemp.degree_C.format('%.1f')              ## 21.7°C
 $hour.outTemp.raw                                  ## 71.0
 ```
 
-{: .important }
-Print them with `.format()`, not bare.  These ValueHelpers are built without the report's
-formatter, so a bare `$hour.outTemp` prints the raw number to six decimal places —
-`71.000000` — and no unit label.  That is why every template in the sample skin writes
-`.format('%.0f')` and appends `$unit.label.outTemp` itself.  Times are the exception: a
-bare `$alert.effective` prints sensibly, as `31-Aug-2026 13:26`.
+**Since 6.1 these behave like every other WeeWX tag.**  They are built with the report's
+own formatter and converter, so the value arrives in **your report's units** and prints
+with your report's formats and labels: a report set to metric gets Celsius and km/h from
+`.raw`, from `.format()` and from a bare tag alike, exactly as `$current.outTemp` does.
+`.format()` supplies the unit label for you; `.raw` gives the plain number for arithmetic,
+in that same unit.
 
-Values arrive in the units NWS served, which for US locations means °F and mph.  Nothing
-converts them to the report's unit system automatically, so a skin running in metric has to
-ask: `$hour.outTemp.degree_C`, `$hour.windSpeed.km_per_hour`.  `.raw` gives the plain
-number for arithmetic.
+{: .important }
+**Upgrading from 6.0 or earlier: delete any `$unit.label.…` you append after `.format()`.**
+Until 6.1 these tags carried no formatter, so `.format('%.0f')` returned a bare `71` and
+every example on this site told you to append the label yourself.  It now returns `71°F`,
+and the old idiom prints `71°F°F`.  Two related workarounds go the same way: values also
+arrived in the units NWS served — °F and mph — whatever `[Units]` said, so a metric report
+printed Fahrenheit under a °C label.  Asking explicitly (`$hour.outTemp.degree_C`) is still
+correct and harmless, because converting Celsius to Celsius does nothing; a hard-coded °F
+label, or your own arithmetic on `.raw` to reach metric, must go or it will convert twice.
+
+For a range, suppress the first label rather than the second: `$hour.windSpeed.format('%.0f',
+add_label=False) to $hour.windSpeed2.format('%.0f')` gives `2 to 9 mph`.
 
 The remaining fields — names, forecast text, icon URLs, the alert's CAP fields — are plain
 strings, and `latitude` and `longitude` are the plain numbers the forecast was requested

@@ -24,13 +24,14 @@ Run from the repo root with the WeeWX venv python:
     /home/weewx/weewx-venv/bin/python -m pytest tests
 """
 
+import json
 import os
 import re
 import sys
 import time
 import types
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
 os.environ['TZ'] = 'America/Los_Angeles'
 time.tzset()
@@ -71,12 +72,44 @@ SKINS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'skin
 LONG_NWS_HEADLINE = ('HEAT ADVISORY REMAINS IN EFFECT FROM 11 AM SATURDAY TO 8 PM PDT TUESDAY '
                      'FOR INTERIOR VALLEYS AND HIGHER TERRAIN OF THE BAY AREA')
 
+def archive_records(hours: int = 72, gap: Tuple[int, ...] = ()) -> List[Dict[str, Any]]:
+    """Five-minute archive records for the `hours` hours before the forecast
+    begins -- a station that has actually been running.
+
+    They have to be laid out relative to the SEAM, not to midnight: freshen()
+    puts the first forecast period an hour from now and observations() takes
+    the seam from that period, so records placed any other way would land in
+    the wrong hourly slots.  Each hour is filled from +5 to +60 minutes,
+    because weewx's aggregation window is (start, stop].
+
+    `gap` names hours, counting back from the seam, that the station recorded
+    nothing in.
+    """
+    seam = int(time.time()) + 3600
+    out = []
+    for h in range(hours, 0, -1):
+        if h in gap:
+            continue
+        slot = seam - h * 3600
+        for minute in range(5, 61, 5):
+            out.append({'dateTime': slot + minute * 60, 'usUnits': weewx.US,
+                        'interval': 5, 'outTemp': 48.0 + (h % 12)})
+    return out
+
 def render_skin(tmp_path,
                 one_hour: Dict[str, Any],
                 twelve_hour: Dict[str, Any],
-                alerts: Dict[str, Any]) -> Dict[str, str]:
+                alerts: Dict[str, Any],
+                archive: Optional[List[Dict[str, Any]]] = None,
+                units: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Populate an nws db from the given json, run the NWSReport through
-    WeeWX's report engine, and return the three generated pages."""
+    WeeWX's report engine, and return the three generated pages.
+
+    `archive` is the station's OWN weather archive, which the 7 Day chart's
+    observed week is read from.  `units` is a {unit group: unit} mapping for
+    the report's own [Units][[Groups]] -- how a reader asks these pages for
+    Celsius.
+    """
     read_dir = str(tmp_path / 'forecasts')
     os.mkdir(read_dir)
     write_forecast_files(read_dir, one_hour=one_hour, twelve_hour=twelve_hour, alerts=alerts)
@@ -101,14 +134,23 @@ def render_skin(tmp_path,
         'database_type': 'SQLite'}
     html_root = str(tmp_path / 'public_html' / 'nws')
     config['WEEWX_ROOT'] = str(tmp_path)
+    report: Dict[str, Any] = {'skin': 'nws', 'enable': 'true'}
+    if units:
+        report['Units'] = {'Groups': dict(units)}
     config['StdReport'] = {
         'SKIN_ROOT': os.path.abspath(SKINS_DIR),
         'HTML_ROOT': html_root,
         'data_binding': 'wx_binding',
-        'NWSReport': {'skin': 'nws', 'enable': 'true'}}
+        'NWSReport': report}
     with weewx.manager.open_manager_with_config(config, 'wx_binding', initialize=True) as dbm:
-        dbm.addRecord({'dateTime': int(time.time()), 'usUnits': weewx.US,
-                       'interval': 5, 'outTemp': 72.0})
+        # The default is ONE record, and it is deliberately older than the
+        # chart's observed window: the report engine needs an archive with
+        # something in it to date the report from at all, and this way the
+        # default pages are the no-observed-week case -- which is what a
+        # fresh install renders, and a state worth having under test.
+        dbm.addRecord(archive if archive is not None
+                      else [{'dateTime': int(time.time()) - 200 * 3600,
+                             'usUnits': weewx.US, 'interval': 5, 'outTemp': 72.0}])
 
     stn_info = weewx.station.StationInfo(**config['Station'])
     report_engine = weewx.reportengine.StdReportEngine(config, stn_info, first_run=True)
@@ -141,6 +183,150 @@ def pages(tmp_path_factory):
         alerts      = make_alerts_json(make_alert(
             parameters={'NWSheadline': [LONG_NWS_HEADLINE]})))
 
+@pytest.fixture(scope='module')
+def pages_with_archive(tmp_path_factory):
+    """The same pages for a station that has been RUNNING for three days,
+    with one three-hour outage in the middle of them.  The 7 Day chart then
+    carries the week the station recorded as well as the week NWS forecasts,
+    which is a different code path from the fresh-install pages above."""
+    return render_skin(
+        tmp_path_factory.mktemp('skin_archive'),
+        one_hour    = freshen(load_fixture('one_hour.json')),
+        twelve_hour = freshen(load_fixture('twelve_hour.json')),
+        alerts      = make_alerts_json(make_alert()),
+        # 18 hours, not a week: the one_hour fixture is trimmed to four
+        # periods, so a week of archive would push the seam so far right that
+        # the label naming the forecast side has nowhere to sit.  The shape
+        # of a full fortnight is pinned in tests/test_nwsskin.py, which needs
+        # no database to draw one.
+        archive     = archive_records(18, gap=(10, 11, 12)))
+
+
+class TestObservedWeek:
+    """The 7 Day chart's observed half, rendered from a real archive through
+    the report engine -- which is the only place the search list, the database
+    read, the unit conversion and the template all meet."""
+
+    def test_the_page_still_renders_whole(self, pages_with_archive):
+        for name, page in pages_with_archive.items():
+            assert_fully_rendered(page, name)
+
+    def test_the_chart_carries_the_week_the_station_recorded(self, pages_with_archive):
+        page = pages_with_archive['index.html']
+        assert 'class="aline"' in page
+        assert 'class="seam"' in page
+        assert '>Observed</text>' in page and '>Forecast</text>' in page
+        assert 'Temperature, recorded and forecast' in page
+
+    def test_an_outage_leaves_a_hole_rather_than_a_confident_line(self, pages_with_archive):
+        """Three hours the station recorded nothing in.  A single stroke
+        across them would be a claim about weather nobody measured."""
+        d = re.search(r'<path d="([^"]*)" class="aline"/>',
+                      pages_with_archive['index.html']).group(1)
+        assert d.count('M') == 2
+
+    def test_the_observed_hours_are_marked_for_the_readout(self, pages_with_archive):
+        """A measurement and a prediction must not be reported in the same
+        words, so the crosshair is told which is which."""
+        spec = json.loads(re.search(r"data-chart='([^']*)'",
+                                    pages_with_archive['index.html']).group(1))
+        observed = [p for p in spec['p'] if p.get('o')]
+        # Every hour, INCLUDING the three the station missed: the crosshair
+        # turns a pointer position into an index, so an hour that lost its
+        # place would put every later reading on the wrong hour.
+        assert len(observed) == 18
+        assert [p['T'] is None for p in observed] == [i in (6, 7, 8)
+                                                      for i in range(18)]
+
+    def test_a_fresh_install_gets_the_forecast_week_alone(self, pages):
+        """An empty archive is what the sample report most often meets: it is
+        frequently the first page a new user sees."""
+        page = pages['index.html']
+        assert 'class="aline"' not in page
+        assert 'class="seam"' not in page
+        assert 'viewBox="0 0 1040 132"' in page
+        assert 'The week&rsquo;s temperature' in page
+        assert 'Temperature, recorded and forecast' not in page
+
+
+METRIC_GROUPS = {'group_temperature': 'degree_C', 'group_speed': 'km_per_hour'}
+
+
+@pytest.fixture(scope='module')
+def metric_pages(tmp_path_factory):
+    """The pages of a station whose report asks for Celsius, with a US
+    archive behind it -- the combination that has to convert BOTH halves of
+    the 7 Day chart, from two different starting points."""
+    return render_skin(
+        tmp_path_factory.mktemp('skin_metric'),
+        one_hour    = freshen(load_fixture('one_hour.json')),
+        twelve_hour = freshen(load_fixture('twelve_hour.json')),
+        alerts      = make_alerts_json(make_alert()),
+        archive     = archive_records(18, gap=(10, 11, 12)),
+        units       = METRIC_GROUPS)
+
+
+class TestReportUnits:
+    """A report set to Celsius must get Celsius.
+
+    Through 6.0 it did not, and no test could see it: nws.py built its
+    ValueHelpers with no converter, and a ValueHelper converts once at
+    construction and never again -- so every number on these pages was
+    Fahrenheit whatever [Units] said, and the wind carried a km/h LABEL on an
+    mph number.  It has to be checked through a real render, because the
+    defect was in how the tag layer and the report's own unit settings meet.
+    """
+
+    def test_the_page_still_renders_whole(self, metric_pages):
+        for name, page in metric_pages.items():
+            assert_fully_rendered(page, name)
+
+    def test_the_forecast_half_is_celsius(self, metric_pages):
+        """The fixture's four hours are 76-81F, which is 24-27C."""
+        spec = json.loads(re.search(r"data-chart='([^']*)'",
+                                    metric_pages['index.html']).group(1))
+        forecast = [p['T'] for p in spec['p'] if not p.get('o')]
+        assert forecast == [24, 26, 27, 27]
+
+    def test_the_observed_half_is_celsius_too(self, metric_pages):
+        """A US archive on a metric report: the two halves start in different
+        units and must arrive in the same one, or they would be drawn on one
+        axis in two scales."""
+        spec = json.loads(re.search(r"data-chart='([^']*)'",
+                                    metric_pages['index.html']).group(1))
+        observed = [p['T'] for p in spec['p'] if p.get('o') and p['T'] is not None]
+        # archive_records() lays down 48-59F, which is 9-15C.
+        assert observed and all(5 <= t <= 18 for t in observed), observed
+
+    def test_the_same_report_in_us_units_is_unchanged(self, pages_with_archive):
+        """The other half of the claim: nothing moves for a US station."""
+        spec = json.loads(re.search(r"data-chart='([^']*)'",
+                                    pages_with_archive['index.html']).group(1))
+        assert [p['T'] for p in spec['p'] if not p.get('o')] == [76, 78, 80, 81]
+
+    def test_the_wind_number_and_its_label_agree(self, metric_pages, pages_with_archive):
+        """The plainest tell that the numbers were never converted:
+        $unit.label.windSpeed follows the report's units even when the value
+        does not, so through 6.0 an unconverted speed printed an mph number
+        wearing a km/h label.
+
+        The twelve-hour fixture's periods are "5 mph" and "1 to 7 mph", so a
+        metric report must read 8 km/h and 2-11 km/h -- not 5 and 1-7 with the
+        units changed underneath them.
+        """
+        metric, us = metric_pages['index.html'], pages_with_archive['index.html']
+        assert '<span class="w">8 km/h</span>' in metric
+        assert '<span class="w">2&ndash;11 km/h</span>' in metric
+        assert '<span class="w">5 mph</span>' in us
+        assert '<span class="w">1&ndash;7 mph</span>' in us
+
+    def test_the_day_rows_are_celsius(self, metric_pages):
+        """Not just the chart: the low-to-high bars read .raw as well."""
+        page = metric_pages['index.html']
+        highs = [int(v) for v in re.findall(r'<span class="hi">(\d+)&deg;</span>', page)]
+        assert highs and all(-10 < h < 45 for h in highs), highs
+
+
 class TestRenderedPages:
     def test_no_unrendered_placeholders(self, pages):
         for name, page in pages.items():
@@ -170,7 +356,9 @@ class TestRenderedPages:
         assert '11 AM Saturday' in page and '8 PM PDT Tuesday' in page
         assert 'HEAT ADVISORY REMAINS IN EFFECT' not in page
         assert 'Heat Advisory issued July 12' in page    # sub-headline
-        assert 'Moderate severity' in page
+        # Named in the chip beside the event, not buried in the footer.
+        assert '<span class="sevchip">Moderate</span>' in page
+        assert 'severity' not in page
         assert 'Drink plenty of fluids.' in page         # instructions
         assert 'What to do' in page                      # the callout
         assert 'No alerts in effect' not in page
@@ -377,13 +565,22 @@ class TestPopThreshold:
     """Chance of rain is blank below 15%, weather.gov's own threshold -- and
     an ABSENT value must not look the same as a suppressed one."""
 
-    def _render(self, tmp_path, pop):
+    _KEEP = object()
+
+    def _render(self, tmp_path, pop, hourly_pop=_KEEP):
+        """`hourly_pop` defaults to `pop`, and is given separately only for
+        the absent case: sanity_check_forecast_json REQUIRES a chance of rain
+        on an hourly period and not on a twelve-hour one, because that is how
+        NWS sends them.  A fixture with neither is a state the feed cannot
+        produce, and since 6.1 the read_from_dir path checks it the same way
+        the network path always did."""
         one_hour = freshen(load_fixture('one_hour.json'))
         twelve_hour = freshen(load_fixture('twelve_hour.json'))
-        for j in (one_hour, twelve_hour):
+        hourly = pop if hourly_pop is self._KEEP else hourly_pop
+        for j, value in ((one_hour, hourly), (twelve_hour, pop)):
             for period in j['properties']['periods']:
                 period['probabilityOfPrecipitation'] = {
-                    'unitCode': 'wmoUnit:percent', 'value': pop}
+                    'unitCode': 'wmoUnit:percent', 'value': value}
         return render_skin(tmp_path, one_hour, twelve_hour, make_alerts_json())
 
     def test_a_low_chance_shows_no_droplet(self, tmp_path):
@@ -399,7 +596,9 @@ class TestPopThreshold:
             assert '60%' in pages[name], name
 
     def test_an_absent_chance_is_an_em_dash_not_a_blank(self, tmp_path):
-        pages = self._render(tmp_path, None)
+        """A twelve-hour period may carry no chance of rain -- and index.html
+        is the twelve-hour page, which is where the em-dash shows."""
+        pages = self._render(tmp_path, None, hourly_pop=10)
         assert 'pop-na' in pages['index.html']
 
 

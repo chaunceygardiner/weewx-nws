@@ -147,11 +147,10 @@ different things for alerts than for forecasts — `shortForecast` holds an aler
 for instance.  [Forecast and alert fields](fields.md) is the map; the schema comments in
 `bin/user/nws.py` are the authority.
 
-{: .important }
-The schema has changed over the extension's life and there is no migration.  When it
-changes, weewx-nws logs an error naming the fix — `You must delete the nws.sdb database and
-restart weewx` — and does nothing else until you do.  Nothing is lost that the next poll
-does not replace.  See [Upgrading](upgrading.md).
+{: .note }
+The schema has changed over the extension's life and there is no migration.  Since 6.1
+weewx-nws notices an old one at startup, says what differs, and rebuilds the table itself;
+nothing is lost that the next poll does not replace.  See [Upgrading](upgrading.md).
 
 ## The sample report's stanza
 

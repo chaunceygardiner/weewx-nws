@@ -25,6 +25,7 @@ is tested against a fake requests.Session.
 
 import datetime
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -32,6 +33,7 @@ import threading
 import time
 
 from typing import Any, Dict, Optional
+from unittest import mock
 
 os.environ['TZ'] = 'America/Los_Angeles'
 time.tzset()
@@ -42,10 +44,16 @@ import configobj
 import pytest
 import requests
 
+import weeutil.config
+
+import weedb
 import weewx
+import weewx.manager
+import weewx.defaults
 import weewx.units
 from weewx.engine import StdEngine
 
+import nws as nws_module
 from nws import Configuration, ForecastType, NWS, NWSForecastVariables, NWSPoller
 
 from test_nws import load_fixture, make_alert, make_alerts_json
@@ -237,10 +245,210 @@ class TestServiceAlerts:
         assert stale_left == 0
 
 
+class TestStaleSchema:
+    """A database from an older release is rebuilt, not complained about.
+
+    6.1 relaxed NOT NULL on startTime and endTime, which leaves the column
+    NAMES identical -- so the names-only check 6.0 shipped would have passed
+    an old table and then failed every INSERT of an alert with no onset.  The
+    check compares nullability now, and acts on what it finds.
+    """
+
+    @staticmethod
+    def _create_6_0_table(db_file: str) -> None:
+        """The 6.0 archive table: startTime and endTime NOT NULL."""
+        columns = [(name, 'FLOAT NOT NULL' if name in ('startTime', 'endTime')
+                    else spec) for name, spec in nws_module.table]
+        conn = sqlite3.connect(db_file)
+        try:
+            conn.execute('CREATE TABLE archive (%s)'
+                         % ', '.join('%s %s' % c for c in columns))
+            conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _nullable(db_file: str, column: str) -> bool:
+        conn = sqlite3.connect(db_file)
+        try:
+            return not [r for r in conn.execute('PRAGMA table_info(archive)')
+                        if r[1] == column][0][3]
+        finally:
+            conn.close()
+
+    def test_an_old_table_is_rebuilt(self, tmp_path):
+        read_dir = str(tmp_path / 'forecasts')
+        os.mkdir(read_dir)
+        write_forecast_files(read_dir, alerts=make_alerts_json(make_alert()))
+        db_file = str(tmp_path / 'nws.sdb')
+        self._create_6_0_table(db_file)
+        assert not self._nullable(db_file, 'startTime')
+
+        config = make_config(db_file, read_dir)
+        nws = NWS(StdEngine(config), config)
+        nws.test_db_file = db_file
+
+        assert self._nullable(db_file, 'startTime')
+        assert self._nullable(db_file, 'endTime')
+        # And it is usable: the whole point is that the operator does nothing.
+        assert nws.cfg is not None
+
+    def test_an_alert_with_no_onset_survives_the_round_trip(self, tmp_path):
+        """The end-to-end case that had no test before, which is why the bug
+        lived: intake, schema and read never met in one assertion."""
+        read_dir = str(tmp_path / 'forecasts')
+        os.mkdir(read_dir)
+        write_forecast_files(read_dir, alerts=make_alerts_json(
+            make_alert(onset=None, ends=None)))
+        db_file = str(tmp_path / 'nws.sdb')
+        config = make_config(db_file, read_dir)
+        nws = NWS(StdEngine(config), config)
+        nws.test_db_file = db_file
+        populate_and_save(nws, ForecastType.ALERTS)
+
+        rows = nws.select_forecasts(ForecastType.ALERTS)
+        assert len(rows) == 1, 'an alert with no onset must still be shown'
+        assert rows[0]['startTime'] is None
+        assert rows[0]['endTime'] is None
+        # An open-ended alert is bounded by its message expiry, and that is
+        # what keeps it visible on read.
+        assert rows[0]['expirationTime'] is not None
+
+    def test_a_rebuild_that_does_not_take_says_so_once(self, tmp_path, caplog):
+        """The guard against silent churn.  If the freshly created table still
+        does not match what we declare, the disagreement is between this check
+        and the database backend -- and without saying so, every restart would
+        drop and recreate the table for ever, wiping the cache each time and
+        looking like nothing at all.  sqlite is covered by the tests above;
+        this exercises the branch for a backend we cannot run here.
+        """
+        read_dir = str(tmp_path / 'forecasts')
+        os.mkdir(read_dir)
+        write_forecast_files(read_dir, alerts=make_alerts_json(make_alert()))
+        db_file = str(tmp_path / 'nws.sdb')
+        self._create_6_0_table(db_file)
+        config = make_config(db_file, read_dir)
+
+        # A declaration no table can satisfy, so the rebuild cannot converge.
+        impossible = [('dateTime', True), ('nosuchcolumn', True)]
+        with mock.patch.object(NWS, 'expected_schema_pairs',
+                               lambda self: impossible):
+            with caplog.at_level(logging.ERROR):
+                nws = NWS(StdEngine(config), config)
+
+        assert 'still does not match this version' in caplog.text
+        assert 'nosuchcolumn is missing' in caplog.text
+        # And it carried on with a usable database rather than giving up.
+        assert nws.cfg is not None
+
+    def test_a_failed_recreate_does_not_take_weewxd_down(self, tmp_path, caplog):
+        """At this point the table is already GONE.  A service constructor
+        that raises takes weewxd with it -- StdEngine.loadServices shuts the
+        started services down and re-raises -- so an unguarded recreate would
+        leave the operator with no forecast table AND no WeeWX.  Failing back
+        to a logged error and an inert extension is what 6.0 did in the same
+        situation.
+        """
+        read_dir = str(tmp_path / 'forecasts')
+        os.mkdir(read_dir)
+        write_forecast_files(read_dir, alerts=make_alerts_json(make_alert()))
+        db_file = str(tmp_path / 'nws.sdb')
+        self._create_6_0_table(db_file)
+        config = make_config(db_file, read_dir)
+        engine = StdEngine(config)
+
+        real = weewx.manager.DBBinder.get_manager
+        seen = {'n': 0}
+
+        def flaky(binder, data_binding='wx_binding', initialize=False):
+            if data_binding == 'nws_binding':
+                seen['n'] += 1
+                if seen['n'] > 1:          # the re-open AFTER the drop
+                    raise weedb.OperationalError('attempt to write a readonly database')
+            return real(binder, data_binding=data_binding, initialize=initialize)
+
+        with mock.patch.object(weewx.manager.DBBinder, 'get_manager', flaky):
+            with caplog.at_level(logging.ERROR):
+                NWS(engine, config)        # must not raise
+
+        assert 'could not recreate it' in caplog.text
+        assert 'readonly database' in caplog.text
+
+    def test_a_current_table_is_left_alone(self, tmp_path):
+        """The guard on the guard.  Rebuilding is destructive, so a false
+        positive costs a user their data rather than a stray log line -- and
+        the rebuild must never fire on a database that is already right."""
+        read_dir = str(tmp_path / 'forecasts')
+        os.mkdir(read_dir)
+        write_forecast_files(read_dir, alerts=make_alerts_json(make_alert()))
+        db_file = str(tmp_path / 'nws.sdb')
+        config = make_config(db_file, read_dir)
+        nws = NWS(StdEngine(config), config)
+        nws.test_db_file = db_file
+        populate_and_save(nws, ForecastType.ALERTS)
+        assert db_count(nws, ForecastType.ALERTS) == 1
+
+        # Second startup against the same, current, database.
+        NWS(StdEngine(config), config)
+        assert db_count(nws, ForecastType.ALERTS) == 1, 'the rows were destroyed'
+
+
+class TestReadFromDir:
+    """Fleet mode reads forecasts from a directory instead of from NWS, and
+    since 6.1 they get the same sanity check a reply from NWS gets.
+
+    They did not through 6.0, and the difference grew teeth once compose began
+    refusing a non-US forecast outright: populate_forecast clears the bucket
+    BEFORE composing and catches only KeyError, so anything else raised there
+    unwound to poll_nws's broad handler -- an empty bucket and a stack trace
+    naming nothing, every retry_wait_secs, for as long as the file sat there.
+    """
+
+    def test_a_non_us_file_is_rejected_rather_than_raising(self, service):
+        j = freshen(load_fixture('one_hour.json'))
+        j['properties']['units'] = 'si'
+        write_forecast_files(service.test_read_dir, one_hour=j)
+        retry, success = NWSPoller.populate_forecast(
+            service.cfg, ForecastType.ONE_HOUR)
+        assert retry is True and success is False
+
+    def test_a_malformed_file_is_rejected_rather_than_raising(self, service):
+        """json.loads raises JSONDecodeError, which IS a ValueError, so this
+        had the same shape as the case above."""
+        with open(os.path.join(service.test_read_dir, 'ONE_HOUR'), 'w') as f:
+            f.write('{ this is not json')
+        retry, success = NWSPoller.populate_forecast(
+            service.cfg, ForecastType.ONE_HOUR)
+        assert retry is True and success is False
+
+    def test_a_good_file_still_loads(self, service):
+        """The other half: the check must not reject what fleet mode actually
+        ships, which is a verbatim copy of a reply NWS already served."""
+        write_forecast_files(service.test_read_dir,
+                             one_hour=freshen(load_fixture('one_hour.json')))
+        retry, success = NWSPoller.populate_forecast(
+            service.cfg, ForecastType.ONE_HOUR)
+        assert success is True
+        assert len(service.cfg.oneHourForecasts) == 4
+
+
 class FakeGenerator:
-    def __init__(self, config: configobj.ConfigObj):
-        self.formatter = weewx.units.Formatter()
-        self.converter = weewx.units.Converter()
+    """Stands in for the report generator.  `converter` is the load-bearing
+    part: the tags build their ValueHelpers with it, so it is what decides
+    which units a report gets."""
+    def __init__(self, config: configobj.ConfigObj, group_units=None,
+                 real_formatter: bool = False):
+        # A bare Formatter() has empty format and label dicts.  `real_formatter`
+        # builds the one an actual report would have -- WeeWX's own defaults --
+        # which is what decides whether .format() labels the value.
+        if real_formatter:
+            skin = weeutil.config.deep_copy(weewx.defaults.defaults)
+            skin['Units']['Groups'].update(
+                weewx.units.std_groups[weewx.METRIC if group_units else weewx.US])
+            self.formatter = weewx.units.Formatter.fromSkinDict(skin)
+        else:
+            self.formatter = weewx.units.Formatter()
+        self.converter = weewx.units.Converter(group_units or weewx.units.USUnits)
         self.config_dict = config
         self.skin_dict: Dict[str, Any] = {}
 
@@ -254,6 +462,51 @@ class TestSearchList:
     def test_extension_list(self, search_list):
         [extensions] = search_list.get_extension_list(None, None)
         assert extensions['nwsforecast'] is search_list
+
+    def test_values_come_back_in_the_reports_units(self, service):
+        """The tags build their ValueHelpers with the report's converter, so a
+        report set to metric gets Celsius and km/h.
+
+        Through 6.0 they were built with no converter at all, and a
+        ValueHelper converts once, at construction, and never again -- so
+        every value came back in the units NWS served whatever [Units] said,
+        and neither .raw nor .format() could rescue a metric skin.
+        """
+        for forecast_type in (ForecastType.ONE_HOUR, ForecastType.TWELVE_HOUR):
+            populate_and_save(service, forecast_type)
+        us = NWSForecastVariables(FakeGenerator(service.test_config))
+        metric = NWSForecastVariables(
+            FakeGenerator(service.test_config, weewx.units.MetricUnits))
+        f_row, c_row = us.one_hour_forecasts()[0], metric.one_hour_forecasts()[0]
+        assert round(f_row['outTemp'].raw) == 76          # the fixture's first hour
+        assert round(c_row['outTemp'].raw) == 24          # ... in Celsius
+        assert round(f_row['windSpeed'].raw) == 2         # mph
+        assert round(c_row['windSpeed'].raw) == 3         # km/h
+        # A percentage is a percentage in both.
+        assert f_row['pop'].raw == c_row['pop'].raw
+
+    def test_format_supplies_the_unit_label(self, service):
+        """The tags now carry the report's formatter, so .format() labels the
+        value the way $current.outTemp does.
+
+        This is the half of the 6.1 change that asks something of existing
+        skins: until 6.1 .format('%.0f') returned a bare '71' and the manual
+        told readers to append $unit.label.outTemp themselves, which now
+        prints '71degF degF'.  The documentation was rewritten around this
+        behavior, so it is pinned here.
+        """
+        populate_and_save(service, ForecastType.ONE_HOUR)
+        us = NWSForecastVariables(
+            FakeGenerator(service.test_config, real_formatter=True))
+        metric = NWSForecastVariables(
+            FakeGenerator(service.test_config, weewx.units.MetricUnits,
+                          real_formatter=True))
+        assert us.one_hour_forecasts()[0]['outTemp'].format('%.0f') == '76\u00b0F'
+        assert metric.one_hour_forecasts()[0]['outTemp'].format('%.0f') == '24\u00b0C'
+        # And the documented way to write a range: suppress the FIRST label.
+        speed = us.one_hour_forecasts()[0]['windSpeed']
+        assert speed.format('%.0f', add_label=False) == '2'
+        assert speed.format('%.0f') == '2 mph'
 
     def test_one_hour_forecasts_wrapped_in_value_helpers(self, search_list):
         rows = search_list.one_hour_forecasts()

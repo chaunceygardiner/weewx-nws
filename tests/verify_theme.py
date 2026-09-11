@@ -64,10 +64,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from test_nws import load_fixture, make_alert, make_alerts_json
 from test_nws_service import freshen
-from test_nws_skin import LONG_NWS_HEADLINE, render_skin
+from test_nws_skin import LONG_NWS_HEADLINE, archive_records, render_skin
 
 # (label, css selector, computed property).  Two of each kind: a ground, text,
-# a filled chip whose text color INVERTS between themes, and the drawn icons.
+# a filled chip whose text color INVERTS between themes, and the drawn icons --
+# plus the 7 Day chart's seam label, which is the one mark on these pages whose
+# color comes from a rule that OVERRIDES another at the same specificity, and
+# so is only correct if it is in the right place in the file.
 PROBES: List[Tuple[str, str, str]] = [
     ('page background',      'body',                 'backgroundColor'),
     ('card background',      'section.now',          'backgroundColor'),
@@ -75,16 +78,27 @@ PROBES: List[Tuple[str, str, str]] = [
     ('page title',           'h1.ctitle',            'color'),
     ('current tab fill',     '.nav a.current',       'backgroundColor'),
     ('current tab text',     '.nav a.current',       'color'),
+    ('chart seam label',     '.sparkcurve .seamlab', 'fill'),
     ('icon: sun disc',       '#wx-skc-day circle',   'fill'),
     ('icon: overcast back',  '#wx-ovc-day g rect',   'fill'),
 ]
+
+# Probes that live on a page other than index.html.  The severity chip is on
+# an alert card, and it is exactly what this file exists for: a NEW colored
+# mark, whose color is the only thing distinguishing one severity from
+# another now that the word is beside it.
+PAGE_PROBES: Dict[str, List[Tuple[str, str, str]]] = {
+    'index.html': PROBES,
+    'alerts.html': [('alert severity chip', '.alert .sevchip', 'color'),
+                    ('alert severity rail', '.alert',          'borderLeftColor')],
+}
 
 # The driver runs inside the Playwright venv, which does not have WeeWX; the
 # rendering happens out here, which does.  Hence two pythons and a subprocess.
 DRIVER = r'''
 import json, sys
 from playwright.sync_api import sync_playwright
-url, probes = sys.argv[1], json.loads(sys.argv[2])
+base, page_probes = sys.argv[1], json.loads(sys.argv[2])
 out = {}
 with sync_playwright() as pw:
     for engine in ('chromium', 'firefox'):
@@ -92,11 +106,15 @@ with sync_playwright() as pw:
         out[engine] = {}
         for scheme in ('light', 'dark'):
             ctx = browser.new_context(color_scheme=scheme)
-            page = ctx.new_page()
-            page.goto(url, wait_until='load')
-            out[engine][scheme] = {
-                label: page.eval_on_selector(sel, '(el, p) => getComputedStyle(el)[p]', prop)
-                for label, sel, prop in probes}
+            readings = {}
+            for name, probes in page_probes.items():
+                page = ctx.new_page()
+                page.goto(base + name, wait_until='load')
+                for label, sel, prop in probes:
+                    readings[label] = page.eval_on_selector(
+                        sel, '(el, p) => getComputedStyle(el)[p]', prop)
+                page.close()
+            out[engine][scheme] = readings
             ctx.close()
         browser.close()
 print(json.dumps(out))
@@ -122,15 +140,21 @@ def main() -> int:
                 freshen(load_fixture('one_hour.json')),
                 freshen(load_fixture('twelve_hour.json')),
                 make_alerts_json(make_alert(
-                    parameters={'NWSheadline': [LONG_NWS_HEADLINE]})))
-    page = os.path.join(base, 'public_html', 'nws', 'index.html')
-    assert os.path.isfile(page), page
+                    parameters={'NWSheadline': [LONG_NWS_HEADLINE]})),
+                # With a station archive behind it, so the 7 Day chart draws
+                # its observed half: the seam label is probed below, and no
+                # probe can reach a mark the page never emits.
+                archive=archive_records(18, gap=(10, 11, 12)))
+    html_root = os.path.join(base, 'public_html', 'nws')
+    for name in PAGE_PROBES:
+        assert os.path.isfile(os.path.join(html_root, name)), name
 
     driver = os.path.join(base, 'driver.py')
     with open(driver, 'w') as f:
         f.write(DRIVER)
     proc = subprocess.run(
-        [options.python, driver, 'file://' + page, json.dumps(PROBES)],
+        [options.python, driver, 'file://' + html_root + '/',
+         json.dumps(PAGE_PROBES)],
         capture_output=True, text=True)
     if proc.returncode != 0:
         print('FAIL: the browser driver exited %d:' % proc.returncode)
@@ -142,7 +166,7 @@ def main() -> int:
     for engine in sorted(results):
         print('\n%s' % engine)
         light, dark = results[engine]['light'], results[engine]['dark']
-        for label, _sel, _prop in PROBES:
+        for label, _sel, _prop in [pr for prs in PAGE_PROBES.values() for pr in prs]:
             same = light[label] == dark[label]
             # Every probe is a color the two palettes define differently.  If
             # one comes back identical the theme did not reach it -- which is

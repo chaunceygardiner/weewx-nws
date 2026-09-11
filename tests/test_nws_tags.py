@@ -70,11 +70,21 @@ def period(start, temp, is_daytime, name='Tuesday', pop=10, dewpoint=50.0):
     }
 
 
-def alert(onset=None, ends=None, expires=None, severity='Severe'):
+def alert(onset=None, ends=None, expires=None, severity='Severe', effective=None):
+    """An alert row as $nwsforecast.alerts() hands one out.
+
+    `effective` defaults to `onset` so a test that does not care reads the
+    same as before -- but it is ALWAYS present, because NWS sends it on every
+    alert and alert_window() falls back to it when there is no onset.  This
+    helper omitted it until 6.1, which is the fixture-shaped blind spot that
+    let the null-onset bug live: a model of the data that cannot express the
+    case cannot test it.
+    """
     return {
         'onset': vh(onset),
         'ends': vh(ends),
         'expires': vh(expires),
+        'effective': vh(effective if effective is not None else onset),
         'severity': severity,
     }
 
@@ -570,13 +580,22 @@ class TestParseDescription:
 
 class TestAlertWindowAndActive:
 
-    def test_ends_equal_to_expires_means_open_ended(self):
-        """This extension never leaves endTime empty: where NWS gave no
-        `ends` it stores `expires`, so equality is what open-ended looks
-        like by the time a skin sees it.  One alert in ten has no end."""
-        a = alert(onset=1000.0, ends=5000.0, expires=5000.0)
+    def test_a_null_end_is_what_open_ended_looks_like(self):
+        """Since 6.1 the column is nullable and says so itself.  About one
+        alert in ten has no end, and `finish` falls back to the message's own
+        expiry because that is the only bound there is."""
+        a = alert(onset=1000.0, ends=None, expires=5000.0)
         onset, finish, open_ended = NWSForecastVariables.alert_window(a)
         assert open_ended is True and finish == 5000.0
+
+    def test_a_real_end_landing_on_the_expiry_is_not_open_ended(self):
+        """Through 6.0 this was READ as open-ended, because endTime held
+        `expires` whenever NWS sent no end and equality was the only tell.
+        That was a false positive on an alert whose real end happens to fall
+        on its expiry, and it is gone."""
+        a = alert(onset=1000.0, ends=5000.0, expires=5000.0)
+        onset, finish, open_ended = NWSForecastVariables.alert_window(a)
+        assert open_ended is False and finish == 5000.0
 
     def test_a_real_end_is_not_open_ended(self):
         a = alert(onset=1000.0, ends=4000.0, expires=5000.0)
@@ -600,10 +619,26 @@ class TestAlertWindowAndActive:
         a = alert(onset=1000.0, ends=5000.0, expires=5000.0)
         assert NWSForecastVariables.is_active(a, now=9000.0) is False
 
-    def test_a_null_onset_is_never_active(self):
-        """The branch that made card() raise: `onset - now` on a None."""
-        a = alert(onset=None, ends=5000.0, expires=5000.0)
+    def test_a_null_onset_is_in_effect_from_its_effective_time(self):
+        """CAP's own reading, and not cosmetic: without the fallback
+        is_active() is false for every alert that has no onset, so an
+        Evacuation Immediate in effect RIGHT NOW files under `upcoming`.  Two
+        of the three null-onset alerts in a national sample were exactly
+        that."""
+        a = alert(onset=None, effective=1000.0, ends=5000.0, expires=5000.0)
+        assert NWSForecastVariables.is_active(a, now=3000.0) is True
+        assert NWSForecastVariables.alert_state(a, now=3000.0) == 'active'
+
+    def test_a_null_onset_before_its_effective_time_is_upcoming(self):
+        """The fallback substitutes a start, it does not assume one: an alert
+        whose message is not yet effective has still not begun."""
+        a = alert(onset=None, effective=4000.0, ends=6000.0, expires=6000.0)
         assert NWSForecastVariables.is_active(a, now=3000.0) is False
+        assert NWSForecastVariables.alert_state(a, now=3000.0) == 'upcoming'
+
+    def test_a_null_onset_whose_window_closed_is_ended(self):
+        a = alert(onset=None, effective=1000.0, ends=2000.0, expires=2000.0)
+        assert NWSForecastVariables.alert_state(a, now=3000.0) == 'ended'
 
     def test_now_defaults_to_this_instant(self):
         now = datetime.datetime.now().timestamp()
@@ -716,11 +751,25 @@ class TestOrdered:
         assert out[0] is minor
 
     def test_a_null_onset_does_not_break_the_sort(self):
+        """Neither time given at all -- which NWS does not send, but a row
+        must not be able to break the ordering."""
         now = datetime.datetime.now().timestamp()
         nulled = alert(onset=None, ends=now + 60, expires=now + 60, severity='Severe')
         active = alert(onset=now - 60, ends=now + 60, expires=now + 60, severity='Severe')
         out = NWSForecastVariables.ordered([nulled, active])
         assert out[0] is active
+
+    def test_a_null_onset_is_ranked_at_its_effective_time(self):
+        """The same instant alert_window() reports, so the order a reader sees
+        agrees with the window each card draws.  Ranking such an alert at
+        `now` instead -- which is what 6.0 did -- floats an alert that has
+        been in effect for hours to the bottom of its severity group."""
+        now = datetime.datetime.now().timestamp()
+        older = alert(onset=None, effective=now - 7200,
+                      ends=now + 60, expires=now + 60, severity='Severe')
+        newer = alert(onset=now - 60, ends=now + 60, expires=now + 60,
+                      severity='Severe')
+        assert NWSForecastVariables.ordered([newer, older])[0] is older
 
     def test_empty_input_is_an_empty_list(self):
         assert NWSForecastVariables.ordered([]) == []

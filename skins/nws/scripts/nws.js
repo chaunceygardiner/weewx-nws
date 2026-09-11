@@ -211,7 +211,19 @@
       var x = spec.x0 + i * step;
       line.setAttribute('x1', x); line.setAttribute('x2', x);
       line.setAttribute('y1', spec.y0); line.setAttribute('y2', spec.y1);
-      dotT.setAttribute('cx', x); dotT.setAttribute('cy', yFor(pt.T));
+      /* An observed hour the station has no reading for still holds its
+         place in the list -- the index is what turns a pointer position into
+         an hour -- so the crosshair line still moves to it and only the dot
+         and the number are withheld. */
+      if (pt.T === null || pt.T === undefined) {
+        dotT.setAttribute('r', 0);
+      } else {
+        dotT.setAttribute('r', 3.4);
+        dotT.setAttribute('cx', x); dotT.setAttribute('cy', yFor(pt.T));
+      }
+      /* A measurement and a prediction must not be shown in the same words,
+         or in the same color. */
+      cross.classList.toggle('past', !!pt.o);
       if (pt.d === null || pt.d === undefined) {
         dotD.setAttribute('r', 0);
       } else {
@@ -227,11 +239,14 @@
          alone, so its points carry no `d` and no `r` at all and both spans
          are simply left out. */
       out.innerHTML = '<b>' + pt.t + '</b>'
-        + '<span class="ro-t">' + pt.T + '°</span>'
+        + ((pt.T === null || pt.T === undefined)
+             ? '<span class="ro-x">no reading</span>'
+             : '<span class="ro-t">' + pt.T + '°</span>')
         + ((pt.d === null || pt.d === undefined)
              ? '' : '<span class="ro-d">dew ' + pt.d + '°</span>')
         + (pt.r === undefined
-             ? '' : '<span class="ro-r">rain ' + pt.r + '%</span>');
+             ? '' : '<span class="ro-r">rain ' + pt.r + '%</span>')
+        + (pt.o ? '<span class="ro-o">observed</span>' : '');
       out.hidden = false;
     }
 

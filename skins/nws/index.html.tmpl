@@ -2,9 +2,10 @@
 ## See LICENSE.txt for your rights
 ##
 ## The seven-day page: NWS's twelve-hour periods as a "Right now" card, a
-## sparkline of the week's rhythm, and one row per CALENDAR DAY carrying
-## that day's low-to-high bar, its daylight, and each of its periods as a
-## line with icon, chance of rain, prose and wind.
+## two-week temperature curve (the week the station recorded, then the week
+## NWS forecasts), and one row per CALENDAR DAY carrying that day's
+## low-to-high bar, its daylight, and each of its periods as a line with
+## icon, chance of rain, prose and wind.
 ##
 ## The arithmetic is not here.  Grouping and the week's range are
 ## $nwsforecast tags (NWS semantics, shared with every skin); the bar
@@ -25,6 +26,9 @@
 #set $tmin = $trange[0]
 #set $tmax = $trange[1]
 #set $hours = $nwsforecast.points($nwsforecast.one_hour_forecasts())
+## The station's OWN week, up to the hour the forecast starts.  Empty on a
+## fresh install, short on a young one, and the chart draws what it is given.
+#set $past = $nwsskin.observations($hours)
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -84,18 +88,42 @@
         </section>
 #end if
 
+#if $hours
+        ## Its own card, and its own heading, because it is the one thing on
+        ## this page that is not a forecast: the day rows below carry the
+        ## forecast highs and lows, so the chart's job is the SHAPE -- what
+        ## the week just did, what the coming one is expected to do, and one
+        ## temperature scale to read both against.  The instrument version,
+        ## with dew point and the rain strip, is the hourly page's.
+        <section class="twoweek">
+## Named by what the chart IS, not by how much of it there is: a station
+## running for two hours draws two hours, and a heading claiming two weeks
+## would be a lie exactly when the reader is least able to spot it.
+#if $past
+          <h2 class="eyebrow">Temperature, recorded and forecast</h2>
+#else
+          <h2 class="eyebrow">The week&rsquo;s temperature</h2>
+#end if
+          <div class="sparkwrap chartwrap">$nwsskin.sparkline($hours, $past)<div class="readout" hidden></div>
+#if $past
+            <p class="sparkcap">Every hour: what this station recorded, up to the marked
+            hour, and what the National Weather Service forecasts from it.  Night is
+            shaded.  The two curves are deliberately not joined &mdash; NWS forecasts a
+            grid square and your station measures its own back yard, so they seldom meet
+            exactly at the seam.
+            <a href="hours.html">Hour by hour, with dew point and rain &rarr;</a></p>
+#else
+            <p class="sparkcap">Forecast temperature every hour of the week, night shaded.
+            Once this station has archive records behind it, the week it recorded is drawn
+            here too.
+            <a href="hours.html">Hour by hour, with dew point and rain &rarr;</a></p>
+#end if
+          </div>
+        </section>
+#end if
+
         <section class="week">
           <h2 class="eyebrow">The week ahead</h2>
-#if $hours
-          ## The rhythm only -- the range bars below already carry the highs
-          ## and the lows, so the sparkline adds the shape of the week and a
-          ## temperature scale to read it against.  The instrument version,
-          ## with dew point and the rain strip, is the hourly page's.
-          <div class="sparkwrap chartwrap">$nwsskin.sparkline($hours)<div class="readout" hidden></div>
-            <p class="sparkcap">Forecast temperature every hour of the week, night shaded.
-            <a href="hours.html">Hour by hour, with dew point and rain &rarr;</a></p>
-          </div>
-#end if
 #if $days
           <div class="colhead">
             <div></div>

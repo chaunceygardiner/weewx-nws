@@ -186,6 +186,8 @@
 .fc svg.chart:focus{outline:none}
 .fc svg.chart.kbd:focus{outline:2px solid var(--fc-accent);outline-offset:2px}
 .fc .sparkwrap{margin:0 0 18px}
+/* The 7 Day chart has its own card, whose padding already does this. */
+.fc .twoweek .sparkwrap{margin-bottom:0}
 .fc .sparkcap{color:var(--fc-muted);font-size:.8em;margin:6px 0 0}
 .fc svg.chart .night{fill:var(--fc-band)}
 .fc svg.chart .hgrid{stroke:var(--fc-grid);stroke-width:1}
@@ -194,6 +196,19 @@
 .fc svg.chart .tline{fill:none;stroke:var(--fc-hi);stroke-width:2;
                      stroke-linejoin:round;stroke-linecap:round}
 .fc svg.chart .tdot{fill:var(--fc-hi)}
+/* The 7 Day chart's two halves.  What the station RECORDED takes a neutral
+   gray and what NWS predicts keeps the forecast red, which is the split the
+   page is about -- and the record is deliberately the QUIETER of the two,
+   one step down the ink ladder and thinner, because this is a forecast page
+   and the week ahead is its subject.  The seam between them is the most
+   prominent structural line the page has.  Every value here is an existing
+   token, so the dark palette needs nothing derived for this.  .adot is a
+   lone reading with an outage on both sides: a broken stroke draws nothing
+   at all for a single point. */
+.fc svg.chart .aline{fill:none;stroke:var(--fc-muted);stroke-width:1.6;
+                     stroke-linejoin:round;stroke-linecap:round}
+.fc svg.chart .adot{fill:var(--fc-muted)}
+.fc svg.chart .seam{stroke:var(--fc-line);stroke-width:1.5}
 .fc svg.chart .dline{fill:none;stroke:var(--fc-dew);stroke-width:1.6;
                      stroke-dasharray:4 3;stroke-linejoin:round}
 .fc svg.chart .parea{fill:var(--fc-rain);opacity:.8}
@@ -205,6 +220,10 @@
                         text-transform:uppercase;
                         font-family:'Open Sans',arial,sans-serif}
 .fc svg.chart .peak{text-anchor:end;text-transform:none;letter-spacing:0;font-style:italic}
+/* AFTER .striplab, which it overrides at the same specificity -- placed
+   before it, this rule is dead.  The seam labels are the answer to "where
+   does the record end", so they carry more weight than an axis label. */
+.fc svg.chart .seamlab{fill:var(--fc-ink-3)}
 /* The crosshair is hidden by a CLASS, not by the html `hidden` attribute:
    `hidden` is not valid on an SVG <g> (Nu rejects it) and the UA's [hidden]
    rule does not reach SVG children anyway, so it was never doing the hiding.
@@ -213,6 +232,9 @@
 .fc .cross.off{display:none}
 .fc .cross .cx{stroke:var(--fc-muted);stroke-width:1;stroke-dasharray:3 3}
 .fc .cross .cdot{fill:var(--fc-hi);stroke:var(--fc-surface);stroke-width:1.4}
+/* Over the observed half the dot follows that half's line, so the crosshair
+   never paints a forecast-colored mark on a measurement. */
+.fc .cross.past .cdot{fill:var(--fc-muted)}
 .fc .cross .cdotd{fill:var(--fc-dew);stroke:var(--fc-surface);stroke-width:1.2}
 .fc .readout{position:absolute;top:0;right:0;background:var(--fc-surface);
              border:1px solid var(--fc-rule);border-radius:5px;padding:6px 10px;
@@ -225,6 +247,8 @@
 .fc .readout .ro-t{color:var(--fc-hi);font-weight:600}
 .fc .readout .ro-d{color:var(--fc-dew)}
 .fc .readout .ro-r{color:var(--fc-rain)}
+.fc .readout .ro-o{color:var(--fc-ink-3)}
+.fc .readout .ro-x{color:var(--fc-faint)}
 .fc .legend{display:flex;flex-wrap:wrap;gap:6px 22px;color:var(--fc-muted);
             font-size:.8em;margin-bottom:10px}
 .fc .legend span{display:flex;align-items:center;gap:7px}
@@ -289,16 +313,23 @@
    with everything else in that row.  Pinning .ahead to 1em fixed the text and
    would have quietly shrunk the dot from 13.1px to 11.2px; this keeps the
    rendered pixel and lets the rule say what it means. */
-.fc .alert .sevdot{width:.82em;height:.82em;border-radius:50%;
-                   background:var(--fc-sev-unknown);display:inline-block;flex:none}
+/* The severity, NAMED and colored, in the slot that used to hold a bare
+   colored dot.  Outlined rather than filled so the one FILLED chip on the row
+   stays the status badge -- two filled chips side by side read as one
+   control, and they say different things.  The rail down the card's left edge
+   now reinforces this rather than being the only place the severity lives. */
+.fc .alert .sevchip{font-size:.72em;letter-spacing:.09em;text-transform:uppercase;
+                    font-weight:600;padding:3px 9px;border-radius:11px;flex:none;
+                    color:var(--fc-sev-unknown);
+                    border:1px solid var(--fc-sev-unknown)}
 .fc .sev-extreme{border-left-color:var(--fc-sev-extreme)}
-.fc .sev-extreme .sevdot{background:var(--fc-sev-extreme)}
+.fc .sev-extreme .sevchip{color:var(--fc-sev-extreme);border-color:var(--fc-sev-extreme)}
 .fc .sev-severe{border-left-color:var(--fc-sev-severe)}
-.fc .sev-severe .sevdot{background:var(--fc-sev-severe)}
+.fc .sev-severe .sevchip{color:var(--fc-sev-severe);border-color:var(--fc-sev-severe)}
 .fc .sev-moderate{border-left-color:var(--fc-sev-moderate)}
-.fc .sev-moderate .sevdot{background:var(--fc-sev-moderate)}
+.fc .sev-moderate .sevchip{color:var(--fc-sev-moderate);border-color:var(--fc-sev-moderate)}
 .fc .sev-minor{border-left-color:var(--fc-sev-minor)}
-.fc .sev-minor .sevdot{background:var(--fc-sev-minor)}
+.fc .sev-minor .sevchip{color:var(--fc-sev-minor);border-color:var(--fc-sev-minor)}
 /* font-size:1em is load-bearing.  .ahead is a HEADING element, so without it
    the browser's default heading size leaks into every em inside -- the event
    name, the badge and the note are all sized relative to their parent, and
@@ -534,7 +565,7 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
      warning) */
   --fc-sev-extreme:#ff8f81;
   --fc-sev-severe:#de6145;
-  --fc-sev-moderate:#c6631c;
+  --fc-sev-moderate:#ca661f;
   --fc-sev-minor:#5193bc;
   --fc-sev-unknown:#8e98a5;
   /* the "begins later" badge */

@@ -29,9 +29,12 @@ attribute -- so the tests are what stop the two drifting.
 """
 
 import datetime
+import json
 import os
+import re
 import sys
 import time
+import types
 
 os.environ['TZ'] = 'America/Los_Angeles'
 time.tzset()
@@ -62,6 +65,19 @@ def pt(start, temp, dewpoint=50.0, pop=10, is_daytime=True):
             'pop': pop, 'isDaytime': is_daytime}
 
 
+def obs(start, temp, is_daytime=True):
+    """An observations() row: a temperature or nothing at all, and never a
+    dew point or a chance of rain -- the station's own past carries neither
+    onto this chart."""
+    return {'startTime': int(start), 'outTemp': temp, 'dewpoint': None,
+            'pop': None, 'isDaytime': is_daytime}
+
+
+def week_of_obs(hours=24, base=None, temp=55.0, **kw):
+    base = base if base is not None else ts(2026, 8, 31, 0)
+    return [obs(base + i * 3600, temp, **kw) for i in range(hours)]
+
+
 def day_of_points(hours=24, base=None, **kw):
     base = base if base is not None else ts(2026, 9, 1, 0)
     return [pt(base + i * 3600, 60.0 + i, **kw) for i in range(hours)]
@@ -86,6 +102,37 @@ def alert_rec(onset=None, ends=None, expires=None, effective=None,
         'instructions': instructions, 'senderName': 'NWS Bay Area',
         'messageType': 'Alert', 'certainty': 'Likely', 'urgency': 'Expected',
     }
+
+
+CSS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        '..', 'skins', 'nws', 'css', 'nws.css')
+
+
+def _css_sizes(cls):
+    """Every font-size the stylesheet gives one chart class, across all its
+    media queries.  The charts are drawn in user units and the stylesheet is
+    what decides how big those get, so geometry that has to clear the type
+    must be checked against the type as it actually ships."""
+    css = open(CSS_PATH).read()
+    sizes = []
+    for body in re.findall(r'\.%s\s*\{([^}]*)\}' % cls, css):
+        found = re.search(r'font-size:\s*(\d+)px', body)
+        if found:
+            sizes.append(int(found.group(1)))
+    assert sizes, cls
+    return sizes
+
+
+def _skin_with(group_unit_dict=None, db_lookup=None):
+    """An NWSSkin with no report engine behind it.  The converter is the only
+    thing the engine supplies that this module reads, so a bare namespace
+    carrying one is the whole of the fake."""
+    skin = NWSSkin.__new__(NWSSkin)
+    skin.generator = types.SimpleNamespace(
+        converter=weewx.units.Converter(group_unit_dict or weewx.units.USUnits))
+    if db_lookup is not None:
+        skin.db_lookup = db_lookup
+    return skin
 
 
 BOTH_CHARTS = pytest.mark.parametrize(
@@ -151,6 +198,33 @@ class TestChartsDewPointAxis:
         svg = getattr(NWSSkin, chart)(hours)
         assert 'class="dline"' in svg
         assert 'class="ylab">10&deg;' in svg
+
+
+class TestAxisGutter:
+    """The room left of the plot for the y-axis labels.
+
+    It is set by the NARROWEST screen, not the widest.  SVG text is in user
+    units, so the stylesheet scales the axis labels UP as the chart is
+    squeezed -- and a gutter sized for the desktop's 10-unit type does not
+    clip the label, it clips the DIGITS.  A phone showed "0, 7, 5" for an axis
+    reading 90, 67 and 45: not a cosmetic failure, a wrong chart.
+    """
+
+    def test_the_gutter_fits_the_widest_label_at_the_largest_type(self):
+        biggest = max(_css_sizes('ylab'))
+        # "-10&deg;": two digits at about 0.55em, a hyphen at 0.33, a degree
+        # sign at 0.4 -- plus the 6 units the labels are drawn clear of the
+        # plot.  Deliberately an estimate against a bound, not a measurement:
+        # what must not happen is the gutter tracking the desktop size.
+        assert NWSSkin.PADL >= biggest * (2 * 0.55 + 0.33 + 0.4) + 6
+
+    def test_every_chart_uses_it(self):
+        """Three charts, one gutter: a fix that reached only the chart the
+        bug was noticed on would leave the other two clipping."""
+        for name in ('sparkline', 'week_chart', 'day_chart'):
+            spec = json.loads(re.search(
+                r"data-chart='([^']*)'", getattr(NWSSkin, name)(day_of_points())).group(1))
+            assert spec['x0'] == NWSSkin.PADL, name
 
 
 class TestCharts:
@@ -279,6 +353,408 @@ class TestCharts:
         """The last day of the feed can be very short."""
         hours = [pt(ts(2026, 9, 1, 0), 60.0), pt(ts(2026, 9, 1, 1), 61.0)]
         assert '<svg' in NWSSkin.day_chart(hours)
+
+
+class TestTwoWeekSparkline:
+    """The 7 Day chart's observed half, and the seam between the two weeks.
+
+    What every case here is really guarding is that the two halves stay ONE
+    chart: one x geometry, one temperature scale, one night shading and one
+    crosshair index -- with a visible, named join.  Each of those is easy to
+    break in a way that still draws a perfectly plausible picture.
+    """
+
+    @staticmethod
+    def _d(svg, cls):
+        m = re.search(r'<path d="([^"]*)" class="%s"/>' % cls, svg)
+        return m.group(1) if m else None
+
+    @staticmethod
+    def _seam_x(svg):
+        m = re.search(r'<line x1="([\d.]+)" y1="\d+" x2="[\d.]+" y2="\d+" class="seam"/>',
+                      svg)
+        return float(m.group(1)) if m else None
+
+    @staticmethod
+    def _spec(svg):
+        return json.loads(re.search(r"data-chart='([^']*)'", svg).group(1))
+
+    @staticmethod
+    def _first_xy(d):
+        parts = d.split()
+        return float(parts[1]), float(parts[2])
+
+    @staticmethod
+    def _last_xy(d):
+        parts = d.split()
+        return float(parts[-2]), float(parts[-1])
+
+    @staticmethod
+    def _ys(d):
+        """Every y in a path: the tokens run <cmd> <x> <y>."""
+        parts = d.split()
+        return [float(v) for i, v in enumerate(parts) if i % 3 == 2]
+
+    def test_no_past_is_exactly_the_chart_it_has_always_been(self):
+        """A fresh install has an empty archive, and the degraded chart must
+        not be a different chart with an empty half: same viewBox, same plot,
+        no seam and no label band."""
+        hours = day_of_points()
+        assert NWSSkin.sparkline(hours, []) == NWSSkin.sparkline(hours)
+        svg = NWSSkin.sparkline(hours, [])
+        assert 'viewBox="0 0 1040 132"' in svg
+        assert 'class="seam"' not in svg
+        assert 'class="aline"' not in svg
+        assert 'Observed' not in svg and 'Forecast</text>' not in svg
+
+    def test_an_empty_observed_path_is_not_emitted_at_all(self):
+        """An empty d= would put a path that draws nothing into the page of
+        every station whose archive is still empty."""
+        assert '<path d=""' not in NWSSkin.sparkline(day_of_points(), [])
+
+    def test_the_seam_is_drawn_and_both_sides_are_named(self):
+        svg = NWSSkin.sparkline(day_of_points(), week_of_obs(48))
+        assert 'class="seam"' in svg
+        assert '>Observed</text>' in svg and '>Forecast</text>' in svg
+
+    def test_the_seam_falls_where_the_forecast_begins(self):
+        """The join is at the forecast's first hour, which is the only place
+        it can be drawn honestly."""
+        past = week_of_obs(48)
+        svg = NWSSkin.sparkline(day_of_points(), past)
+        x0, x1 = float(NWSSkin.PADL), 1040 - 8
+        n = 48 + 24 - 1
+        assert abs(self._seam_x(svg) - (x0 + (x1 - x0) * 48 / n)) < 0.1
+
+    def test_the_two_halves_are_separate_strokes_that_are_not_joined(self):
+        """NWS forecasts a grid square and the station measures its own back
+        yard, so the last reading and the first forecast hour seldom agree.
+        One stroke across the seam would smooth that step away and claim a
+        continuity neither series has."""
+        svg = NWSSkin.sparkline(day_of_points(), week_of_obs(48))
+        sx = self._seam_x(svg)
+        assert self._last_xy(self._d(svg, 'aline'))[0] < sx
+        assert abs(self._first_xy(self._d(svg, 'tline'))[0] - sx) < 0.1
+
+    def test_each_half_is_drawn_from_its_own_rows(self):
+        """A stroke built from the wrong slice would still draw a plausible
+        line -- of the wrong data, in the right place."""
+        past = week_of_obs(24, temp=40.0)
+        hours = [pt(ts(2026, 9, 1, h), 80.0) for h in range(24)]
+        svg = NWSSkin.sparkline(hours, past)
+        observed, forecast = self._ys(self._d(svg, 'aline')), self._ys(self._d(svg, 'tline'))
+        assert len(set(observed)) == 1 and len(set(forecast)) == 1
+        # Colder is further down the plot, and y grows downward.
+        assert observed[0] > forecast[0]
+
+    def test_an_outage_breaks_the_observed_line(self):
+        """Joining across an hour the station recorded nothing in draws a
+        confident stroke through an outage."""
+        past = week_of_obs(24)
+        for i in range(8, 14):
+            past[i]['outTemp'] = None
+        d = self._d(NWSSkin.sparkline(day_of_points(), past), 'aline')
+        assert d.count('M') == 2
+
+    def test_an_unbroken_week_is_one_stroke(self):
+        d = self._d(NWSSkin.sparkline(day_of_points(), week_of_obs(24)), 'aline')
+        assert d.count('M') == 1
+
+    def test_a_lone_reading_between_outages_still_appears(self):
+        """A broken stroke draws NOTHING for a single point -- a subpath of
+        one moveto has no length -- so the hour would vanish silently."""
+        past = week_of_obs(24)
+        for i, r in enumerate(past):
+            if i != 12:
+                r['outTemp'] = None
+        svg = NWSSkin.sparkline(day_of_points(), past)
+        assert svg.count('class="adot"') == 1
+
+    def test_a_reading_with_a_neighbor_gets_no_dot(self):
+        assert 'class="adot"' not in NWSSkin.sparkline(day_of_points(), week_of_obs(24))
+
+    def test_one_scale_covers_both_weeks(self):
+        """A cold snap last week rescales the forecast half, and that is the
+        point: "warm for the week" and "warm for the fortnight" are different
+        claims and only a shared scale tells them apart."""
+        past = week_of_obs(24, temp=10.0)
+        svg = NWSSkin.sparkline(day_of_points(), past)     # forecast is 60..83
+        assert 'class="ylab">10&deg;' in svg
+        assert 'class="ylab">85&deg;' in svg
+
+    def test_night_shading_crosses_the_seam(self):
+        """Shading that stopped at the join would read as two charts pasted
+        together rather than one fortnight."""
+        past = week_of_obs(24, is_daytime=False)
+        hours = [pt(ts(2026, 9, 1, h), 70.0, is_daytime=False) for h in range(24)]
+        svg = NWSSkin.sparkline(hours, past)
+        band = re.search(r'<rect x="([\d.]+)" y="\d+" width="([\d.]+)"', svg)
+        assert band and float(band.group(1)) < self._seam_x(svg)
+        assert float(band.group(1)) + float(band.group(2)) > self._seam_x(svg)
+
+    def test_every_slot_reaches_the_crosshair_including_the_empty_ones(self):
+        """The script turns a pointer position into an INDEX by dividing the
+        plot width by the number of points.  Leaving the empty hours out of
+        that list would put every reading on the wrong hour."""
+        past = week_of_obs(24)
+        past[5]['outTemp'] = None
+        spec = self._spec(NWSSkin.sparkline(day_of_points(), past))
+        assert len(spec['p']) == 48
+        assert spec['p'][5]['T'] is None
+        assert spec['p'][6]['T'] is not None
+
+    def test_the_observed_points_say_so(self):
+        """A measurement and a prediction must not be reported in the same
+        words."""
+        spec = self._spec(NWSSkin.sparkline(day_of_points(), week_of_obs(24)))
+        assert all(p.get('o') == 1 for p in spec['p'][:24])
+        assert all('o' not in p for p in spec['p'][24:])
+
+    def test_the_page_script_withholds_a_dot_for_an_empty_hour(self):
+        """An empty hour keeps its place in the list, so the crosshair still
+        moves to it; what it must not do is compute a y from null."""
+        js = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               '..', 'skins', 'nws', 'scripts', 'nws.js')).read()
+        assert 'no reading' in js
+        assert "pt.T === null" in js
+        assert "classList.toggle('past'" in js
+
+    def test_a_very_short_history_keeps_the_seam_and_drops_the_label(self):
+        """A station two hours old still gets the join; what it does not get
+        is the word Observed hanging off the left edge."""
+        svg = NWSSkin.sparkline(day_of_points(156), week_of_obs(2))
+        assert 'class="seam"' in svg
+        assert '>Observed</text>' not in svg
+        assert '>Forecast</text>' in svg
+
+    def test_the_seam_labels_sit_clear_of_the_top_and_of_the_plot(self):
+        """The band above the plot is sized by the labels' own type, which the
+        stylesheet scales UP as the chart is squeezed.  Too shallow and the
+        ascenders are cut off by the top of the viewBox; too deep and the
+        labels sit on the curve."""
+        biggest = max(_css_sizes('striplab'))
+        svg = NWSSkin.sparkline(day_of_points(), week_of_obs(48))
+        baseline = float(re.search(
+            r'<text x="[\d.]+" y="(\d+)" class="striplab seamlab"', svg).group(1))
+        top_of_plot = json.loads(
+            re.search(r"data-chart='([^']*)'", svg).group(1))['y0']
+        assert baseline - 0.75 * biggest >= 0          # ascenders stay on the canvas
+        assert baseline + 0.25 * biggest <= top_of_plot  # descenders clear the plot
+
+    def test_the_seam_label_color_is_not_a_dead_rule(self):
+        """.seamlab and .striplab have identical specificity, so the LATER of
+        the two wins.  Written ABOVE .striplab, where it first went, the
+        override never applies and the labels silently take the axis-label
+        color -- a stylesheet that parses, validates and does nothing.
+
+        A source-text check, which is not proof that anything WORKS: the
+        computed color is probed in a real browser by tests/verify_theme.py.
+        """
+        css = open(CSS_PATH).read()
+        assert css.count('.seamlab{') == 1
+        assert css.index('.seamlab{') > css.index('.striplab{')
+
+    def test_the_two_week_chart_bakes_no_color_either(self):
+        svg = NWSSkin.sparkline(day_of_points(), week_of_obs(24))
+        assert 'fill="#' not in svg and 'stroke="#' not in svg
+
+
+class TestObservations:
+    """observations() -- the archive on the forecast's own hourly grid."""
+
+    class _Skin(NWSSkin):
+        """A search list with no report engine behind it: the archive read and
+        the almanac are the two things that need one, and each case here
+        supplies its own."""
+        def __init__(self, readings=None):
+            self._readings = readings or {}
+
+        def _hourly_means(self, start, stop):
+            return dict(self._readings)
+
+        def _daytime(self, first_ts, last_ts):
+            return lambda when: True
+
+    @staticmethod
+    def _forecast(start):
+        return [pt(start + i * 3600, 70.0) for i in range(12)]
+
+    def test_an_empty_archive_costs_no_almanac_work(self):
+        """With nothing to plot there is nothing to shade, and the
+        fresh-install path -- an archive with nothing in it yet -- is the
+        common one.  Eight sunrise/sunset lookups per report cycle to decide
+        the shading of a chart that will not be drawn is work nobody asked
+        for."""
+        class _NoAlmanac(TestObservations._Skin):
+            def _daytime(self, first_ts, last_ts):
+                raise AssertionError('the almanac was consulted anyway')
+
+        assert _NoAlmanac().observations(self._forecast(ts(2026, 9, 1, 12))) == []
+
+    def test_no_forecast_means_no_observed_week(self):
+        """There is nothing to hang the seam on."""
+        assert self._Skin().observations([]) == []
+
+    def test_an_empty_archive_gives_an_empty_week(self):
+        assert self._Skin().observations(self._forecast(ts(2026, 9, 1, 12))) == []
+
+    def test_one_row_per_hour_back_to_the_first_reading(self):
+        seam = int(ts(2026, 9, 1, 12))
+        readings = {seam - i * 3600: 50.0 + i for i in range(1, 5)}
+        rows = self._Skin(readings).observations(self._forecast(seam), back=168)
+        assert len(rows) == 4
+        assert [r['startTime'] for r in rows] == [seam - i * 3600 for i in (4, 3, 2, 1)]
+        assert rows[-1]['outTemp'] == 51.0
+
+    def test_a_young_station_gets_a_short_chart_not_a_week_of_lies(self):
+        """Data-driven width: two days of archive is two days of chart."""
+        seam = int(ts(2026, 9, 1, 12))
+        readings = {seam - i * 3600: 60.0 for i in range(1, 49)}
+        rows = self._Skin(readings).observations(self._forecast(seam))
+        assert len(rows) == 48
+
+    def test_an_interior_outage_keeps_its_place(self):
+        """The crosshair indexes this list by position, and the line must
+        break where the station stopped -- both need the hour to stay."""
+        seam = int(ts(2026, 9, 1, 12))
+        readings = {seam - i * 3600: 60.0 for i in (1, 2, 5, 6)}
+        rows = self._Skin(readings).observations(self._forecast(seam))
+        assert len(rows) == 6
+        assert [r['outTemp'] is None for r in rows] == [False, False, True, True,
+                                                        False, False]
+
+    def test_a_trailing_outage_is_kept_not_trimmed(self):
+        """A gap between the last reading and the forecast is exactly the
+        news that weewxd stopped; closing it would hide that."""
+        seam = int(ts(2026, 9, 1, 12))
+        readings = {seam - i * 3600: 60.0 for i in (10, 11, 12)}
+        rows = self._Skin(readings).observations(self._forecast(seam))
+        assert len(rows) == 12
+        assert rows[-1]['outTemp'] is None
+
+    def test_an_unreadable_archive_costs_the_chart_not_the_page(self):
+        """A misconfigured binding must not take the 7 Day page down with it.
+        This runs on the report thread, so there is no Terminate to let
+        through, and a sample report is exactly where a broken archive is
+        most likely."""
+        def no_such_binding():
+            raise ValueError('no such binding')
+
+        assert _skin_with(db_lookup=no_such_binding)._hourly_means(0, 3600) == {}
+
+    def test_the_rows_are_shaped_like_points(self):
+        """One list of both halves goes to the night bands and the crosshair,
+        so the observed rows must carry the same keys."""
+        seam = int(ts(2026, 9, 1, 12))
+        rows = self._Skin({seam - 3600: 60.0}).observations(self._forecast(seam))
+        assert set(rows[0]) == {'startTime', 'outTemp', 'dewpoint', 'pop', 'isDaytime'}
+
+    def test_the_chart_unit_is_the_reports_own(self):
+        """Not "whatever nws.py stored".  $nwsforecast now hands the chart
+        numbers already converted to the report's unit, so the observed half
+        has to be brought to that same one -- 20 C and 68 F are the same
+        afternoon, and on one axis unconverted they land 48 degrees apart."""
+        assert _skin_with(weewx.units.USUnits)._forecast_temp_unit() == 'degree_F'
+        assert _skin_with(weewx.units.MetricUnits)._forecast_temp_unit() == 'degree_C'
+
+
+class TestHourlyMeans:
+    """The archive on the chart's own grid: ABSOLUTE hourly slots, whatever
+    the clock did that week, and every record converted from the unit system
+    it was recorded in."""
+
+    class _Manager:
+        table_name = 'archive'
+
+        def __init__(self, rows):
+            self.rows = rows
+
+        def genSql(self, _sql, args):
+            start, stop = args
+            return ((w, u, v) for w, u, v in self.rows if start < w <= stop)
+
+    def _skin(self, rows, report_units=None):
+        return _skin_with(report_units,
+                          db_lookup=lambda: TestHourlyMeans._Manager(rows))
+
+    def test_the_fall_clock_change_does_not_lose_an_hour(self):
+        """weewx.xtypes.get_series(..., 'avg', 3600) would be the obvious way
+        to ask, and it is the wrong one here: its intervals are constant in
+        LOCAL time, while this chart's x axis is absolute time -- the forecast
+        half is hourly in absolute time and the two halves share one geometry.
+
+        The second assertion is what keeps the first from being vacuous: on
+        the night the clock goes back, intervalgen yields one interval FEWER
+        than there are hours, because the repeated hour gets none of its own
+        and its neighbor's runs two hours.  Reading through it would leave a
+        one-hour hole in the recorded week every November, beside an hour
+        whose mean silently covered two.
+        """
+        # 2026-11-01: 2 am PDT becomes 1 am PST.  Twelve absolute hours from
+        # 10 pm the night before carry the window straight through it.
+        start = int(ts(2026, 10, 31, 22))
+        rows = [(start + h * 3600 + 1800, weewx.US, 50.0 + h) for h in range(12)]
+        means = self._skin(rows)._hourly_means(start, start + 12 * 3600)
+        assert sorted(means) == [start + h * 3600 for h in range(12)]
+        assert means[start + 11 * 3600] == 61.0
+
+        import weeutil.weeutil
+        assert len(list(weeutil.weeutil.intervalgen(
+            start, start + 12 * 3600, 3600))) == 11
+
+    def test_a_reading_on_the_hour_belongs_to_the_hour_before_it(self):
+        """weewx stamps a record at the END of its interval, so the window is
+        (start, stop] and 10:00 closes the 9 o'clock hour."""
+        start = int(ts(2026, 9, 1, 9))
+        means = self._skin([(start + 3600, weewx.US, 70.0)])._hourly_means(
+            start, start + 7200)
+        assert list(means) == [start]
+
+    def test_an_hour_is_the_mean_of_its_readings(self):
+        start = int(ts(2026, 9, 1, 9))
+        rows = [(start + 900, weewx.US, 60.0), (start + 1800, weewx.US, 62.0),
+                (start + 2700, weewx.US, 64.0)]
+        assert self._skin(rows)._hourly_means(start, start + 3600) == {start: 62.0}
+
+    def test_a_metric_station_is_converted_not_plotted_raw(self):
+        """20 C and 68 F are the same afternoon; on one axis unconverted they
+        land 48 degrees apart."""
+        start = int(ts(2026, 9, 1, 9))
+        means = self._skin([(start + 1800, weewx.METRIC, 20.0)])._hourly_means(
+            start, start + 3600)
+        assert round(means[start]) == 68
+
+    def test_an_hour_with_two_unit_systems_averages_after_converting(self):
+        """Raw values from two systems cannot be added: a station switched
+        mid-hour would otherwise average 20 C with 68 F and report 44."""
+        start = int(ts(2026, 9, 1, 9))
+        rows = [(start + 900, weewx.METRIC, 20.0), (start + 1800, weewx.US, 68.0)]
+        assert round(self._skin(rows)._hourly_means(start, start + 3600)[start]) == 68
+
+    def test_a_metric_report_gets_celsius_from_a_us_archive(self):
+        """The other direction, and the one that matters now: the forecast
+        half arrives already converted to the report's unit, so a US archive
+        on a metric report has to be converted too or the two halves would be
+        drawn on one axis in two scales."""
+        start = int(ts(2026, 9, 1, 9))
+        means = self._skin([(start + 1800, weewx.US, 68.0)],
+                           report_units=weewx.units.MetricUnits)._hourly_means(
+            start, start + 3600)
+        assert round(means[start]) == 20
+
+    def test_a_corrupt_unit_system_costs_the_chart_not_the_page(self):
+        """WeeWX knows three unit systems and getStandardUnitType() raises
+        KeyError for anything else, so a hand-edited archive row carrying a
+        usUnits of 3 would take the whole 7 Day page down if the conversion
+        sat outside the guard -- which is the failure the guard exists to
+        prevent."""
+        start = int(ts(2026, 9, 1, 9))
+        assert self._skin([(start + 1800, 3, 60.0)])._hourly_means(
+            start, start + 3600) == {}
+
+    def test_an_empty_window_is_an_empty_mapping(self):
+        start = int(ts(2026, 9, 1, 9))
+        assert self._skin([])._hourly_means(start, start + 3600) == {}
 
 
 class TestTempBar:
@@ -431,8 +907,30 @@ class TestAlertCard:
                                      expires=now - 3600))
         assert 'class="badge past"' in out and 'Expired' in out
 
-    def test_an_alert_with_no_onset_does_not_raise(self):
-        """`onset - now` on a None is what this branch exists to avoid."""
+    def test_an_alert_with_no_onset_is_in_effect_from_its_effective_time(self):
+        """The case a station actually sees, and the one that matters most:
+        NWS gave no onset, but it always says when the message took effect, so
+        the alert is in effect from then.
+
+        Before 6.1 such an alert could not be stored at all -- the sanity
+        check threw away the whole reply -- so this was unreachable.  The
+        moment it became reachable, getting it wrong would badge an
+        Evacuation Immediate that is in effect RIGHT NOW as "Not yet begun".
+        Two of the three null-onset alerts in a national sample were exactly
+        that event.
+        """
+        now = datetime.datetime.now().timestamp()
+        rec = alert_rec(onset=None, effective=now - 3600,
+                        ends=now + 3600, expires=now + 3600)
+        out = NWSSkin.card(rec)
+        assert 'class="badge on"' in out and 'In effect now' in out
+        assert 'Not yet begun' not in out
+        assert '<b>1 alert</b> in effect' in NWSSkin.count_line([rec])
+
+    def test_an_alert_with_neither_onset_nor_effective_does_not_raise(self):
+        """`onset - now` on a None is what this branch exists to avoid.  NWS
+        always sends `effective`, so this pairing does not occur in the wild;
+        it is here because a card must not raise on any row it is handed."""
         now = datetime.datetime.now().timestamp()
         out = NWSSkin.card(alert_rec(onset=None, ends=now + 3600,
                                      expires=now + 3600))
@@ -471,12 +969,22 @@ class TestAlertCard:
         assert 'data-ends=' not in out
         assert 'data-onset=' in out and 'data-expires=' in out
 
-    def test_ends_equal_to_expires_is_treated_as_open_ended(self):
+    def test_a_null_end_reads_as_no_end_time_given(self):
         now = datetime.datetime.now().timestamp()
-        out = NWSSkin.card(alert_rec(onset=now - 60, ends=now + 3600,
+        out = NWSSkin.card(alert_rec(onset=now - 60, ends=None,
                                      expires=now + 3600))
         assert 'no end time given' in out
         assert 'data-ends=' not in out
+
+    def test_a_real_end_on_the_expiry_still_gets_an_end_time(self):
+        """The 6.0 reading -- ends equal to expires means open-ended -- was a
+        false positive on an alert that genuinely ends when its message
+        expires.  Such a card now shows the end it was given."""
+        now = datetime.datetime.now().timestamp()
+        out = NWSSkin.card(alert_rec(onset=now - 60, ends=now + 3600,
+                                     expires=now + 3600))
+        assert 'no end time given' not in out
+        assert 'data-ends=' in out
 
     def test_the_window_bar_places_now_between_onset_and_end(self):
         now = datetime.datetime.now().timestamp()
@@ -492,11 +1000,43 @@ class TestAlertCard:
                                          expires=now + 60, severity=sev))
             assert 'sev-%s' % sev.lower() in out
 
+    def test_the_severity_is_NAMED_not_just_colored(self):
+        """Through 6.0 severity reached the reader as a rail color and a bare
+        colored dot, and the word appeared once -- sixth in a six-item gray
+        footer.  Color alone conveys nothing to a reader who cannot see the
+        difference, which is a WCAG 1.4.1 failure, and it mattered more here
+        than the rule suggests: these cards are SORTED by severity and the
+        count line says "most serious first", so the page announced that the
+        order meant something while hiding the key.
+        """
+        now = datetime.datetime.now().timestamp()
+        for sev in ('Extreme', 'Severe', 'Moderate', 'Minor'):
+            out = NWSSkin.card(alert_rec(onset=now - 60, ends=now + 60,
+                                         expires=now + 60, severity=sev))
+            assert '<span class="sevchip">%s</span>' % sev in out, sev
+
+    def test_the_bare_colored_dot_is_gone(self):
+        """It was the only thing in that slot and it said nothing at all: no
+        text, no title, no aria-label."""
+        now = datetime.datetime.now().timestamp()
+        out = NWSSkin.card(alert_rec(onset=now - 60, ends=now + 60,
+                                     expires=now + 60, severity='Severe'))
+        assert 'sevdot' not in out
+
+    def test_the_footer_no_longer_repeats_the_severity(self):
+        """Certainty and urgency stay there, being genuinely secondary."""
+        now = datetime.datetime.now().timestamp()
+        out = NWSSkin.card(alert_rec(onset=now - 60, ends=now + 60,
+                                     expires=now + 60, severity='Moderate'))
+        assert 'severity' not in out
+        assert 'Likely certainty' in out and 'Expected urgency' in out
+
     def test_an_absent_severity_becomes_unknown(self):
         now = datetime.datetime.now().timestamp()
         out = NWSSkin.card(alert_rec(onset=now - 60, ends=now + 60,
                                      expires=now + 60, severity=None))
         assert 'sev-unknown' in out
+        assert '<span class="sevchip">Unknown</span>' in out
 
     def test_an_instruction_gets_a_callout_and_its_absence_does_not(self):
         """Four alerts in five carry no instruction; they get no empty box."""

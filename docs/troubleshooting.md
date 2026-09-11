@@ -2,7 +2,7 @@
 title: Troubleshooting
 layout: default
 nav_order: 11
-description: Diagnosing weewx-nws — no tags in a report, empty forecasts, missing alerts, what each log message means, and when to delete nws.sdb.
+description: Diagnosing weewx-nws — no tags in a report, empty forecasts, missing alerts, what each log message means, and what the database rebuild is telling you.
 ---
 
 # Troubleshooting
@@ -109,16 +109,30 @@ INFO user.nws: request_urls: 404, Data Unavailable For Requested Point, ...
   source that asks too often — which is also why a `User-Agent` that identifies you is
   worth setting, since it gives them someone to contact instead.
 
-## `You must delete the nws.sdb database`
+## `The nws database has an old schema; rebuilding it`
 
 ```
-ERROR user.nws: You must delete the nws.sdb database and restart weewx.  It contains an old schema!
+INFO user.nws: The nws database has an old schema (startTime is NOT NULL and should be nullable, endTime is NOT NULL and should be nullable); rebuilding it.
+INFO user.nws: Rebuilt archive with the current schema.  The next poll of each forecast type will repopulate it.
 ```
 
-The database was created by an older release whose schema differed, and there is no
-migration.  Stop WeeWX, delete `nws.sdb` (it sits with the weather archive — commonly
-`/var/lib/weewx/` on a package install, `~/weewx-data/archive/` on a pip one), and start it
-again.  Nothing is lost that the next poll does not replace.  See
+Not a problem, and nothing to do.  The database was created by an older release whose
+schema differed; there is no migration, so weewx-nws drops the table and lets WeeWX
+recreate it from the current schema.  Nothing is lost that the next poll does not replace —
+no page reads a row older than the current forecast.  You will see this once, on the first
+start after an upgrade that changed the schema.
+
+Before 6.1 this was an error telling you to delete `nws.sdb` yourself, and the extension
+did nothing at all — no polling, no saving, no tags — until you did.
+
+If the rebuild itself cannot be done, that *is* an error, and the old advice applies:
+
+```
+ERROR user.nws: Could not drop table archive to rebuild it: ...  Delete the nws database by hand and restart weewx.
+```
+
+Stop WeeWX, delete `nws.sdb` (it sits with the weather archive — commonly `/var/lib/weewx/`
+on a package install, `~/weewx-data/archive/` on a pip one), and start it again.  See
 [Upgrading](upgrading.md).
 
 ## No alerts appear when there should be

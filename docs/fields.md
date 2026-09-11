@@ -15,10 +15,12 @@ description: Every field a weewx-nws forecast period and alert carries — what 
 ---
 
 What every field holds, and what type it comes back as.  **VH** marks a WeeWX
-`ValueHelper`: format it with `.format('%.0f')`, convert it with `.degree_C` or
-`.km_per_hour`, take the plain number with `.raw`, and expect `N/A` when the value is
-`None`.  Print one bare and you get the raw number to six decimal places, so don't — see
-[Values, and formatting them](tags.md#values-and-formatting-them).  Everything else is a
+`ValueHelper`, carrying the value in **your report's own units**: print it bare for your
+skin's own format and label, shape it with `.format('%.0f')` (which labels it too), convert
+it to something else with `.degree_C` or `.km_per_hour`, take the plain number with `.raw`,
+and expect `N/A` when the value is `None`.  See
+[Values, and formatting them](tags.md#values-and-formatting-them) — and if you are
+upgrading from 6.0, the note there about deleting `$unit.label.…`.  Everything else is a
 plain string or number.
 
 ## Forecast fields
@@ -49,7 +51,7 @@ actually fills each one in.
 | `latitude`, `longitude` | number | ● | ● | The point the forecast was requested for. |
 | `dateTime` | VH time | ● | ● | When this row was written to the database. |
 | `interval` | int | ● | ● | 720 for twelve-hour, 60 for one-hour.  How the shared table tells the types apart. |
-| `usUnits` | int | ● | ● | The unit system NWS served, as WeeWX's constant. |
+| `usUnits` | int | ● | ● | The unit system the row is stored in, as WeeWX's constant.  Always `1` (US) — a reply that says otherwise is rejected rather than stored.  The `ValueHelper` fields above are converted to your report's units regardless. |
 
 The alert-only fields — `id`, `expirationTime`, `instruction`, `sent`, `status`,
 `messageType`, `category`, `severity`, `certainty`, `urgency`, `sender`, `senderName`,
@@ -64,9 +66,9 @@ handle the two cases:
 
 ```
 #if $hour.windSpeed2 is None
-  $hour.windSpeed.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass
+  $hour.windSpeed.format('%.0f') $hour.windDir.ordinal_compass
 #else
-  $hour.windSpeed.format('%.0f') to $hour.windSpeed2.format('%.0f')$unit.label.windSpeed $hour.windDir.ordinal_compass
+  $hour.windSpeed.format('%.0f', add_label=False) to $hour.windSpeed2.format('%.0f') $hour.windDir.ordinal_compass
 #end if
 ```
 
@@ -95,8 +97,8 @@ weewx-nws's names read better.
 | `description` | string | The body of the alert — What / Where / When / Impacts, several paragraphs, newline separated. |
 | `instructions` | string or `None` | What to do about it: "Drink plenty of fluids, stay in an air-conditioned room...". |
 | `effective` | VH time | When the alert was issued. |
-| `onset` | VH time | When the conditions begin. |
-| `ends` | VH time | When they end.  An alert whose `ends` has passed is not returned. |
+| `onset` | VH time, `.raw` may be `None` | When the conditions begin.  **NWS does not always say**, and since 6.1 that is stored as nothing rather than faked; [`alert_window()`](tags.md#alert-semantics) falls back to `effective`.  The tag is still a ValueHelper — test `.raw is None`, not the tag. |
+| `ends` | VH time, `.raw` may be `None` | When they end, and likewise empty when NWS gave no end — about one alert in ten.  An alert whose end has passed is not returned; an open-ended one is bounded by `expires` instead. |
 | `expires` | VH time | When the alert message itself expires — usually well before `ends`, because NWS re-issues. |
 | `sent` | VH time | When NWS sent this message. |
 | `severity` | string | Extreme, Severe, Moderate, Minor, Unknown. |

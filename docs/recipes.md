@@ -33,11 +33,11 @@ Twelve-hour periods, each with an icon, the temperature, the wind and NWS's own 
 <div class="forecast-period">
   <img src='$twelve_hour.iconUrl' alt='$twelve_hour.shortForecast'>
   <h3>$twelve_hour.name</h3>
-  <p>$twelve_hour.outTemp.format('%.0f')$unit.label.outTemp</p>
+  <p>$twelve_hour.outTemp.format('%.0f')</p>
   #if $twelve_hour.windSpeed2 is None
-  <p>$twelve_hour.windSpeed.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</p>
+  <p>$twelve_hour.windSpeed.format('%.0f') $twelve_hour.windDir.ordinal_compass</p>
   #else
-  <p>$twelve_hour.windSpeed.format('%.0f') to $twelve_hour.windSpeed2.format('%.0f')$unit.label.windSpeed $twelve_hour.windDir.ordinal_compass</p>
+  <p>$twelve_hour.windSpeed.format('%.0f', add_label=False) to $twelve_hour.windSpeed2.format('%.0f') $twelve_hour.windDir.ordinal_compass</p>
   #end if
   <p>$twelve_hour.detailedForecast</p>
 </div>
@@ -86,9 +86,9 @@ The next seven hours across the top of a page — time, icon, temperature, chanc
   </tr>
   <tr>
   #for $hour in $hours
-    <td>$hour.outTemp.format('%.0f')$unit.label.outTemp<br>
+    <td>$hour.outTemp.format('%.0f')<br>
         $hour.shortForecast<br>
-        PoP: $hour.pop.format('%.0f')$unit.label.pop</td>
+        PoP: $hour.pop.format('%.0f')</td>
   #end for
   </tr>
 </table>

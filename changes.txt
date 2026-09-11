@@ -1,6 +1,127 @@
 nws change history
 ------------------
 
+6.1 09/10/2026
+- ACTION REQUIRED for any skin of your own that prints these tags.  DELETE
+  THE "$unit.label..." YOU APPEND AFTER .format().  Until 6.1 the tags carried
+  no formatter, so .format('%.0f') returned a bare "71" and every example in
+  the documentation told you to append the label yourself.  It now returns
+  "71degF", and the old idiom prints "71degF degF".  For a range, suppress the
+  FIRST label instead of the second:
+      $hour.windSpeed.format('%.0f', add_label=False) to
+          $hour.windSpeed2.format('%.0f')
+  The sample skin never used that idiom, so an unmodified NWSReport needs
+  nothing.  The documentation -- Tags, Fields and Recipes -- is updated.
+- ACTION REQUIRED for a metric skin that worked around the units bug below.
+  Asking for a conversion explicitly -- $hour.outTemp.degree_C,
+  $hour.windSpeed.km_per_hour -- is still correct and needs no change, because
+  converting Celsius to Celsius does nothing.  A skin that hard-coded a degF
+  label, or did its own arithmetic on .raw to reach metric, must drop that
+  workaround or it will now convert twice.
+- ACTION REQUIRED only for a skin that reads $alert.ends directly.  For an
+  alert NWS gave no end for, $alert.ends.raw is now None, where it used to be
+  a copy of the alert's expiry; $alert.onset.raw can likewise be None now.
+  The tags themselves are still ValueHelpers either way, so test .raw --
+  "$alert.ends is not None" is always true and always was.
+  $nwsforecast.alert_window() is unchanged and is still the right way to ask:
+  it hands back (onset, finish, open_ended), with finish falling back to the
+  expiry exactly as before, so a skin using it needs nothing.
+- Fleet mode (read_from_dir) now sanity-checks the forecast files it reads,
+  the same way a reply from NWS is checked.  A bad file is logged and retried
+  instead of throwing a stack trace that named nothing, every
+  retry_wait_secs, for as long as the file sat there.
+- An alert's severity is now NAMED on its card, in a chip beside the event --
+  SEVERE, MODERATE -- where 6.0 had a bare colored dot.  The severity had been
+  reaching the reader as color and nothing else: a rail color and that dot,
+  with the word appearing once, sixth in a six-item gray footer.  Color alone
+  tells a colorblind reader nothing, and it mattered more here than that rule
+  suggests -- the cards are SORTED by severity and the line above them says
+  "most serious first", so the page announced that the order meant something
+  while keeping the key in eight-point gray.  The rail now reinforces the
+  chip rather than being the only place the severity lives, and the footer no
+  longer repeats it; certainty and urgency stay there.
+  One dark color moved to pay for it.  A severity is text now, so it needs a
+  contrast bar it never had: --fc-sev-moderate went from #c6631c to #ca661f
+  (4.32 to 4.51 against the card).  Light is unchanged, and the severity
+  ordering is unchanged in both palettes.
+- Fixed: ONE alert with no onset threw away EVERY alert for the station.  NWS
+  need not say when an event begins, and the sanity check treated a missing
+  onset as a malformed reply -- so the whole batch was discarded and the
+  alerts page went on showing the previous one until NWS sent a batch without
+  one.  In a national snapshot that was 3 alerts of 356, two of them
+  Evacuation Immediate.  The failure was silent: a rejected reply logs and
+  keeps the old data, so the page still looked current.
+  The principle behind the fix, measured against that snapshot: NWS always
+  says when it SPOKE -- sent, effective and expires were present on all 356 --
+  and does not always say when the WEATHER starts or stops (onset absent on 3,
+  ends on 23).  Message times are required; event times may be absent and are
+  now stored as the nothing NWS sent, rather than as a message time wearing an
+  event's name.  That also retires a guess: alert_window() used to infer an
+  open-ended alert from its end EQUALLING its expiry, which was wrong for an
+  alert that genuinely ends when its message does.
+  An absent event time falls back to the message time that answers the same
+  question, and that happens in alert_window() rather than in the database:
+  no onset means in effect from `effective`, which is CAP's own reading, and
+  no end means bounded by `expires`, which is what open_ended reports.  The
+  onset half matters more than it sounds -- without it is_active() is false
+  for every alert that has no onset, so alert_state() would file an
+  Evacuation Immediate that is in effect RIGHT NOW under "upcoming", and
+  two of the three null-onset alerts in the sample were exactly that event.
+  ordered() ranks such an alert at the same instant, so the order a reader
+  sees agrees with the window each card draws.
+- The nws database now rebuilds itself when its schema is out of date.  6.1
+  changes the schema (startTime and endTime become nullable, for the above),
+  and earlier releases changed it too -- and the instruction was always "stop
+  weewx, delete nws.sdb, start it again", with the extension doing nothing at
+  all until you did.  It now notices at startup, says what differs, drops the
+  table and lets WeeWX recreate it; the next poll refills it.  Nothing is lost
+  that was ever read: no page looks at a row older than the current forecast.
+  The check that finds it compares column NULLABILITY as well as names now.
+  Names alone could not see this release's change at all, and would have
+  reported an old table as current -- after which the first alert with no
+  onset would have failed its INSERT, once per archive period, forever.
+- Fixed: a report set to metric got Fahrenheit and miles per hour.  Every
+  value the $nwsforecast tags returned came back in the units NWS served --
+  degF and mph -- whatever [Units] said, so a metric page printed a
+  Fahrenheit number beside a degC label, and an mph number beside a km/h one.
+  The cause was that the tags built their ValueHelpers without the report's
+  converter, and a ValueHelper converts once, when it is constructed, and
+  never again: a helper built without one holds degF for life, which is why
+  neither .raw nor .format() could save a skin from it.  They are now built
+  with the report's own converter and formatter, like every other WeeWX tag,
+  so a bare $hour.outTemp prints "71.0degF" through your skin's own
+  [Units][[StringFormats]] and [[Labels]] rather than as a six-decimal number.
+- A forecast reply that does not say it is in US units is now REJECTED rather
+  than stored.  nws.py sends no units parameter and api.weather.gov answers
+  "us", but a forecast url pasted into weewx.conf can carry "?units=si" -- and
+  such a reply used to be composed into records stamped METRIC that nothing
+  downstream ever read, so Celsius would have been served as Fahrenheit.  The
+  log line names the cause and says what to change.
+- The sample report's seven-day page now leads with TWO weeks of temperature:
+  the week this station recorded, then the week the National Weather Service
+  forecasts, on one shared scale.  A single scale is the point -- a cold snap
+  last week rescales the forecast half, and "warm for the week" and "warm for
+  the fortnight" are different claims that only one scale can tell apart.  The
+  join is marked and named, the two curves are deliberately NOT connected
+  across it (NWS forecasts a grid square and your station measures its own
+  back yard, so the last reading and the first forecast hour seldom agree, and
+  that step is worth seeing), and the observed half is drawn in a neutral ink
+  rather than the forecast's red.  Pointing at the chart says which of the two
+  a reading is.
+  A station that has not been running for a week gets exactly the history it
+  HAS -- three days of archive draw three days of chart, not a week four
+  sevenths of which is invented -- and a station with no archive at all, which
+  is every fresh install, gets precisely the forecast-only chart of 6.0.  An
+  hour the station recorded nothing in leaves a hole in the line rather than a
+  confident stroke across it, so an outage reads as an outage.
+  The chart takes its own card, headed "Temperature, recorded and forecast",
+  above the seven forecast day rows; the archive is read once per report
+  through the report's own data binding, and an archive that cannot be read
+  costs the chart and never the page.
+  Note for upgrades: reinstalling overwrites skins/nws/ as it always has, so
+  copy anything you customized before upgrading.  No configuration changes,
+  and no change to any $nwsforecast tag.
+
 6.0 09/01/2026
 - The sample report is rebuilt.  Its three pages -- seven day, hourly and
   alerts -- are responsive, so one page serves a phone and a desktop, and they
