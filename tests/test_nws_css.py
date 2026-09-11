@@ -67,7 +67,14 @@ GROUNDS = {
                        ('--fc-tint', 4.5), ('--fc-tint-2', 4.5)],
     '--fc-nav-ink':   [('--fc-nav-bg', 4.5)],
     '--fc-ok':        [('--fc-surface', 3.0)],
-    '--fc-on-accent': [('--fc-accent', 4.5), ('--fc-sev-severe', 4.5)],
+    # --fc-muted and --fc-hi joined this list in 6.1.2: the 7 Day chart's two
+    # seam chips are filled with the curve colors they name, and the words in
+    # them are --fc-on-accent.  4.5 and not 3.0 even though the type is bold:
+    # the chips are sized in the chart's own units, so the 13 they take on a
+    # wide page is about 13px and the 21 they take on a phone is nearer 8 --
+    # the chart shrinks with the column.  Nothing here is ever large text.
+    '--fc-on-accent': [('--fc-accent', 4.5), ('--fc-sev-severe', 4.5),
+                       ('--fc-muted', 4.5), ('--fc-hi', 4.5)],
     '--fc-rain':      [('--fc-surface', 4.5), ('--fc-tint', 4.5)],
     # The severity colors became TEXT in 6.1 -- the named chip on an alert
     # card -- so they need a contrast bar and not just the prominence ORDER

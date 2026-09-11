@@ -66,11 +66,14 @@ from test_nws import load_fixture, make_alert, make_alerts_json
 from test_nws_service import freshen
 from test_nws_skin import LONG_NWS_HEADLINE, archive_records, render_skin
 
+# After the test modules, which are what put bin/user on the path.
+from nwsskin import NWSSkin
+
 # (label, css selector, computed property).  Two of each kind: a ground, text,
 # a filled chip whose text color INVERTS between themes, and the drawn icons --
-# plus the 7 Day chart's seam label, which is the one mark on these pages whose
-# color comes from a rule that OVERRIDES another at the same specificity, and
-# so is only correct if it is in the right place in the file.
+# plus the 7 Day chart's two seam chips, which are the only marks on these
+# pages carrying --fc-hi and --fc-muted as FILLS, where a theme that did not
+# reach them would leave a forecast-red box on a dark card.
 PROBES: List[Tuple[str, str, str]] = [
     ('page background',      'body',                 'backgroundColor'),
     ('card background',      'section.now',          'backgroundColor'),
@@ -78,7 +81,8 @@ PROBES: List[Tuple[str, str, str]] = [
     ('page title',           'h1.ctitle',            'color'),
     ('current tab fill',     '.nav a.current',       'backgroundColor'),
     ('current tab text',     '.nav a.current',       'color'),
-    ('chart seam label',     '.sparkcurve .seamlab', 'fill'),
+    ('chart chip: recorded', '.seamchip.obs',        'backgroundColor'),
+    ('chart chip: forecast', '.seamchip.fcast',      'backgroundColor'),
     ('icon: sun disc',       '#wx-skc-day circle',   'fill'),
     ('icon: overcast back',  '#wx-ovc-day g rect',   'fill'),
 ]
@@ -120,6 +124,143 @@ with sync_playwright() as pw:
 print(json.dumps(out))
 '''
 
+# ---- the chips, measured where they are actually drawn --------------------
+#
+# WHY THIS IS A MEASUREMENT.  The chips name the halves of the 7 Day chart and
+# they are markup rather than SVG <text> precisely so that nothing has to
+# compute how wide a filled box around those words comes out: the browser
+# sizes them.  What NWSSkin DOES decide is whether there is room for the pair
+# at all (CHIP_ROOM), and that is arithmetic against a width no python can
+# see.  So this asks the browser where the ink went.
+#
+# FOUR WIDTHS, because the stylesheet gives the chips three sizes as the page
+# narrows -- 13 viewBox units, 18 below 880px and 21 below 620px -- and the
+# narrowest page is always the binding case: css scales this type in the same
+# units the geometry is written in.  621 is here as well as 390 and 880 to
+# catch each switch on the wide side of itself.  Both engines, because they do
+# not agree about text metrics, and whatever face this machine substitutes for
+# Open Sans, which the skin names and does not load.
+#
+# It fails if a pair that was SHOWN does not fit between the plot's edge and
+# the seam rule -- the one thing CHIP_ROOM exists to prevent -- and if any
+# chip came out wider than CHIP_WIDTH, which is how that constant is stopped
+# from going stale.
+CHIP_VIEWPORTS = [1280, 880, 621, 390]
+
+# Room to spare, in viewBox units, before a chip is called clipped.  Not zero:
+# a chip whose edge lands exactly on the plot edge is one rounding away from
+# crossing it.
+MIN_CLEARANCE = 1.0
+
+CHIP_DRIVER = r'''
+import json, sys
+from playwright.sync_api import sync_playwright
+
+PROBE = """() => {
+  const out = [];
+  document.querySelectorAll('.seamlegend').forEach(leg => {
+    const wrap = leg.parentNode;
+    const svg = wrap.querySelector('svg.chart');
+    if (!svg) return;
+    const box = svg.getBoundingClientRect();
+    if (!box.width) return;
+    /* viewBox units per css pixel, so everything below is in the units the
+       python geometry is written in. */
+    const k = svg.viewBox.baseVal.width / box.width;
+    const seam = svg.querySelector('.seam');
+    if (!seam) return;
+    let spec;
+    try { spec = JSON.parse(svg.getAttribute('data-chart')); } catch (e) { return; }
+    leg.querySelectorAll('.seamchip').forEach(chip => {
+      const r = chip.getBoundingClientRect();
+      out.push({
+        text: chip.textContent,
+        obs: chip.classList.contains('obs'),
+        left: +((r.left - box.left) * k).toFixed(2),
+        right: +((r.right - box.left) * k).toFixed(2),
+        width: +(r.width * k).toFixed(2),
+        top: +((r.top - box.top) * k).toFixed(2),
+        bottom: +((r.bottom - box.top) * k).toFixed(2),
+        seam: +(seam.x1.baseVal.value).toFixed(2),
+        x0: spec.x0, x1: spec.x1, y0: spec.y0,
+        fontpx: +getComputedStyle(chip).fontSize.replace('px', ''),
+        unit: +(1 / k).toFixed(4)
+      });
+    });
+  });
+  return out;
+}"""
+
+base, widths = sys.argv[1], json.loads(sys.argv[2])
+out = {}
+with sync_playwright() as pw:
+    for engine in ('chromium', 'firefox'):
+        browser = getattr(pw, engine).launch()
+        out[engine] = {}
+        for w in widths:
+            ctx = browser.new_context(viewport={'width': w, 'height': 900})
+            page = ctx.new_page()
+            page.goto(base + 'index.html', wait_until='load')
+            out[engine][str(w)] = page.evaluate(PROBE)
+            ctx.close()
+        browser.close()
+print(json.dumps(out))
+'''
+
+
+def measure_chips(python: str, html_root: str, driver_dir: str) -> int:
+    """Run CHIP_DRIVER and report.  Returns the number of failures."""
+    driver = os.path.join(driver_dir, 'chip_driver.py')
+    with open(driver, 'w') as f:
+        f.write(CHIP_DRIVER)
+    proc = subprocess.run(
+        [python, driver, 'file://' + html_root + '/', json.dumps(CHIP_VIEWPORTS)],
+        capture_output=True, text=True)
+    print('\nthe 7 Day chart\'s seam chips, measured in viewBox units')
+    if proc.returncode != 0:
+        print('  FAIL: the browser driver exited %d:' % proc.returncode)
+        print((proc.stderr or proc.stdout).strip()[-2000:])
+        return 1
+    readings = json.loads(proc.stdout)
+
+    fails, widest = 0, 0.0
+    for engine in sorted(readings):
+        for width in CHIP_VIEWPORTS:
+            # A chip the stylesheet has hidden still MATCHES the selector;
+            # what it has is a zero box.  Reading that as a 0-wide chip would
+            # report it as clipped and outside the band, which is the opposite
+            # of what it is.
+            chips = [c for c in readings[engine][str(width)] if c['width']]
+            if not chips:
+                # Never the right answer at any of these widths: the pair is
+                # shown at every page width, and only a short ARCHIVE takes it
+                # away.  Nothing measured means a selector stopped matching.
+                print('  %-9s %4dpx  no chips drawn  <-- expected a pair'
+                      % (engine, width))
+                fails += 1
+                continue
+            for c in chips:
+                widest = max(widest, c['width'])
+                # The gap between the chip and the edge of the plot on its own
+                # side.  That is what CHIP_ROOM was asked to guarantee.
+                room = (c['left'] - c['x0']) if c['obs'] else (c['x1'] - c['right'])
+                bad = []
+                if room < MIN_CLEARANCE:
+                    bad.append('clipped: %.1f from the plot edge' % room)
+                if c['width'] > NWSSkin.CHIP_WIDTH:
+                    bad.append('wider than CHIP_WIDTH (%d)' % NWSSkin.CHIP_WIDTH)
+                # The band was cut to hold it; the stylesheet centers it there.
+                if c['top'] < 0 or c['bottom'] > c['y0']:
+                    bad.append('outside the band (0..%d)' % c['y0'])
+                print('  %-9s %4dpx  %-24s %6.1f wide at %4.1f units,'
+                      ' %5.1f clear of the plot edge  %s'
+                      % (engine, width, c['text'], c['width'], c['unit'],
+                         room, '  '.join(bad) or 'ok'))
+                fails += bool(bad)
+    print('  widest chip seen: %.1f units.  CHIP_WIDTH is %d.'
+          % (widest, NWSSkin.CHIP_WIDTH))
+    return fails
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--python', default=os.environ.get('PLAYWRIGHT_PYTHON'),
@@ -141,10 +282,17 @@ def main() -> int:
                 freshen(load_fixture('twelve_hour.json')),
                 make_alerts_json(make_alert(
                     parameters={'NWSheadline': [LONG_NWS_HEADLINE]})),
-                # With a station archive behind it, so the 7 Day chart draws
-                # its observed half: the seam label is probed below, and no
-                # probe can reach a mark the page never emits.
-                archive=archive_records(18, gap=(10, 11, 12)))
+                # FOUR hours, and the number is load-bearing.  The chart
+                # needs an archive at all for its observed half to exist --
+                # no probe can reach a mark the page never emits -- but the
+                # two chips are shown only when BOTH halves are at least
+                # NWSSkin.CHIP_ROOM wide, and the one_hour fixture is trimmed
+                # to four periods.  More archive than forecast pushes the
+                # seam right until the forecast side has nowhere to put a
+                # chip, and the pair goes.  Four each side puts the seam in
+                # the middle, which is also the widest the chips ever have to
+                # be measured at.
+                archive=archive_records(4))
     html_root = os.path.join(base, 'public_html', 'nws')
     for name in PAGE_PROBES:
         assert os.path.isfile(os.path.join(html_root, name)), name
@@ -176,6 +324,7 @@ def main() -> int:
                      'IDENTICAL <-- theme did not apply' if same else 'ok'))
             fails += same
     print('\n%d probe(s) unchanged across the two settings' % fails)
+    fails += measure_chips(options.python, html_root, base)
     return 1 if fails else 0
 
 if __name__ == '__main__':

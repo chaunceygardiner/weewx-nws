@@ -185,7 +185,10 @@
    click while Firefox drew nothing. */
 .fc svg.chart:focus{outline:none}
 .fc svg.chart.kbd:focus{outline:2px solid var(--fc-accent);outline-offset:2px}
-.fc .sparkwrap{margin:0 0 18px}
+/* container-type on .sparkwrap and NOT on .chartwrap: the Hourly page's two
+   charts share that class and have no chips, and containment they do not need
+   is containment that can only surprise someone later. */
+.fc .sparkwrap{margin:0 0 18px;container-type:inline-size}
 /* The 7 Day chart has its own card, whose padding already does this. */
 .fc .twoweek .sparkwrap{margin-bottom:0}
 .fc .sparkcap{color:var(--fc-muted);font-size:.8em;margin:6px 0 0}
@@ -223,10 +226,67 @@
                         text-transform:uppercase;
                         font-family:'Open Sans',arial,sans-serif}
 .fc svg.chart .peak{text-anchor:end;text-transform:none;letter-spacing:0;font-style:italic}
-/* AFTER .striplab, which it overrides at the same specificity -- placed
-   before it, this rule is dead.  The seam labels are the answer to "where
-   does the record end", so they carry more weight than an axis label. */
-.fc svg.chart .seamlab{fill:var(--fc-ink-3)}
+/* ---- the two chips that name the 7 Day chart's halves ----------------
+   PAST n DAYS ACTUAL and FORECASTED TEMPERATURES, one filled rectangle each
+   side of the rule, matched in width with the words centered in them.  Each
+   box carries its own half's curve color -- --fc-muted is .aline, --fc-hi is
+   .tline -- so the label IS the swatch.
+   MARKUP, NOT SVG <text>, and NWSSkin's CHIP_GAP comment carries the whole
+   argument: a filled box must be exactly as wide as the words in it, and the
+   words, the type size and the FACE all vary, so the browser sizes the box
+   and nothing computes a width.  It is also the only way the words are
+   readable AT ALL by a screen reader -- the chart carries role="img", which
+   hides every <text> inside it. */
+.fc .seamlegend{position:absolute;pointer-events:none;
+                /* Centered on the rule, and vertically on the middle of the
+                   chart's own label band -- which arrives as a bare number of
+                   viewBox units from the code that opened the band, so the
+                   band's depth is stated once, there.  The px value is the
+                   fallback for a browser without container queries. */
+                top:20px;top:calc(100cqw * var(--band-mid) / 1040);
+                left:var(--seam);transform:translate(-50%,-50%);
+                /* EQUAL WIDTHS WITHOUT MEASURING ANYTHING.  Two 1fr columns
+                   under a max-content container both take the max-content
+                   width of the WIDER item, so the boxes match and the text
+                   centers in each -- and the browser, not the markup, is what
+                   knows how wide the words are.  The pair straddles the rule
+                   with a gutter of --chip-gap units, so each chip stands
+                   CHIP_GAP clear of it.
+                   THE GAP ARRIVES AS A BARE NUMBER of viewBox units and is
+                   converted here.  It cannot be a percentage: a percentage gap
+                   inside a max-content grid is measured against a width that
+                   is not yet known, and resolves to zero.  And it cannot be
+                   written here as a constant -- NWSSkin owns it, because the
+                   same number decides whether there is room for the pair. */
+                display:grid;grid-template-columns:1fr 1fr;width:max-content;
+                column-gap:16px;column-gap:calc(100cqw * var(--chip-gap) / 1040)}
+/* The chip type is sized in the CHART'S OWN units -- 100cqw of the wrapper is
+   1040 of them -- so it tracks the chart's other labels as the page narrows,
+   which an em ladder rooted in the page's 16px cannot do.
+   13, not the 10 .striplab takes: these two are the KEY to the chart, and
+   without them a reader cannot tell which half is a measurement and which is
+   a prediction, so they outrank every other label on the plot.
+   line-height:1 is load-bearing, not tidiness: at `normal` the fallback face
+   gives about 1.36, which takes the narrow-screen chip off the top of the
+   viewBox and down into the plot at once.  With it the box is 1.6em tall,
+   whatever the face. */
+.fc .seamchip{font-size:13px;font-size:calc(100cqw * 13 / 1040);
+              font-family:'Open Sans',arial,sans-serif;font-weight:600;
+              letter-spacing:.06em;white-space:nowrap;text-align:center;
+              line-height:1;padding:.3em 1.05em;color:var(--fc-on-accent);
+              background:var(--fc-muted)}
+.fc .seamchip.fcast{background:var(--fc-hi)}
+/* THE READOUT CLEARS THE CHIP BAND, and only on the chart that has one.  The
+   readout is anchored top:0 right:0 of the same wrapper and is sized in PAGE
+   pixels, while the chips are sized in the chart's units -- two ladders that
+   cross, so whether they collide depends on the width.  They do not at 1280;
+   at 800 the readout covered the forecast chip by 69x20, hiding the label
+   this change exists to add exactly while the reader is working the chart.
+   40 is the band: 12 units of plot padding plus NWSSkin.CHIP_BAND, which owns
+   the number -- tests/test_nwsskin.py fails if the two drift apart.  The
+   readout then starts at the top of the plot, where it has always been
+   content to sit on the curve for as long as a pointer is down. */
+.fc .twoweek .readout{top:calc(100cqw * 40 / 1040)}
 /* The crosshair is hidden by a CLASS, not by the html `hidden` attribute:
    `hidden` is not valid on an SVG <g> (Nu rejects it) and the UA's [hidden]
    rule does not reach SVG children anyway, so it was never doing the hiding.
@@ -463,6 +523,7 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
   .fc svg.chart .ylab{font-size:17px}
   .fc svg.chart .xlab{font-size:19px}
   .fc svg.chart .striplab{font-size:17px}
+  .fc .seamchip{font-size:18px;font-size:calc(100cqw * 18 / 1040)}
 }
 
 @media (max-width: 620px) {
@@ -470,6 +531,11 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
   .fc svg.chart .ylab{font-size:26px}
   .fc svg.chart .xlab{font-size:28px}
   .fc svg.chart .striplab{font-size:22px}
+  /* 21, not the 22 .striplab takes: at 22 the pair clears the plot edge by
+     nine viewBox units on a full seven-day archive, which is inside the
+     font-substitution slop that clipped the axis in 6.1.1.  21 leaves 29.
+     Bold uppercase reads at 21 as well as regular does at 22. */
+  .fc .seamchip{font-size:21px;font-size:calc(100cqw * 21 / 1040)}
   /* The rain strip's 100/50/0 are only 16 viewBox units apart, so at a label
      size a phone can read they collide with each other and with the
      temperature scale.  They are the most inferable marks on the chart --

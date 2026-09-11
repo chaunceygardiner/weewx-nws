@@ -108,14 +108,13 @@
           <h2 class="eyebrow">The week&rsquo;s temperature</h2>
 #end if
           <div class="sparkwrap chartwrap">$nwsskin.sparkline($hours, $past)<div class="readout" hidden></div>
-#if $past
-            <p class="sparkcap">The week this station recorded, then the week the
-            Weather Service forecasts, on one temperature scale.  Night shaded.</p>
-#else
-            <p class="sparkcap">Forecast temperature every hour of the week, night shaded.
-            Once this station has archive records behind it, the week it recorded is drawn
-            here too.</p>
-#end if
+            ## NOT WRITTEN OUT HERE, because it counts the same days the
+            ## chart's own chips count: a fixed "the week this station
+            ## recorded" is the identical claim to a chip fixed at seven, and
+            ## wrong on the identical station.  Below the width the chips need
+            ## they go and this line is the only thing naming the halves, so
+            ## it is where the wrong number would have survived longest.
+            <p class="sparkcap">$nwsskin.sparkline_caption($past)</p>
           </div>
         </section>
 #end if

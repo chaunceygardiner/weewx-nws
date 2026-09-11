@@ -2,6 +2,27 @@ nws change history
 ------------------
 
 6.1.2 (in progress)
+- The 7 Day page's temperature chart names its two halves with a pair of
+  filled labels -- PAST 7 DAYS ACTUAL in the recorded curve's gray, FORECASTED
+  TEMPERATURES in the forecast curve's red -- one each side of the dividing
+  rule, matched in width.  Each box carries the color of the line it names, so
+  the label is also the key; the two bare words it replaces, OBSERVED and
+  FORECAST, read as one phrase at chart size and the full-height rule was
+  already a patch for that.  They also count: the recorded half is as wide as
+  the archive is long, so a station that has been up three days now says so
+  rather than claiming a week it does not have, and the sentence under the
+  chart and the description a screen reader is given count the same days.  A
+  station with less than about five and a half days behind it gets no labels
+  at all -- a matched pair centered on the rule cannot be dropped one at a
+  time, and one alone would straddle the rule it is meant to stand beside --
+  and there the caption is what names the halves.  A station whose sensor has
+  died counts only the hours it actually recorded: the chart still draws the
+  whole week, hole and all, but nothing claims to have measured it.
+- The words naming the two halves can now be read by a screen reader at all.
+  They were text inside the chart, and the chart is marked up as a single
+  image with one description, which hides everything drawn inside it -- so the
+  two labels saying which half was a measurement and which a prediction were
+  reachable by no route.  They are ordinary text beside the chart now.
 - The caption under the 7 Day page's temperature chart no longer promises dew
   point and rain.  It ended with a link reading "Hour by hour, with dew point
   and rain", meaning the Hourly page -- but sitting at the end of a paragraph

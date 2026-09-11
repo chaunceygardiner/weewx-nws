@@ -400,6 +400,30 @@ class TestTwoWeekSparkline:
         return json.loads(re.search(r"data-chart='([^']*)'", svg).group(1))
 
     @staticmethod
+    def _chips(svg):
+        """(observed text, forecast text, custom properties) or None.
+
+        The chips ride OUTSIDE the svg -- see NWSSkin.CHIP_GAP -- so what
+        sparkline() returns is the chart followed by their markup, or by
+        nothing at all when neither half is wide enough for the pair.
+        """
+        legend = re.search(r'<div class="seamlegend" style="([^"]*)">(.*)</div>',
+                           svg)
+        if not legend:
+            return None
+        css = dict(kv.split(':', 1) for kv in legend.group(1).rstrip(';').split(';'))
+        text = re.findall(r'<span class="seamchip \w+">([^<]*)</span>',
+                          legend.group(2))
+        assert len(text) == 2, text
+        return text[0], text[1], css
+
+    # A full NWS hourly feed is 156 records, and the production archive is a
+    # week.  That shape is what the chips are sized for, and CHIP_ROOM leaves
+    # no room for them on the toy 24-hour series the other cases use.
+    FEED = 156
+    WEEK = 168
+
+    @staticmethod
     def _first_xy(d):
         parts = d.split()
         return float(parts[1]), float(parts[2])
@@ -433,9 +457,92 @@ class TestTwoWeekSparkline:
         assert '<path d=""' not in NWSSkin.sparkline(day_of_points(), [])
 
     def test_the_seam_is_drawn_and_both_sides_are_named(self):
-        svg = NWSSkin.sparkline(day_of_points(), week_of_obs(48))
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(self.WEEK))
         assert 'class="seam"' in svg
-        assert '>Observed</text>' in svg and '>Forecast</text>' in svg
+        obs, fcast, _css = self._chips(svg)
+        assert obs == 'PAST 7 DAYS ACTUAL'
+        assert fcast == 'FORECASTED TEMPERATURES'
+
+    def test_the_chip_counts_the_days_that_were_actually_drawn(self):
+        """A chip fixed at seven would be a printed lie on a station that had
+        just been built -- the observed half is as wide as the archive is
+        long, by design.  ROUNDED DOWN: a label may understate what was drawn,
+        never overstate it."""
+        for hours, expected in ((self.WEEK, 'PAST 7 DAYS ACTUAL'),
+                                (167, 'PAST 6 DAYS ACTUAL'),
+                                (144, 'PAST 6 DAYS ACTUAL'),
+                                (135, 'PAST 5 DAYS ACTUAL')):
+            svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(hours))
+            assert self._chips(svg)[0] == expected, hours
+
+    def test_a_dead_sensor_does_not_buy_a_week_of_credit(self):
+        """observations() keeps TRAILING empty hours -- a gap between the last
+        reading and the forecast is the news that weewxd stopped -- so a
+        station whose sensor died six days ago still hands over 168 rows with
+        24 readings in them.  Counting the rows printed PAST 7 DAYS ACTUAL
+        over a curve that stops six days back, which is the class of claim
+        these labels were written to retire.
+
+        All THREE places that say it are checked, because they are three
+        separate sentences and only the chip can be checked against the
+        picture."""
+        past = week_of_obs(self.WEEK)
+        for row in past[24:]:
+            row['outTemp'] = None
+        assert NWSSkin._observed_span(past) == 24
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), past)
+        assert self._chips(svg)[0] == 'PAST 1 DAY ACTUAL'
+        assert 'the past 1 day this station recorded' in svg
+        assert '1 day' in NWSSkin.sparkline_caption(past)
+        # The half is still DRAWN a week wide -- the geometry is unchanged and
+        # the hole is the point.  Only the claim shrank.
+        assert self._spec(svg)['x0'] < self._seam_x(svg)
+
+    def test_a_half_that_is_all_holes_claims_nothing(self):
+        """_from_first_reading makes this unreachable from observations(), but
+        the caption is a public tag and takes whatever a skin hands it."""
+        past = week_of_obs(48)
+        for row in past:
+            row['outTemp'] = None
+        assert NWSSkin._observed_span(past) == 0
+        assert 'archive records behind it' in NWSSkin.sparkline_caption(past)
+
+    def test_the_forecast_chip_claims_no_span(self):
+        """Deliberate.  The NWS hourly feed is 156 records and the chart plots
+        from the current hour, so that half is 6.5 days at its widest -- a day
+        count there would read 6 while every reader took the chart for a
+        week's forecast."""
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(self.WEEK))
+        assert not re.search(r'\d', self._chips(svg)[1])
+
+    def test_under_a_day_the_chip_counts_hours(self):
+        """The day count is floored, so a five-hour-old station would
+        otherwise read "0 DAYS"."""
+        assert NWSSkin._span_words(5) == '5 HOURS'
+        assert NWSSkin._span_words(1) == '1 HOUR'
+        assert NWSSkin._span_words(23) == '23 HOURS'
+        assert NWSSkin._span_words(24) == '1 DAY'
+        assert NWSSkin._span_words(47) == '1 DAY'
+
+    def test_the_caption_counts_the_same_days_the_chip_does(self):
+        """One line below the chip, and on the identical half.  Below
+        CHIP_ROOM the chips go and this sentence is the only thing naming the
+        halves at all, so the shorter the archive the more weight it carries.
+        """
+        assert '7 days' in NWSSkin.sparkline_caption(week_of_obs(self.WEEK))
+        assert '3 days' in NWSSkin.sparkline_caption(week_of_obs(72))
+        assert '5 hours' in NWSSkin.sparkline_caption(week_of_obs(5))
+        # A fresh install has no observed half to count.
+        assert 'past' not in NWSSkin.sparkline_caption([])
+        assert 'archive records behind it' in NWSSkin.sparkline_caption([])
+
+    def test_the_aria_label_counts_them_too(self):
+        """This sentence is what a screen reader gets INSTEAD of the picture,
+        so it is the one place the wrong number cannot be checked against what
+        is on the screen."""
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(72))
+        label = re.search(r'aria-label="([^"]*)"', svg).group(1)
+        assert 'the past 3 days this station recorded' in label
 
     def test_the_seam_falls_BETWEEN_the_two_halves(self):
         """Not ON the first forecast point.  Drawn there the rule touches the
@@ -456,23 +563,38 @@ class TestTwoWeekSparkline:
         # -- up to 0.05 of rounding, which this difference sees twice.
         assert abs((sx - last_observed) - (first_forecast - sx)) < 0.11
 
-    def test_the_seam_rule_divides_the_two_labels(self):
-        """It runs the FULL height, label band included.  Stopped at the top
-        of the plot it left the two words side by side with nothing between
-        them, and at this size they read as one phrase -- "OBSERVED FORECAST"
-        -- which is worse than the bare line they were added to explain."""
-        svg = NWSSkin.sparkline(day_of_points(), week_of_obs(48))
+    def test_the_seam_rule_divides_the_two_chips(self):
+        """It runs the FULL height, chip band included.  Stopped at the top of
+        the plot it left the two labels side by side with nothing between
+        them, which at this size reads as one phrase rather than two labels.
+        The line is what makes them two."""
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(self.WEEK))
         top, bottom = self._seam_ys(svg)
-        spec = json.loads(re.search(r"data-chart='([^']*)'", svg).group(1))
-        baseline = float(re.search(
-            r'<text x="[\d.]+" y="(\d+)" class="striplab seamlab"', svg).group(1))
-        biggest = max(_css_sizes('striplab'))
-        # Starts above the tallest letters the stylesheet ever draws...
-        assert top <= baseline - biggest
-        # ...and still on the canvas, which LY - 22 was not until the band
-        # was deepened to hold it.
-        assert top >= 0
+        spec = self._spec(svg)
+        # From the top of the BAND, not the top of the chips: the chips are
+        # opaque and cover the rule where they sit, so what a reader sees is
+        # the gutter between them plus a stub above them wherever the type is
+        # smaller than the size the band was cut for.
+        assert 0 <= top < spec['y0']
         assert bottom == spec['y1']
+
+    def test_the_band_is_deep_enough_for_the_largest_chip_the_css_draws(self):
+        """The band above the plot is sized by the chips' own type, which the
+        stylesheet scales UP as the page narrows.  Too shallow and the chip is
+        cut off by the top of the viewBox or sits on the curve.
+
+        A chip is 1.6 times its type size tall: line-height:1 plus .3em of
+        padding above and below.  A source-text check, which is not proof that
+        anything WORKS -- tests/verify_theme.py measures the real boxes in a
+        real browser.
+        """
+        biggest = max(_css_sizes('seamchip'))
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(self.WEEK))
+        band = self._spec(svg)['y0']
+        assert band >= 1.6 * biggest
+        # And not so deep that the chip rattles around in it.  The stylesheet
+        # centers the chip in the band, so this bounds the clearance.
+        assert band - 1.6 * biggest <= 8
 
     def test_the_two_halves_are_separate_strokes_that_are_not_joined(self):
         """NWS forecasts a grid square and the station measures its own back
@@ -567,40 +689,138 @@ class TestTwoWeekSparkline:
         assert "pt.T === null" in js
         assert "classList.toggle('past'" in js
 
-    def test_a_very_short_history_keeps_the_seam_and_drops_the_label(self):
+    def test_a_very_short_history_keeps_the_seam_and_drops_BOTH_chips(self):
         """A station two hours old still gets the join; what it does not get
-        is the word Observed hanging off the left edge."""
-        svg = NWSSkin.sparkline(day_of_points(156), week_of_obs(2))
+        is a chip hanging off the left edge.
+
+        BOTH OR NEITHER.  The asymmetric words this replaced could be dropped
+        one at a time; a matched pair centered on the rule cannot -- one of
+        them alone would straddle the rule it is meant to stand beside.  The
+        caption under the chart still names both halves.
+        """
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(2))
         assert 'class="seam"' in svg
-        assert '>Observed</text>' not in svg
-        assert '>Forecast</text>' in svg
+        assert self._chips(svg) is None
 
-    def test_the_seam_labels_sit_clear_of_the_top_and_of_the_plot(self):
-        """The band above the plot is sized by the labels' own type, which the
-        stylesheet scales UP as the chart is squeezed.  Too shallow and the
-        ascenders are cut off by the top of the viewBox; too deep and the
-        labels sit on the curve."""
-        biggest = max(_css_sizes('striplab'))
-        svg = NWSSkin.sparkline(day_of_points(), week_of_obs(48))
-        baseline = float(re.search(
-            r'<text x="[\d.]+" y="(\d+)" class="striplab seamlab"', svg).group(1))
-        top_of_plot = json.loads(
-            re.search(r"data-chart='([^']*)'", svg).group(1))['y0']
-        assert baseline - 0.75 * biggest >= 0          # ascenders stay on the canvas
-        assert baseline + 0.25 * biggest <= top_of_plot  # descenders clear the plot
+    def test_the_pair_goes_the_moment_either_side_is_too_narrow(self):
+        """Both sides are tested, not just the short one: a week of archive
+        against a four-period feed pushes the seam so far RIGHT that the
+        forecast chip is the one with nowhere to sit."""
+        wide = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(self.WEEK))
+        assert self._chips(wide) is not None
+        assert self._chips(NWSSkin.sparkline(day_of_points(4),
+                                             week_of_obs(self.WEEK))) is None
 
-    def test_the_seam_label_color_is_not_a_dead_rule(self):
-        """.seamlab and .striplab have identical specificity, so the LATER of
-        the two wins.  Written ABOVE .striplab, where it first went, the
-        override never applies and the labels silently take the axis-label
-        color -- a stylesheet that parses, validates and does nothing.
+    def test_a_shown_chip_clears_the_plot_edge(self):
+        """What CHIP_ROOM exists to guarantee, in the units the geometry is
+        written in: the pair is shown only where a chip of the widest size the
+        stylesheet ever draws fits between the rule and the edge of the plot.
+
+        The widths themselves are the browser's business -- see CHIP_GAP for
+        why nothing here computes one -- so this checks the DECISION against
+        the measured constant, and tests/verify_theme.py checks the constant
+        against the real boxes.
+        """
+        # 134 is the shortest archive the pair fits against a full feed;
+        # a shorter feed lets it in sooner, which the case below covers.
+        for hours in (134, 144, self.WEEK):
+            svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(hours))
+            assert self._chips(svg) is not None, hours
+            spec, sx = self._spec(svg), self._seam_x(svg)
+            need = NWSSkin.CHIP_WIDTH + NWSSkin.CHIP_GAP
+            assert sx - spec['x0'] >= need, hours
+            assert spec['x1'] - sx >= need, hours
+
+    def test_the_pair_survives_the_feed_shrinking_between_generations(self):
+        """The forecast half is NOT a fixed 156 hours.  Ended periods are
+        dropped on read, so it loses an hour every hour until NWS issues the
+        next generation -- and the seam walks right as it does, which is the
+        direction that squeezes the forecast chip.
+
+        Measured on a production database: every generation is 156 records,
+        the drawn half runs 152-156, and gaps between generations run half an
+        hour to four.  CHIP_WIDTH is sized so the pair holds through twelve,
+        because chips that blink out and back on a healthy station are worse
+        than chips that are never shown at all.
+        """
+        for feed in range(144, self.FEED + 1):
+            svg = NWSSkin.sparkline(day_of_points(feed), week_of_obs(self.WEEK))
+            assert self._chips(svg) is not None, feed
+
+    def test_the_chips_are_placed_from_the_geometry_the_chart_was_drawn_with(self):
+        """Every number handed to the stylesheet comes from THIS chart rather
+        than being written down a second time in the css, so the placement
+        cannot drift from the room test that allowed it.
+
+        --chip-gap and --band-mid are bare NUMBERS of viewBox units, not
+        lengths: the stylesheet turns units into pixels with the container
+        query that also sizes the type, and a percentage gap inside a
+        max-content grid resolves against a width that is not yet known -- to
+        zero.
+        """
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(self.WEEK))
+        _obs, _fcast, css = self._chips(svg)
+        spec, sx = self._spec(svg), self._seam_x(svg)
+        assert abs(float(css['--seam'].rstrip('%')) - 100.0 * sx / 1040) < 0.01
+        # The pair straddles the rule, so each chip stands CHIP_GAP clear.
+        assert float(css['--chip-gap']) == 2 * NWSSkin.CHIP_GAP
+        assert float(css['--band-mid']) == spec['y0'] / 2.0
+
+    def test_the_chips_ride_outside_the_svg(self):
+        """The chart carries role="img" with an aria-label, which hides every
+        <text> inside it from assistive technology -- so as SVG the two words
+        naming the halves could be reached by no route at all.  As markup
+        beside the chart they are read like any other text on the page."""
+        svg = NWSSkin.sparkline(day_of_points(self.FEED), week_of_obs(self.WEEK))
+        assert svg.index('</svg>') < svg.index('seamlegend')
+        assert 'role="img"' in svg
+
+    def test_each_chip_carries_its_own_half_s_curve_color(self):
+        """The box IS the swatch, which is what the two floating words this
+        replaced could never be: --fc-muted is the recorded curve (.aline) and
+        --fc-hi is the forecast one (.tline).
 
         A source-text check, which is not proof that anything WORKS: the
-        computed color is probed in a real browser by tests/verify_theme.py.
+        computed fills are probed in a real browser by tests/verify_theme.py,
+        and tests/test_nws_css.py is what proves they are legible on each
+        other in both palettes.
         """
         css = open(CSS_PATH).read()
-        assert css.count('.seamlab{') == 1
-        assert css.index('.seamlab{') > css.index('.striplab{')
+        assert re.search(r'\.seamchip\{[^}]*background:var\(--fc-muted\)', css)
+        assert re.search(r'\.seamchip\.fcast\{background:var\(--fc-hi\)', css)
+        assert re.search(r'\.seamchip\{[^}]*color:var\(--fc-on-accent\)', css)
+        # line-height:1 is load-bearing, not tidiness: at `normal` the
+        # fallback face gives about 1.36, which takes the narrow-screen chip
+        # off the top of the viewBox and into the plot at once.  It is also
+        # what makes the box exactly 1.6em tall, which the band is cut for.
+        assert re.search(r'\.seamchip\{[^}]*line-height:1[;}]', css)
+
+    def test_the_readout_is_pushed_clear_of_the_chip_band(self):
+        """The crosshair readout is anchored to the top of the same wrapper
+        and is sized in PAGE pixels, while the chips are sized in the chart's
+        units -- two ladders that cross, so whether they collide depends on
+        the page width.  At 1280 they do not; at 800 the readout covered the
+        forecast chip by 69x20, hiding the label while the reader works the
+        chart.
+
+        The offset is the band, and NWSSkin owns that number.  A source-text
+        check that the two have not drifted apart; the real boxes are measured
+        in a browser by tests/verify_theme.py.
+        """
+        css = open(CSS_PATH).read()
+        band = 12 + NWSSkin.CHIP_BAND
+        assert ('.twoweek .readout{top:calc(100cqw * %d / 1040)}' % band) in css
+
+    def test_the_chips_are_sized_in_the_charts_own_units(self):
+        """An em ladder rooted in the page's 16px cannot do this: the chips
+        have to track the chart's other labels as the page narrows, and the
+        chart is stretched to the column width.  100cqw of the wrapper is
+        1040 viewBox units, which is what makes the two the same scale --
+        so the wrapper has to BE a container."""
+        css = open(CSS_PATH).read()
+        assert re.search(r'\.sparkwrap\{[^}]*container-type:inline-size', css)
+        for size in _css_sizes('seamchip'):
+            assert 'calc(100cqw * %d / 1040)' % size in css
 
     def test_the_two_week_chart_bakes_no_color_either(self):
         svg = NWSSkin.sparkline(day_of_points(), week_of_obs(24))

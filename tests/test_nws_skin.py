@@ -196,10 +196,32 @@ def pages_with_archive(tmp_path_factory):
         alerts      = make_alerts_json(make_alert()),
         # 18 hours, not a week: the one_hour fixture is trimmed to four
         # periods, so a week of archive would push the seam so far right that
-        # the label naming the forecast side has nowhere to sit.  The shape
-        # of a full fortnight is pinned in tests/test_nwsskin.py, which needs
-        # no database to draw one.
+        # the forecast half has nowhere to put a chip.  The shape of a full
+        # fortnight is pinned in tests/test_nwsskin.py, which needs no
+        # database to draw one.
         archive     = archive_records(18, gap=(10, 11, 12)))
+
+
+@pytest.fixture(scope='module')
+def pages_with_chips(tmp_path_factory):
+    """The same pages again, with the archive and the forecast the SAME
+    length, which is the only shape that puts the 7 Day chart's two seam
+    chips on a page rendered from the trimmed fixtures.
+
+    It earns a third render because the chips are the one part of that chart
+    that is not SVG: NWSSkin returns them as markup after the </svg>, and
+    only a real render proves the template places them inside the wrapper
+    that positions them.  Four hours, because the one_hour fixture is four
+    periods -- more archive than forecast pushes the seam right until the
+    forecast chip has nowhere to sit, which is exactly what the fixture above
+    demonstrates.
+    """
+    return render_skin(
+        tmp_path_factory.mktemp('skin_chips'),
+        one_hour    = freshen(load_fixture('one_hour.json')),
+        twelve_hour = freshen(load_fixture('twelve_hour.json')),
+        alerts      = make_alerts_json(make_alert()),
+        archive     = archive_records(4))
 
 
 class TestObservedWeek:
@@ -215,8 +237,40 @@ class TestObservedWeek:
         page = pages_with_archive['index.html']
         assert 'class="aline"' in page
         assert 'class="seam"' in page
-        assert '>Observed</text>' in page and '>Forecast</text>' in page
         assert 'Temperature, recorded and forecast' in page
+
+    def test_the_caption_counts_the_hours_that_were_actually_drawn(self, pages_with_archive):
+        """Eighteen hours of archive draw eighteen hours, so the caption says
+        so.  A fixed "the week this station recorded" was the identical claim
+        to a chip fixed at seven days, on the identical half -- and below the
+        width the chips need, this line is the only thing naming the halves at
+        all, which is where the wrong number survived longest."""
+        assert 'The past 18 hours this station recorded' in pages_with_archive['index.html']
+
+    def test_the_seam_chips_reach_the_page_outside_the_svg(self, pages_with_chips):
+        """The one part of the chart that is not SVG.  NWSSkin returns the
+        chips as markup after the </svg>, and the template has to place them
+        inside the wrapper that positions them -- which nothing short of a
+        render can show.  They are markup so the browser can size a filled box
+        around words whose length, type size and face all vary, and so a
+        screen reader can reach them at all: role="img" hides every <text>
+        inside the chart."""
+        page = pages_with_chips['index.html']
+        legend = re.search(r'<div class="seamlegend"[^>]*>(.*?)</div>', page)
+        assert legend, 'the chips did not reach the page'
+        assert 'PAST 4 HOURS ACTUAL' in legend.group(1)
+        assert 'FORECASTED TEMPERATURES' in legend.group(1)
+        # Inside the positioning wrapper, and after the chart it names.
+        # Counted FROM the wrapper: the first </svg> on the page closes the
+        # icon sprite, hundreds of lines above this.
+        wrap = page.index('<div class="sparkwrap chartwrap">')
+        assert wrap < page.index('</svg>', wrap) < page.index('seamlegend', wrap)
+
+    def test_a_short_history_gets_the_seam_without_the_chips(self, pages_with_archive):
+        """BOTH CHIPS OR NEITHER: a matched pair centered on the rule cannot
+        be dropped one at a time, because one alone would straddle the rule it
+        is meant to stand beside.  Here the forecast half is the narrow one."""
+        assert 'seamlegend' not in pages_with_archive['index.html']
 
     def test_an_outage_leaves_a_hole_rather_than_a_confident_line(self, pages_with_archive):
         """Three hours the station recorded nothing in.  A single stroke

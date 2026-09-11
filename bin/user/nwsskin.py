@@ -629,27 +629,213 @@ class NWSSkin(SearchList):
 
     # ---- the three charts -------------------------------------------------
 
-    # A seam label is only drawn with this much plot on its side of the seam.
-    # A station two hours old still gets its seam LINE; what it does not get
-    # is the word "Observed" hanging off the edge of the chart.
+    # ---- the two chips that name the halves --------------------------------
     #
-    # MEASURED, like PADL: at the phone's 22 units "Observed" advances 135.5
-    # and "Forecast" 132.6.  An earlier comment here estimated 125, which was
-    # 10 short -- the same guess-instead-of-measure that clipped the axis.
+    # PAST n DAYS ACTUAL and FORECASTED TEMPERATURES: one filled rectangle
+    # each side of the rule, both the same width, the words centered in them.
+    # Each box is filled with its own half's curve color, so the label IS the
+    # swatch -- which is what the two floating words this replaced could never
+    # be.  At chart size "Observed" and "Forecast" read as one phrase, and the
+    # full-height rule was already a patch for that.
     #
-    # 132 is nonetheless the right threshold, and not by luck: it is measured
-    # from x0, while the label may extend on past it into the GUTTER, which at
-    # the label band's height is empty (the axis labels sit lower, inside the
-    # plot).  At the limit the label's far edge lands at x0 + 132 - 14 - 135.5,
-    # which is 58 -- comfortably on the canvas.  The test is conservative by
-    # this much, so a label is sometimes dropped that would have fitted; that
-    # is the safe direction and not worth the arithmetic to reclaim.
-    SEAM_LABEL_ROOM = 132
+    # THEY ARE MARKUP, NOT SVG <text>, and that is the whole design.  Two
+    # reasons, either of which would be enough on its own:
+    #
+    #   NOTHING HERE COMPUTES A WIDTH.  A filled box has to be exactly as wide
+    #   as the words inside it, and the words are not one fixed string -- the
+    #   day count follows the archive -- while the stylesheet draws them at
+    #   three sizes as the page narrows, in whatever face the reader's machine
+    #   substitutes for Open Sans, which this skin names and deliberately does
+    #   not load.  A box sized in Python is a box sized for one string, at one
+    #   size, in one face, out of the dozen combinations that actually render.
+    #   A box sized by the browser is right in all of them -- and the equal
+    #   widths come free with it, from a two-column max-content grid.
+    #
+    #   AND IT IS THE ONLY WAY THE WORDS CAN BE READ AT ALL.  The chart
+    #   carries role="img" with an aria-label, which hides every <text> inside
+    #   it from assistive technology -- so the two words saying which half was
+    #   which could be reached by no route.  As markup beside the chart they
+    #   are read like any other text on the page.
+    #
+    # ARITHMETIC HERE DECIDES ONLY WHETHER THE PAIR IS SHOWN, never how wide
+    # it is.  So getting CHIP_WIDTH wrong drops a pair on a young station; it
+    # cannot clip ink on a station with a week behind it, which is every
+    # station that has been up a week.
+    #
+    # BOTH CHIPS OR NEITHER.  The old asymmetric words could be dropped one at
+    # a time; a matched pair centered on the rule cannot -- one of them alone
+    # would straddle the rule it is meant to stand beside.  On this geometry
+    # the pair fits from 134 observed hours up, so a station shows no chips
+    # for its first five and a half days and keeps them from then on; below
+    # that the caption under the chart is what names the two halves.
+    #
+    # GAP is the space each chip stands clear of the rule.  It lives HERE and
+    # only here: the stylesheet is handed twice this as the gutter the pair
+    # straddles, along with the x the rule was actually drawn at, so the
+    # placement cannot drift from the room test that allowed it.
+    CHIP_GAP = 8
+    # MEASURED, like PADL, and for the same reason: an estimate here is the
+    # mistake that clipped the axis in 6.1.1.  This is the widest chip the
+    # stylesheet ever draws -- FORECASTED TEMPERATURES at the narrow-screen 21
+    # units -- read off the rendered page in both engines at 423.1 units, and
+    # rounded UP by 2% for a machine whose substituted face is wider than this
+    # one's.  2% and not more, and the reason is the paragraph below.
+    #
+    # FORECASTED TEMPERATURES is much the longer of the two strings, so it
+    # sets the pair's width in every case: the longest the left chip can ever
+    # be is PAST 23 HOURS ACTUAL, which is shorter.  (That is what made ACTUAL
+    # free to add.  PAST n DAYS ACTUAL TEMPERATURES would not have been -- it
+    # overtakes the forecast chip and would widen both boxes.)
+    #
+    # SLACK IS NOT FREE HERE, which is what makes this different from PADL.
+    # It is bounded on BOTH sides, and the two bounds pull against each other:
+    #
+    #   too small and a chip overruns its side of the plot -- and the right
+    #   one has only 8 units of margin before the edge of the card, where the
+    #   left has the whole 76-unit axis gutter, empty at this height
+    #
+    #   too large and the pair vanishes from a station that is perfectly
+    #   healthy.  The forecast half is not a fixed 156 hours: ended periods
+    #   are dropped on read, so it shrinks by an hour every hour until NWS
+    #   issues the next generation.  Measured on this station's own database,
+    #   every generation is 156 records, the drawn half runs 152-156, and the
+    #   gaps between generations run half an hour to four hours.  432 holds
+    #   the pair through a TWELVE-hour gap; 445 would have lost it at four,
+    #   so the chips would have blinked out and back on a working station.
+    #
+    # The face this was measured in is DejaVu, which is what fontconfig
+    # substitutes here for a stack of 'Open Sans', arial, sans-serif -- the
+    # skin names Open Sans and deliberately loads no webfont.  DejaVu is at
+    # the WIDE end of the common sans faces (Arial and Helvetica are
+    # narrower, and Open Sans itself measures 374), so 423 is close to a
+    # ceiling rather than a typical value, and 2% on top of it is real room.
+    #
+    # RE-MEASURE WHENEVER THE STRINGS OR .seamchip's SIZE MOVE.
+    # tests/verify_theme.py measures the real chips in a real browser, prints
+    # what it saw and FAILS if one is wider than this, so it cannot quietly go
+    # stale.
+    CHIP_WIDTH = 432
+    CHIP_ROOM = CHIP_WIDTH + CHIP_GAP
+    # How far the plot is pushed down to open the band the chips sit in.  The
+    # chip is 1.6 times its type size tall -- line-height:1 plus .3em of
+    # padding above and below -- which is 33.6 units at the largest type the
+    # stylesheet ever gives them, the narrow-screen 21, and the band it is
+    # centered in is this plus the 12 units of top padding the plot has
+    # anyway.  28 leaves it 3.2 clear top and bottom.  The stylesheet does not
+    # know this number: it is handed the band's midpoint.
+    CHIP_BAND = 28
 
-    # Clearance between the rule and each label.  14, not 6: the rule now runs
-    # up THROUGH the label band (see sparkline), and it can only divide the two
-    # words if there is room for it to be seen between them.
-    SEAM_LABEL_GAP = 14
+    @staticmethod
+    def _observed_span(past: List[Dict[str, Any]]) -> int:
+        """Hours of the observed half that have a reading BEHIND them: the
+        index of the last row with an outTemp, plus one.
+
+        NOT len(past), which is how wide the half is DRAWN.  observations()
+        drops leading empty hours but deliberately keeps trailing ones -- a
+        gap between the last reading and the forecast is exactly the news that
+        weewxd stopped -- so a station whose sensor died six days ago still
+        returns a full 168 rows, 24 of them with anything in them.  Counting
+        the rows there printed PAST 7 DAYS ACTUAL over a curve that stops six
+        days back, and "The past 7 days this station recorded" under it, which
+        is the class of claim these labels were written to retire.
+
+        Rounding DOWN to the last reading is the same rule _span_words works
+        to: a label may understate what was drawn, never overstate it.  A
+        station that missed the last three hours says 6 days rather than 7,
+        and that is the safe direction.
+        """
+        for i in range(len(past) - 1, -1, -1):
+            if past[i]['outTemp'] is not None:
+                return i + 1
+        return 0
+
+    @staticmethod
+    def _span_words(hours: int) -> str:
+        """"7 DAYS" / "3 DAYS" / "18 HOURS" for a half that many hours wide.
+
+        THE CLAIM HAS TO MATCH THE CHART.  The observed half is as wide as the
+        archive is long -- three days of archive draw three days, by design,
+        and observations() drops leading empty hours to make that so -- and a
+        chip that always said 7 would be a printed lie on a station that had
+        just been built.
+
+        ROUNDED DOWN, and that is the whole of the rule: a label may
+        understate what was drawn, never overstate it.  Under a day it counts
+        hours instead, because the day count is floored and a five-hour-old
+        station would otherwise read "0 DAYS".
+        """
+        if hours >= 24:
+            days = hours // 24
+            return '%d DAY%s' % (days, '' if days == 1 else 'S')
+        return '%d HOUR%s' % (hours, '' if hours == 1 else 'S')
+
+    @staticmethod
+    def _seam_chips(width: int, y0: int, sx: float, x0: float, x1: float,
+                    n_obs: int) -> str:
+        """The two chips, as markup placed over the chart's label band.
+
+        Empty when either side is too narrow to hold one -- see CHIP_ROOM
+        above for why it is both or neither.
+
+        ONLY THE OBSERVED HALF IS COUNTED.  The forecast chip takes no span
+        deliberately and so needs no number: the NWS hourly feed is 156
+        records and the chart plots from the current hour, so that half is
+        6.5 days at its widest, and a day count there would read 6 while
+        every reader took the chart for a week of forecast.
+        """
+        if min(sx - x0, x1 - sx) < NWSSkin.CHIP_ROOM:
+            return ''
+        # THREE NUMBERS, and every one comes from the geometry this chart was
+        # actually drawn with rather than being written down a second time in
+        # the stylesheet:
+        #   --seam       the rule's own x, as a percentage of the chart's
+        #                width -- which is the wrapper's width, since the svg
+        #                is width:100% of it
+        #   --chip-gap   the gutter the pair straddles the rule with, in
+        #                viewBox units, so the placement cannot drift from the
+        #                room test that allowed it
+        #   --band-mid   half the plot's top edge, which is the middle of the
+        #                band the chips are centered in
+        # Bare numbers rather than lengths for the last two: the stylesheet
+        # turns units into pixels with the container query that also sizes the
+        # type, and a percentage gap inside a max-content grid resolves
+        # against a width that is not yet known -- to zero.
+        return ('<div class="seamlegend" style="--seam:%.2f%%;--chip-gap:%d;'
+                '--band-mid:%.1f">'
+                '<span class="seamchip obs">PAST %s ACTUAL</span>'
+                '<span class="seamchip fcast">FORECASTED TEMPERATURES</span>'
+                '</div>'
+                % (100.0 * sx / width, 2 * NWSSkin.CHIP_GAP, y0 / 2.0,
+                   NWSSkin._span_words(n_obs)))
+
+    @staticmethod
+    def sparkline_caption(past: Optional[List[Dict[str, Any]]] = None) -> str:
+        """The words under the 7 Day chart, matching what was drawn.
+
+        IT COUNTED THE SAME WEEK THE CHIP DOES, one line below it: "the week
+        this station recorded" was the identical claim to a chip fixed at
+        seven days, on the identical half, and wrong on the identical station.
+        Worse where it survives longest -- below CHIP_ROOM the chips go and
+        this sentence is the only thing naming the halves at all, so the
+        shorter the archive, the more weight the wrong number carried.  It
+        takes its span from _span_words, so the two cannot disagree.
+
+        WHAT IS DELIBERATELY LEFT: "the week the Weather Service forecasts".
+        That half is 6.5 days, so "week" is loose -- but it is loose the way a
+        reader's own "the week ahead" is loose, and it names no number to be
+        wrong about.
+        """
+        # The hours with readings, not the width of the half -- see
+        # _observed_span.  A half that is all holes has nothing to claim and
+        # falls through to the fresh-install sentence, which is true of it.
+        recorded = NWSSkin._observed_span(list(past or []))
+        if recorded:
+            return ('The past %s this station recorded, then the week the '
+                    'Weather Service forecasts, on one temperature scale.  '
+                    'Night shaded.' % NWSSkin._span_words(recorded).lower())
+        return ('Forecast temperature every hour of the week, night shaded.  '
+                'Once this station has archive records behind it, the week it '
+                'recorded is drawn here too.')
 
     @staticmethod
     def sparkline(hours: List[Dict[str, Any]],
@@ -681,15 +867,15 @@ class NWSSkin(SearchList):
         series = past + list(hours)
         seam_i = len(past)
         W = 1040
-        # The label band above the plot exists only when there is a seam to
-        # label, so the degraded chart keeps its old proportions exactly.
+        # The chip band above the plot exists only when there is a seam to
+        # name, so the degraded chart keeps its old proportions exactly.
         #
-        # Its depth is set by the seam RULE, not by the letters: the rule
-        # starts a full label-height (22, the phone's size) above the
-        # baseline so that it clears the tops of the letters it divides, so
-        # LY must be at least 22 or the rule begins off the top of the
-        # viewBox.  LY 24 puts its top at 2.
-        LY, H, y0 = 24, (154 if seam_i else 132), (34 if seam_i else 12)
+        # NOTHING HERE PLACES THE CHIPS VERTICALLY.  Its depth is CHIP_BAND,
+        # which is sized by the tallest type the stylesheet ever gives them
+        # (the narrow-screen 21 units, in the same viewBox units the geometry
+        # is written in), and the stylesheet centers them in it.
+        band = NWSSkin.CHIP_BAND if seam_i else 0
+        H, y0 = 132 + band, 12 + band
         x0, x1, y1 = NWSSkin.PADL, W - 8, y0 + 88
         px = NWSSkin._geom(series, x0, x1)
         # Observed hours can be empty; forecast hours cannot (points() drops
@@ -714,7 +900,7 @@ class NWSSkin(SearchList):
             if lt.hour == 12:
                 labels.append('<text x="%.1f" y="%d" class="xlab">%s</text>'
                               % (px(i), H - 6, lt.strftime('%a')))
-        seam = ''
+        seam, legend = '', ''
         if seam_i:
             # BETWEEN the two points, not on one of them.  Drawn at px(seam_i)
             # the rule touches the first forecast point while standing a full
@@ -723,45 +909,50 @@ class NWSSkin(SearchList):
             # reading and the first prediction; the line belongs between them,
             # clear of both by the same amount.
             sx = (px(seam_i - 1) + px(seam_i)) / 2.0
-            # THE RULE RUNS THE FULL HEIGHT, label band included.  Stopped at
-            # the top of the plot it left the two words side by side with
-            # nothing between them, and at this size they read as one phrase --
-            # "OBSERVED FORECAST" -- which is worse than the bare line they
-            # were added to explain.  The line is what makes them two labels.
+            # THE RULE RUNS THE FULL HEIGHT, chip band included.  Stopped at
+            # the top of the plot it left the two labels side by side with
+            # nothing between them, which at this size reads as one phrase
+            # rather than two labels.  The line is what makes them two; the
+            # chips stand CHIP_GAP clear either side of it for the same reason.
             #
-            # The top is sized by the PHONE's 22-unit labels, not the desktop's
-            # 10: sized by the smaller one the rule starts below the top of the
-            # phone's letters and stops dividing them.  Same rule as PADL above
-            # -- geometry in user units is sized by the LARGEST type the
-            # stylesheet ever gives it, not by the one in front of you.
+            # From y=3, which is the top of the BAND rather than the top of
+            # the chips: the chips are opaque and cover the rule where they
+            # sit, so what a reader sees is the gutter between them, plus a
+            # short stub above them wherever the type is smaller than the
+            # narrow-screen size the band was cut for.
             seam = ('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" class="seam"/>'
-                    % (sx, LY - 22, sx, y1))
-            gap = NWSSkin.SEAM_LABEL_GAP
-            if sx - x0 >= NWSSkin.SEAM_LABEL_ROOM:
-                seam += ('<text x="%.1f" y="%d" class="striplab seamlab" '
-                         'text-anchor="end">Observed</text>' % (sx - gap, LY))
-            if x1 - sx >= NWSSkin.SEAM_LABEL_ROOM:
-                seam += ('<text x="%.1f" y="%d" class="striplab seamlab">Forecast</text>'
-                         % (sx + gap, LY))
+                    % (sx, 3, sx, y1))
+            legend = NWSSkin._seam_chips(W, y0, sx, x0, x1,
+                                         NWSSkin._observed_span(past))
         # Emitted only when there is something to draw: an empty d= would put
         # a <path> that draws nothing into every fresh install's page.
         recorded = NWSSkin._path(past, px, py, 'outTemp', gaps=True)
         if recorded:
             recorded = ('<path d="%s" class="aline"/>%s'
                         % (recorded, NWSSkin._orphans(past, px, py, 'outTemp')))
+        # THE SAME SPAN, IN THE SAME WORDS, as the chips and the caption: this
+        # sentence is what a screen reader gets INSTEAD of the picture, so "the
+        # week just gone" over three days of archive is the one place the wrong
+        # number cannot be checked against what is on the screen.
+        label = ('Temperature every hour: the past %s this station recorded, then '
+                 'the week the National Weather Service forecasts, night shaded'
+                 % NWSSkin._span_words(NWSSkin._observed_span(past)).lower()
+                 if seam_i else
+                 'Forecast temperature every hour across the week, night shaded')
+        # The chips ride OUTSIDE the svg, in the wrapper the template already
+        # makes position:relative -- see CHIP_GAP for why they are markup.  The
+        # template places what this returns as one thing; there is nothing for
+        # it to position, and nothing here to recompute the geometry from.
         return ('<svg viewBox="0 0 %d %d" class="sparkcurve chart" data-chart=\'%s\' '
                 'tabindex="0" role="img" aria-label="%s">%s%s%s%s%s%s'
-                '<path d="%s" class="tline"/>%s%s</svg>'
+                '<path d="%s" class="tline"/>%s%s</svg>%s'
                 % (W, H, NWSSkin._series(series, x0, x1, y0, y1, lo_ax, span,
                                          with_dew_and_rain=False, past_n=seam_i),
-                   ('Temperature every hour: the week this station recorded, then the '
-                    'week the National Weather Service forecasts, night shaded'
-                    if seam_i else
-                    'Forecast temperature every hour across the week, night shaded'),
+                   label,
                    NWSSkin._night_bands(series, px, y0, y1), ''.join(grid),
                    ''.join(ticks), ''.join(ylab), seam, recorded,
                    NWSSkin._path(hours, px, py, 'outTemp', offset=seam_i),
-                   NWSSkin.CROSS, ''.join(labels)))
+                   NWSSkin.CROSS, ''.join(labels), legend))
 
     @staticmethod
     def week_chart(hours: List[Dict[str, Any]]) -> str:
