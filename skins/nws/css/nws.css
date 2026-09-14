@@ -396,6 +396,12 @@
 .fc .sev-moderate .sevchip{color:var(--fc-sev-moderate);border-color:var(--fc-sev-moderate)}
 .fc .sev-minor{border-left-color:var(--fc-sev-minor)}
 .fc .sev-minor .sevchip{color:var(--fc-sev-minor);border-color:var(--fc-sev-minor)}
+/* What NWS recommends doing, in a reader's words.  Outlined and uncolored:
+   the severity chip beside it carries the color, and the status badge stays
+   the one filled chip on the row. */
+.fc .alert .respchip{font-size:.72em;letter-spacing:.09em;text-transform:uppercase;
+                     font-weight:600;padding:3px 9px;border-radius:11px;flex:none;
+                     color:var(--fc-ink-3);border:1px solid var(--fc-rule)}
 /* font-size:1em is load-bearing.  .ahead is a HEADING element, so without it
    the browser's default heading size leaks into every em inside -- the event
    name, the badge and the note are all sized relative to their parent, and
@@ -417,6 +423,12 @@
 .fc .aline{margin:0;font-size:1.02em;line-height:1.5;max-width:74ch;color:var(--fc-ink-2)}
 .fc .asub{margin:8px 0 0;font-size:.86em;color:var(--fc-muted);max-width:82ch;
           line-height:1.5}
+/* The areas the alert covers.  A long list folds behind its count with no
+   script: <details> does it. */
+.fc .aarea{margin:8px 0 0;font-size:.86em;color:var(--fc-muted);max-width:82ch;
+           line-height:1.5}
+.fc details.aarea summary{cursor:pointer}
+.fc details.aarea p{margin:4px 0 0}
 .fc .awindow{display:flex;align-items:center;gap:12px;margin:16px 0;font-size:.8em;
              color:var(--fc-muted);font-variant-numeric:tabular-nums}
 .fc .aw-t{flex:none}

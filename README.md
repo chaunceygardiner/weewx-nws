@@ -14,10 +14,6 @@ sample report, and troubleshooting — with search.
 `dateutil` packages (installing them is covered below).  WeeWX 4 users: weewx-nws 4.5.7 was
 the last release to support WeeWX 4.**
 
-**If you are updating from a version earlier than 4.5.4, you MUST delete the nws database
-(nws.sdb) before restarting weewx.  The database schema has changed and there is no
-migration.  See [Upgrading](https://chaunceygardiner.github.io/weewx-nws/upgrading.html).**
-
 ## Description
 
 A WeeWX extension that fetches National Weather Service forecasts and alerts for the
@@ -73,7 +69,8 @@ its **7 Day**, **Hourly** and **Alerts** tabs are driven by these tags.
 
 - **Alerts handled properly.**  Test, exercise, system and draft alerts ignored; superseded
   alerts dropped; expired alerts deleted; and a download of zero alerts clears the stale
-  ones, so an empty list means NWS has nothing for you.
+  ones, so an empty list means NWS has nothing for you.  Each alert keeps the areas it
+  covers and what NWS recommends doing, and the sample report's alert cards show both.
 
 - **Diagnostics built in.**  `nws.py` runs from the command line: see exactly what NWS is
   serving your location right now, run every active US alert through the parser, check your
@@ -149,8 +146,8 @@ and what to do when
 [something is not working](https://chaunceygardiner.github.io/weewx-nws/troubleshooting.html).
 
 Upgrading from an earlier release?  See
-[Upgrading](https://chaunceygardiner.github.io/weewx-nws/upgrading.html) — which release
-requires deleting `nws.sdb`, and the hard-coded gridpoint URLs that are now doing harm.
+[Upgrading](https://chaunceygardiner.github.io/weewx-nws/upgrading.html) — why there is
+nothing to do about the database, and the hard-coded gridpoint URLs that are now doing harm.
 The full history is in
 [changes.txt](https://github.com/chaunceygardiner/weewx-nws/blob/master/changes.txt).
 

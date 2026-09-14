@@ -73,7 +73,10 @@ then most serious first.  Each alert is a card whose severity is **named** in a 
 beside the event — `SEVERE`, `MODERATE` — and echoed by the colored rail down its edge, with
 a status
 badge, a bar showing where now falls between the alert's onset and its end, the
-description's own sections as real structure, and any instructions called out.
+description's own sections as real structure, and any instructions called out.  A second,
+uncolored chip gives what NWS recommends doing — `AVOID`, `ACT NOW`, `TAKE SHELTER` — and a
+line under the headline names the areas the alert covers, folding a long list behind its
+count.
 
 ![The sample report's alerts page, with a flood warning in effect](images/sample-report-alerts.png)
 

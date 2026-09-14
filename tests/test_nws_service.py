@@ -573,6 +573,11 @@ class TestSearchList:
         assert alert['severity'] == 'Moderate'
         for field in ('effective', 'onset', 'expires', 'ends', 'sent'):
             assert isinstance(alert[field], weewx.units.ValueHelper), field
+        # Stored and read back since 6.1.2; parameters comes back parsed.
+        props = make_alert()['properties']
+        assert alert['areaDesc'] == props['areaDesc']
+        assert alert['response'] == props['response']
+        assert alert['parameters'] == props['parameters']
 
     def test_alert_count(self, search_list):
         assert search_list.alert_count() == 1

@@ -121,6 +121,8 @@ Four things are worth knowing about what comes back:
 #for $alert in $nwsforecast.alerts()
   $alert.event         ## "Heat Advisory", "Red Flag Warning"...
   $alert.nwsHeadline
+  $alert.areaDesc      ## "Presque Isle; Alpena; Alcona"
+  $alert.response      ## CAP's recommended action: "Avoid", "Shelter", "Execute"...
   $alert.description
   $alert.instructions
 #end for

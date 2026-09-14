@@ -387,6 +387,8 @@ def make_alert(**overrides) -> Dict[str, Any]:
         'headline'    : 'Heat Advisory issued July 12',
         'description' : 'Temperatures up to 105 expected.',
         'instruction' : 'Drink plenty of fluids.',
+        'areaDesc'    : 'Santa Clara Valley Including San Jose; Santa Cruz Mountains',
+        'response'    : 'Execute',
         'sender'      : 'w-nws.webmaster@noaa.gov',
         'senderName'  : 'NWS San Francisco CA',
         'sent'        : iso(now - datetime.timedelta(hours=1)),
@@ -537,11 +539,46 @@ class TestComposeAlertRecords:
         records = compose_alerts(j)
         assert len(records) == 1
 
+    def test_area_response_and_parameters_are_stored(self):
+        """areaDesc and response are on every alert NWS sends (321 of 321 on
+        2026-09-14).  parameters is kept whole, as JSON, because most of what
+        it can carry had not been seen in the feed when it was added."""
+        params = {'NWSheadline': ['WIND ADVISORY IN EFFECT'],
+                  'maxWindGust': ['40 MPH'], 'VTEC': ['/O.NEW.KMTR.WI.Y.0001/']}
+        alert = make_alert(areaDesc='Presque Isle; Alpena', response='Avoid',
+                           parameters=params)
+        record = compose_alerts(make_alerts_json(alert))[0]
+        assert record.areaDesc == 'Presque Isle; Alpena'
+        assert record.response == 'Avoid'
+        assert json.loads(record.parameters) == params
+
+    def test_an_alert_without_area_or_response_still_composes(self):
+        """Neither is required: a missing one is no reason to drop an alert."""
+        alert = make_alert()
+        del alert['properties']['areaDesc'], alert['properties']['response']
+        j = make_alerts_json(alert)
+        assert sanity_check(j, ForecastType.ALERTS) is None
+        record = compose_alerts(j)[0]
+        assert record.areaDesc is None and record.response is None
+
     def test_nws_headline_parameter(self):
         j = make_alerts_json(make_alert(
             parameters = {'NWSheadline': ['HEAT ADVISORY IN EFFECT UNTIL 8 PM']}))
         record = compose_alerts(j)[0]
         assert record.nwsHeadline == 'HEAT ADVISORY IN EFFECT UNTIL 8 PM'
+
+    def test_every_nws_headline_is_kept(self):
+        """NWS sends NWSheadline as a list.  Through 6.1.1 only the last
+        entry survived."""
+        j = make_alerts_json(make_alert(
+            parameters = {'NWSheadline': ['FLOOD WARNING NOW IN EFFECT', 'RIVER CRESTING TUESDAY']}))
+        assert compose_alerts(j)[0].nwsHeadline == 'FLOOD WARNING NOW IN EFFECT, RIVER CRESTING TUESDAY'
+
+    def test_an_empty_nws_headline_list_keeps_the_alert(self):
+        """Through 6.1.1 an empty list raised inside the loop's aftermath and
+        the alert was skipped as malformed."""
+        records = compose_alerts(make_alerts_json(make_alert(parameters={'NWSheadline': []})))
+        assert len(records) == 1 and records[0].nwsHeadline is None
 
 
 class TestEndToEndParse:

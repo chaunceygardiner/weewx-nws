@@ -132,6 +132,14 @@ all.  Three of the four are tags — see
   #end if
   <p>$alert.event, issued $alert.effective</p>
   <p>Severity: $alert.severity · Certainty: $alert.certainty · Urgency: $alert.urgency</p>
+  ## Four alerts in ten have no WHERE section in their description, so say it here.
+  #if $alert.areaDesc
+    <p>Covers $alert.areaDesc</p>
+  #end if
+  ## CAP's one-word recommended action; "None" says nothing.
+  #if $alert.response and $alert.response != 'None'
+    <p>NWS recommends: $alert.response</p>
+  #end if
 
   ## The description as real structure: labeled sections, paragraphs, bullets.
   #for $block in $nwsforecast.parse_description($alert.description)

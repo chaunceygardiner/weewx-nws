@@ -77,6 +77,11 @@ consequences:
 
 ## Notable changes for existing stations
 
+**6.1.2** — alerts keep three more fields NWS sends: `areaDesc`, the areas an alert covers;
+`response`, CAP's recommended action; and `parameters`, NWS's own parameters for the alert.
+See [Alert fields](fields.md#alert-fields).  It is a schema change, and there is nothing to
+do: the database rebuilds itself on the first start, as described above.
+
 **6.1** — three things.
 
 **If you print these tags in a skin of your own, delete any `$unit.label.…` you append

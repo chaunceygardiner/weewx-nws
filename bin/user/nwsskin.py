@@ -1147,6 +1147,17 @@ class NWSSkin(SearchList):
         return ('<b>%s</b> &mdash; none in effect now.'
                 % NWSSkin._plural(len(alerts), 'alert'))
 
+    # CAP's <response> as a reader would say it.  'None' says nothing and gets
+    # no chip; a value CAP adds later is shown as NWS spelled it.
+    RESPONSE_WORDS = {'Shelter': 'Take shelter', 'Evacuate': 'Evacuate',
+                      'Prepare': 'Prepare', 'Execute': 'Act now', 'Avoid': 'Avoid',
+                      'Monitor': 'Monitor', 'Assess': 'Assess', 'AllClear': 'All clear'}
+
+    # Up to this many areas are listed on the card; more fold behind their
+    # count.  Most alerts name one, 90% name eight or fewer, and a marine
+    # alert can name fifty-five (national feed, 2026-09-14).
+    AREA_INLINE_MAX = 4
+
     @staticmethod
     def card(alert: Dict[str, Any]) -> str:
         """One alert as a finished <section>."""
@@ -1242,6 +1253,23 @@ class NWSSkin(SearchList):
             headline = NWSSkin.esc(alert['headline'])
             sub = ''
 
+        response = alert['response']
+        respchip = ('<span class="respchip">%s</span>'
+                    % NWSSkin.esc(NWSSkin.RESPONSE_WORDS.get(response, response))
+                    if response and response != 'None' else '')
+        # Where it applies.  About four alerts in ten have no WHERE section in
+        # their description -- nearly all marine -- so this is often the only
+        # place a reader learns it.
+        areas = [a.strip() for a in (alert['areaDesc'] or '').split(';') if a.strip()]
+        if not areas:
+            covers = ''
+        elif len(areas) <= NWSSkin.AREA_INLINE_MAX:
+            covers = '<p class="aarea">Covers %s</p>' % NWSSkin.esc('; '.join(areas))
+        else:
+            covers = ('<details class="aarea"><summary>Covers %d areas</summary>'
+                      '<p>%s</p></details>'
+                      % (len(areas), NWSSkin.esc('; '.join(areas))))
+
         severity = alert['severity'] or 'Unknown'
         attrs = ' data-onset="%d"' % onset
         if not open_ended:
@@ -1251,11 +1279,11 @@ class NWSSkin(SearchList):
 
         return (
             '<section class="alert sev-%s"%s>'
-            '<h2 class="ahead"><span class="sevchip">%s</span>'
+            '<h2 class="ahead"><span class="sevchip">%s</span>%s'
             '<span class="aevent">%s</span>'
             '<span class="badge %s">%s</span>'
             '<span class="anote" data-ends-text="%s">%s</span></h2>'
-            '<p class="aline">%s</p>%s%s'
+            '<p class="aline">%s</p>%s%s%s'
             '<div class="asecs">%s</div>%s'
             '<p class="ameta">%s &middot; %s &middot; %s certainty &middot; '
             '%s urgency &middot; issued %s</p>'
@@ -1269,9 +1297,9 @@ class NWSSkin(SearchList):
             # something while keeping the key in eight-point gray at the foot
             # of each card.  The footer no longer repeats it; certainty and
             # urgency stay there, being genuinely secondary.
-            % (NWSSkin.esc(severity.lower()), attrs, NWSSkin.esc(severity),
+            % (NWSSkin.esc(severity.lower()), attrs, NWSSkin.esc(severity), respchip,
                NWSSkin.esc(alert['event']),
-               badge_cls, badge, ends_text, note, headline, sub, window,
+               badge_cls, badge, ends_text, note, headline, sub, covers, window,
                body, todo, NWSSkin.esc(alert['senderName']),
                NWSSkin.esc(alert['messageType']),
                NWSSkin.esc(alert['certainty']), NWSSkin.esc(alert['urgency']),

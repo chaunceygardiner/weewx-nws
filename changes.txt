@@ -42,6 +42,20 @@ nws change history
   light mode two colors moved: the page title's blue is a shade darker,
   and the chart axes and the 7 Day chart's dividing rule are a darker
   gray.
+- Alerts now keep three more things NWS sends: the areas an alert covers
+  (areaDesc), CAP's recommended action (response), and NWS's whole
+  parameters object.  $nwsforecast.alerts() returns all three, the last as
+  a dict.  The sample report's alert cards show the first two: a chip with
+  the action in plain words (ACT NOW, TAKE SHELTER, AVOID) and a line naming
+  the areas covered, with a long list folded behind its count.  About four
+  alerts in ten have no WHERE section in their description, so this line
+  is often the only place the areas appear.  The parameters are stored for
+  later use; nothing shows them yet.  This is a schema change, and the
+  database rebuilds itself on the first start, as it has since 6.1: the
+  next poll refills it.
+- Fixed: an alert carrying more than one NWS headline kept only the last,
+  and one whose headline list was empty was dropped as malformed.  Every
+  headline is now kept, in order.
 - Fixed: an alert that gives no onset showed its start as N/A.  Its window
   bar was already drawn from the message's effective time, which is when
   CAP says such an alert takes effect, but the time printed at the start of

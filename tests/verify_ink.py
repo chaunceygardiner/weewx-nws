@@ -37,7 +37,8 @@ HOW.  For each scenario, page, theme, width and STATE:
      The WORST ground is the one reported.
 
 STATES.  A page at load is not the whole page.  Every visible <button> is
-clicked in turn (the Hourly page's day tabs), each chart is hovered on both
+clicked in turn (the Hourly page's day tabs), every <details> is opened (an
+alert's folded list of areas), each chart is hovered on both
 halves (the readout, and the crosshair's past state), and a nav tab that is
 not current is hovered.  The alerts page is also loaded with the browser's
 clock three and a half hours ahead: alerts() never returns an ended alert,
@@ -234,11 +235,13 @@ with sync_playwright() as pw:
                     page = fresh()
                     measure(page, dict(base, state='load'))
                     buttons = page.evaluate(BUTTONS)
+                    summaries = page.locator('details > summary').count()
                     charts = page.locator('svg.chart').count()
                     nav = page.locator('.nav a:not(.current)').count()
                     page.close()
 
                     drives = [('button %d: %s' % (i, t), 'click', i) for i, t in buttons]
+                    drives += [('summary %d opened' % i, 'summary', i) for i in range(summaries)]
                     for c in range(charts):
                         for frac in (0.25, 0.75):
                             drives.append(('chart %d hover at %d%%' % (c, frac * 100), 'chart', (c, frac)))
@@ -260,6 +263,13 @@ with sync_playwright() as pw:
                         if kind == 'clock':
                             if not page.locator('.badge.past').count():
                                 problems.append('%s %s: NOT DRIVEN (no Expired badge)' % (base, state))
+                                page.close()
+                                continue
+                        elif kind == 'summary':
+                            page.locator('details > summary').nth(arg).click()
+                            if not page.evaluate('(i) => document.querySelectorAll("details > summary")[i]'
+                                                 '.parentElement.open', arg):
+                                problems.append('%s %s: NOT DRIVEN (details did not open)' % (base, state))
                                 page.close()
                                 continue
                         elif kind == 'click':
@@ -303,7 +313,9 @@ def render(base: str) -> Dict[str, str]:
         # In effect with no onset and no end, as some real alerts are: the
         # window falls back to the message's own times.
         make_alert(id='urn:ink.extreme', severity='Extreme', event='Hurricane Warning',
-                   onset=None, ends=None),
+                   onset=None, ends=None, response='Shelter',
+                   # Enough areas to fold: the summary is a control to click.
+                   areaDesc='; '.join('Coastal Zone %d' % i for i in range(12))),
         # Begins later: the warn badge.
         make_alert(id='urn:ink.moderate', severity='Moderate', event='Wind Advisory',
                    onset=hours(5), ends=hours(9), expires=hours(9)),
@@ -403,7 +415,8 @@ def main() -> int:
             assert os.path.isfile(os.path.join(root, name)), (root, name)
     alerts_page = open(os.path.join(roots['alerts'], 'alerts.html')).read()
     for cls in ('badge on', 'badge soon', '<i>(expires)</i>', '<i>(effective)</i>',
-                '<span class="aw-t">&ndash; ', 'sev-extreme',
+                '<span class="aw-t">&ndash; ', 'class="respchip"', '<details class="aarea">',
+                '<p class="aarea">', 'sev-extreme',
                 'sev-severe', 'sev-moderate', 'sev-minor'):
         # A state the render never produced is a state nothing measured.
         if cls not in alerts_page:

@@ -55,7 +55,8 @@ actually fills each one in.
 
 The alert-only fields — `id`, `expirationTime`, `instruction`, `sent`, `status`,
 `messageType`, `category`, `severity`, `certainty`, `urgency`, `sender`, `senderName`,
-`nwsHeadline` — are present on a forecast period too, always `None`.
+`nwsHeadline`, `areaDesc`, `response`, `parameters` — are present on a forecast period
+too, always `None`.
 
 ### Wind speed comes in two parts
 
@@ -109,6 +110,9 @@ weewx-nws's names read better.
 | `category` | string | Met for weather; Geo, Safety, Fire and the rest of CAP's list exist. |
 | `sender` | string | `w-nws.webmaster@noaa.gov`. |
 | `senderName` | string | The issuing office: "NWS San Francisco CA". |
+| `areaDesc` | string or `None` | The areas the alert covers, as NWS lists them, separated by semicolons: "Presque Isle; Alpena; Alcona".  Most alerts name one; a marine alert can name dozens of zones.  Since 6.1.2. |
+| `response` | string or `None` | CAP's recommended action, one word: Shelter, Evacuate, Prepare, Execute, Avoid, Monitor, Assess, AllClear or None.  Since 6.1.2. |
+| `parameters` | dict | NWS's own parameters for the alert, each value a list: `VTEC`, `NWSheadline`, and on some storm warnings `maxWindGust`, `maxHailSize` and the like.  Stored whole, so what NWS adds later is here too.  Empty when none were stored.  Since 6.1.2. |
 | `id` | string | NWS's identifier for the alert, e.g. `urn:oid:2.49.0.1.840.0.b46a...001.1`. |
 | `latitude`, `longitude` | number | The point the alerts were requested for. |
 

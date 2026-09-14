@@ -93,8 +93,10 @@ def wind_period(speed, speed2=None, direction=270.0):
 
 def alert_rec(onset=None, ends=None, expires=None, effective=None,
               severity='Severe', event='Heat Advisory', headline='hot',
-              nws_headline=None, description='Some prose.', instructions=None):
+              nws_headline=None, description='Some prose.', instructions=None,
+              area=None, response=None):
     return {
+        'areaDesc': area, 'response': response,
         'onset': vh(onset), 'ends': vh(ends), 'expires': vh(expires),
         'effective': vh(effective if effective is not None else onset),
         'severity': severity, 'event': event, 'headline': headline,
@@ -1318,6 +1320,34 @@ class TestAlertCard:
                                      expires=now + 60, severity=None))
         assert 'sev-unknown' in out
         assert '<span class="sevchip">Unknown</span>' in out
+
+    def test_a_response_becomes_a_chip_in_a_readers_words(self):
+        now = datetime.datetime.now().timestamp()
+        for cap, words in (('Execute', 'Act now'), ('Shelter', 'Take shelter'),
+                           ('AllClear', 'All clear'), ('Avoid', 'Avoid'),
+                           ('SomethingNew', 'SomethingNew')):
+            out = NWSSkin.card(alert_rec(onset=now - 60, ends=now + 60,
+                                         expires=now + 60, response=cap))
+            assert '<span class="respchip">%s</span>' % words in out, cap
+
+    def test_no_response_or_none_gets_no_chip(self):
+        now = datetime.datetime.now().timestamp()
+        for cap in (None, 'None'):
+            out = NWSSkin.card(alert_rec(onset=now - 60, ends=now + 60,
+                                         expires=now + 60, response=cap))
+            assert 'respchip' not in out, cap
+
+    def test_a_short_area_list_is_inline_and_a_long_one_folds(self):
+        """A marine alert can name fifty-odd zones; the card lists a few and
+        folds the rest behind their count, without script."""
+        now = datetime.datetime.now().timestamp()
+        def card(area):
+            return NWSSkin.card(alert_rec(onset=now - 60, ends=now + 60,
+                                          expires=now + 60, area=area))
+        assert '<p class="aarea">Covers Presque Isle; Alpena</p>' in card('Presque Isle; Alpena')
+        many = card('; '.join('Zone %d' % i for i in range(12)))
+        assert '<summary>Covers 12 areas</summary>' in many and 'Zone 11' in many
+        assert 'aarea' not in card(None) and 'aarea' not in card('')
 
     def test_an_instruction_gets_a_callout_and_its_absence_does_not(self):
         """Four alerts in five carry no instruction; they get no empty box."""
