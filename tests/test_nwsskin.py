@@ -1195,24 +1195,37 @@ class TestAlertCard:
         assert 'Not yet begun' not in out
         assert '<b>1 alert</b> in effect' in NWSSkin.count_line([rec])
 
-    def test_an_alert_with_neither_onset_nor_effective_does_not_raise(self):
-        """`onset - now` on a None is what this branch exists to avoid.  NWS
-        always sends `effective`, so this pairing does not occur in the wild;
-        it is here because a card must not raise on any row it is handed."""
+    def test_an_alert_with_no_onset_starts_at_its_effective_time(self):
+        """The window's start is printed from the same fallback its bar is
+        drawn from, and the page script is handed that same instant.
+        Stamping the raw onset printed N/A beside a bar that began at the
+        effective time."""
         now = datetime.datetime.now().timestamp()
-        out = NWSSkin.card(alert_rec(onset=None, ends=now + 3600,
-                                     expires=now + 3600))
-        assert 'Not yet begun' in out
-        assert 'start not given' in out
+        out = NWSSkin.card(alert_rec(onset=None, effective=now - 3600,
+                                     ends=now + 3600, expires=now + 3600))
+        assert 'N/A' not in out
+        assert NWSSkin.stamp(vh(now - 3600)) + ' <i>(effective)</i>' in out
+        assert 'data-onset="%d"' % (now - 3600) in out
+
+    def test_an_end_at_or_before_the_start_shows_both_times(self):
+        """No span to draw a bar across, but still an end: the card says both
+        times, and never that there is no end."""
+        now = datetime.datetime.now().timestamp()
+        out = NWSSkin.card(alert_rec(onset=now + 7200, ends=now + 3600,
+                                     expires=now + 10800))
+        assert 'aw-bar' not in out
+        assert 'no end time given' not in out
+        assert '&ndash; ' + NWSSkin.stamp(vh(now + 3600)) in out
 
     def test_an_alert_with_no_onset_whose_window_closed_reads_expired(self):
         """All three consumers used to disagree about this one alert: the
         count line called it upcoming, the card badged it "Not yet begun",
         and the page script never saw it at all because it selected
-        .alert[data-onset] and no onset attribute is written.  They now share
+        .alert[data-onset] and no onset attribute was written.  They now share
         one classification."""
         now = datetime.datetime.now().timestamp()
-        rec = alert_rec(onset=None, ends=now - 3600, expires=now - 3600)
+        rec = alert_rec(onset=None, effective=now - 7200,
+                        ends=now - 3600, expires=now - 3600)
         out = NWSSkin.card(rec)
         assert 'class="badge past"' in out and 'Expired' in out
         assert 'Not yet begun' not in out

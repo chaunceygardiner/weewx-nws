@@ -1,7 +1,7 @@
 nws change history
 ------------------
 
-6.1.2 (in progress)
+6.1.2 09/14/2026
 - The 7 Day page's temperature chart names its two halves with a pair of
   filled labels -- PAST 7 DAYS ACTUAL in the recorded curve's gray, FORECASTED
   TEMPERATURES in the forecast curve's red -- one each side of the dividing
@@ -31,6 +31,25 @@ nws change history
   has carried Hourly on every page all along, and this was the only inline
   cross-page link in the skin.  The caption is now one sentence naming what
   the two halves of the chart are.
+- The sample report's colors now clear the stricter of two contrast
+  measures, WCAG 2 and APCA, for every piece of text and every chart line
+  and marker on every ground it lands on, in both themes.  Text must reach
+  a WCAG ratio of 4.5 and an APCA Lc of 60, whatever its size; lines and
+  markers a reader has to see, 3.0 and Lc 30.  The WCAG ratio alone had
+  passed the whole dark palette while APCA scored most of its text too
+  faint -- the dimmest gray at Lc 35.  In dark mode the text, alert
+  severity and chart colors are all noticeably lighter as a result.  In
+  light mode two colors moved: the page title's blue is a shade darker,
+  and the chart axes and the 7 Day chart's dividing rule are a darker
+  gray.
+- Fixed: an alert that gives no onset showed its start as N/A.  Its window
+  bar was already drawn from the message's effective time, which is when
+  CAP says such an alert takes effect, but the time printed at the start of
+  the bar was the missing onset.  It is now the effective time, marked
+  "(effective)" the way a missing end is marked "(expires)".
+- Fixed: an alert whose end falls at or before its start -- nothing NWS
+  means to send -- now shows both times instead of saying "no end time
+  given".
 
 6.1.1 09/10/2026
 - The seven-day chart's dividing rule is drawn where the boundary actually

@@ -32,20 +32,23 @@
   --fc-hair:#d8dde3;
   --fc-hair-2:#eaeef2;
   --fc-rule:#c2c8ce;
-  /* #3378a0, not #367ba3.  The ground walk showed accent reaches THREE
-     grounds -- the page, the card and the tint -- and it had only ever
-     been chosen against the card.  On the tint it read 4.33 against a
-     4.5 bar, which is the .ado .ak callout label.  This is the lightest
-     value clearing 4.5 on all three; the move is a perceptual distance
-     of 0.010, and every other accent measurement improves with it. */
-  --fc-accent:#3378a0;
+  /* Accent reaches THREE grounds -- the page, the card and the tint -- and
+     the page title is accent text on the page.  Held to the text bar there
+     (WCAG 4.5 AND APCA Lc 60, whatever the size), #3378a0 read 3.77 / Lc
+     56.9.  #226b93 is the lightest value on the same hue clearing both
+     bars on all three grounds. */
+  --fc-accent:#226b93;
   --fc-link:#3f7bab;
   --fc-hi:#aa4444;
   --fc-lo:#4444aa;
   --fc-band:#eef1f5;
   --fc-grid:#e2e6eb;
   --fc-grid-2:#c8ced6;
-  --fc-axis:#b9c0c9;
+  /* The chart axes and the 7 Day chart's dividing rule are marks a reader
+     has to find, so they clear WCAG 3.0 AND APCA Lc 30 -- on the card and
+     on the night shading the rule crosses.  #b9c0c9 read 1.83 on the card;
+     #858c94 is the lightest value on its hue clearing both grounds. */
+  --fc-axis:#858c94;
   --fc-rain:#2f6ea8;
   --fc-dew:#2f7d70;
   --fc-tint:#f5f7f9;
@@ -211,9 +214,9 @@
 .fc svg.chart .aline{fill:none;stroke:var(--fc-muted);stroke-width:1.6;
                      stroke-linejoin:round;stroke-linecap:round}
 .fc svg.chart .adot{fill:var(--fc-muted)}
-/* --fc-axis, not --fc-line: the rule runs the full height of the chart
-   including the label band, which reads strongly enough without the
-   weight of the page's most prominent structural line. */
+/* --fc-axis, the chart's mark color for structure a reader has to find: the
+   rule runs the full height of the chart, across the night shading, and its
+   token clears the mark bar on both grounds. */
 .fc svg.chart .seam{stroke:var(--fc-axis);stroke-width:1.5}
 .fc svg.chart .dline{fill:none;stroke:var(--fc-dew);stroke-width:1.6;
                      stroke-dasharray:4 3;stroke-linejoin:round}
@@ -417,7 +420,6 @@
 .fc .awindow{display:flex;align-items:center;gap:12px;margin:16px 0;font-size:.8em;
              color:var(--fc-muted);font-variant-numeric:tabular-nums}
 .fc .aw-t{flex:none}
-.fc .aw-t.open{color:var(--fc-faint);font-style:italic}
 .fc .aw-t i{color:var(--fc-faint)}
 .fc .aw-bar{position:relative;flex:1;height:8px;border-radius:4px;background:var(--fc-grid)}
 .fc .aw-fill{position:absolute;left:0;top:0;height:8px;border-radius:4px;
@@ -568,13 +570,15 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
    Never absolute lightness.  Per token, hue and chroma are held and only
    lightness moves, so heat stays red and the accent stays blue.
 
-   Which ground each token lands on, and at what size, was measured by
-   walking the RENDERED pages rather than read off this file: a token's bar
-   is 4.5 or 3.0 depending on the px it actually renders at.  Every rule is
-   asserted over BOTH palettes, and light passes unchanged -- that is what
-   shows these rules describe the design instead of having been fitted to
-   the new numbers.  It also caught a live light-mode failure: --fc-accent
-   reached three grounds and had only ever been chosen against one.
+   Which grounds each token lands on, and whether it is text or a mark
+   there, is read from the RULES; tests/test_nws_css.py holds the map.
+   Text clears WCAG 4.5 AND APCA Lc 60, whatever its size, and a mark
+   clears WCAG 3.0 AND Lc 30.  On this card Lc 60 puts every light text
+   color at CIE L* 73 or above, whatever its hue, and that floor -- not
+   taste -- is why the text here is as light as it is.  Every rule is
+   asserted over BOTH palettes, and light passes too: that is what shows
+   the rules describe the design instead of having been fitted to the new
+   numbers.  It also caught live light-mode failures, --fc-accent twice.
 
    Three results here are not what intuition suggests, and none is a bug:
 
@@ -605,45 +609,46 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
   --fc-tint-2:#1a213d;
   /* the ink ladder -- five tiers, evenly stepped in CIE L* */
   --fc-ink:#f5f5f5;
-  --fc-ink-2:#d7d7d7;
-  --fc-ink-3:#b1bcca;
-  --fc-muted:#96a0ac;
-  --fc-faint:#7d8594;
+  --fc-ink-2:#e4e4e4;
+  --fc-ink-3:#cad5e4;
+  --fc-muted:#bac5d2;
+  --fc-faint:#acb5c5;
   /* structural lines: seen, not read, so they get a prominence band rather
-     than a contrast bar -- and none may out-shout the text it separates */
+     than a contrast bar -- and none may out-shout the text it separates.
+     --fc-axis is the one mark among them, and clears the mark bar. */
   --fc-line:#666a8c;
   --fc-hair:#2c314f;
   --fc-hair-2:#1f2542;
   --fc-rule:#3d4262;
   --fc-grid:#252a48;
   --fc-grid-2:#383d5c;
-  --fc-axis:#444869;
+  --fc-axis:#767a9d;
   --fc-band:#1c2240;
   --fc-head-rule:#999cc1;
   /* chromatic text and marks */
-  --fc-accent:#4c8eb7;
-  --fc-link:#4c87b8;
-  --fc-hi:#e27571;
-  --fc-lo:#ada4ff;
-  --fc-rain:#5a92d0;
-  --fc-dew:#489587;
-  --fc-ok:#4c9969;
-  --fc-on-accent:#181f3b;
+  --fc-accent:#7cbbe8;
+  --fc-link:#81b9ec;
+  --fc-hi:#ff9690;
+  --fc-lo:#b2aaff;
+  --fc-rain:#82b8f7;
+  --fc-dew:#75c1b2;
+  --fc-ok:#76c491;
+  --fc-on-accent:#131a36;
   /* alert severity -- prominence follows severity, which the first
      hand-picked dark palette inverted (an ordinary advisory out-shouting a
      warning) */
-  --fc-sev-extreme:#ff8f81;
-  --fc-sev-severe:#de6145;
-  --fc-sev-moderate:#ca661f;
-  --fc-sev-minor:#5193bc;
-  --fc-sev-unknown:#8e98a5;
+  --fc-sev-extreme:#ffbfb4;
+  --fc-sev-severe:#ff9d81;
+  --fc-sev-moderate:#ff9a52;
+  --fc-sev-minor:#7bbbe6;
+  --fc-sev-unknown:#aab5c2;
   /* the "begins later" badge */
   --fc-warn-bg:#2a2518;
   --fc-warn-line:#553a00;
-  --fc-warn-ink:#ac8549;
+  --fc-warn-ink:#dab072;
   /* the navigation, the only element that sits on the page ground */
   --fc-nav-bg:#111834;
-  --fc-nav-ink:#b1bcca;
+  --fc-nav-ink:#cad5e4;
   --fc-nav-hover:#1a213d;
 
   /* The drawn forecast icons.  Their LIGHT defaults live in

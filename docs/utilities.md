@@ -136,7 +136,7 @@ Lists every option.
 ## Testing a checkout
 
 The repository carries a hermetic pytest suite — it never contacts NWS — plus one harness
-that does, and two more that are offline but need something the suite does not.  Run them
+that does, and three more that are offline but need something the suite does not.  Run them
 from the repository root, with the same python as above:
 
 ```
@@ -144,12 +144,16 @@ python -m pytest tests              # the hermetic suite
 python tests/verify_cli.py          # every utility above, against live NWS, PASS/FAIL each
 python tests/validate_skin_html.py  # renders the skin; validates every page and its css
 python tests/verify_theme.py        # drives the pages in a browser at both color settings
+python tests/verify_ink.py          # scores every piece of text against the pixels under it
 ```
 
 `verify_cli.py` is the only one that contacts NWS; it takes `--skip-multigrid` to leave out
 the 50-city sweep and its ~150 requests.  `validate_skin_html.py` needs `java` and
-`vnu.jar`; `verify_theme.py` needs Playwright, and is the only check that can catch a dark
-theme that validates, tests clean and never actually applies.
+`vnu.jar`.  `verify_theme.py` and `verify_ink.py` need Playwright: the first is the only
+check that can catch a dark theme that validates, tests clean and never actually applies,
+and the second measures text against what is really painted under it — in both themes, at
+desktop and phone widths, and in every tab, chart readout and alert state — to WCAG 4.5 and
+APCA Lc 60.
 
 The layers have different jobs, and both are needed: the suite catches regressions in
 *this extension*, while the live utility catches changes in *what NWS serves* — which the

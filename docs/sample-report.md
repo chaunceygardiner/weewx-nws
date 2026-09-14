@@ -75,7 +75,7 @@ a status
 badge, a bar showing where now falls between the alert's onset and its end, the
 description's own sections as real structure, and any instructions called out.
 
-![The sample report's alerts page, with severe thunderstorm alerts in effect](images/sample-report-alerts.png)
+![The sample report's alerts page, with a flood warning in effect](images/sample-report-alerts.png)
 
 Most of the time there are no alerts, and the page says so plainly rather than showing an
 empty list.
@@ -99,8 +99,13 @@ they might not want.
 Every color on the page is a custom property, so a copy of the skin can restyle any part
 of it by redefining a property rather than by editing rules.  The dark values are derived
 rather than picked — each color reproduces its light counterpart's prominence against
-whatever ground it actually sits on — and both palettes are checked on every release by
-`tests/test_nws_css.py`.
+whatever ground it actually sits on, then is lightened as far as legibility requires.
+
+In both themes, every piece of text clears a WCAG 2 contrast ratio of 4.5 **and** an APCA
+Lc of 60 on every ground it can land on, whatever its size, and every chart line and
+marker a reader has to find clears 3.0 and Lc 30.  `tests/test_nws_css.py` checks both
+palettes color by color, and `tests/verify_ink.py` checks the rendered pages pixel by
+pixel, in every tab, chart readout and alert state.
 
 The `--fc-*` properties this skin defines are its own and may change between releases.
 The `--wx-*` properties that color the icons are a contract and will not; see

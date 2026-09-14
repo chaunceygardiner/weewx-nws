@@ -74,7 +74,7 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-WEEWX_NWS_VERSION = "6.1.1"
+WEEWX_NWS_VERSION = "6.1.2"
 
 def reraise_if_terminate(e: BaseException) -> None:
     """weewxd stops by raising Terminate from its SIGTERM signal handler --

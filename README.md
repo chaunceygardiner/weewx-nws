@@ -179,7 +179,7 @@ catching changes in *what NWS serves* — which the hermetic tests, validating a
 against saved responses, cannot see.  `tests/verify_cli.py` runs every one of them and
 reports PASS/FAIL per option.
 
-Two more checks are offline, but need something the test suite does not:
+Three more checks are offline, but need something the test suite does not:
 
 - `tests/validate_skin_html.py` renders the sample skin in both alert states and validates
   every page *and its stylesheet* with the
@@ -187,11 +187,16 @@ Two more checks are offline, but need something the test suite does not:
 - `tests/verify_theme.py` drives the rendered pages in a real browser at both OS color
   settings and reads the computed colors back — the only check that can catch a dark theme
   that validates, tests clean, and never actually applies.  Needs Playwright.
+- `tests/verify_ink.py` measures every piece of text on the rendered pages against the
+  pixels actually painted under it — both themes, desktop and phone widths, every day tab,
+  chart readout and alert state — and fails any that misses a WCAG 2 contrast ratio of 4.5
+  or an APCA Lc of 60.  Needs Playwright.
 
 ```
 python tests/verify_cli.py          # --skip-multigrid skips the 50-city sweep
 python tests/validate_skin_html.py
 python tests/verify_theme.py
+python tests/verify_ink.py
 ```
 
 Each utility is documented in

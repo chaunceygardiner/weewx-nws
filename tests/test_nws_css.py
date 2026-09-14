@@ -13,17 +13,24 @@
 
 """The sample skin's two palettes, asserted as one set of rules.
 
-EVERY RULE HERE RUNS OVER BOTH PALETTES, and light must pass unchanged.  That
-is the point: a rule that only the new values satisfy has been fitted to them
-and describes nothing.  Asserting it over the palette that was designed,
-shipped and liked is what shows the rule is real -- and it works: this
-condition is what caught --fc-accent failing AA on the tint in LIGHT mode,
-which two earlier contrast sweeps had both missed because both measured every
-token against the card.
+EVERY RULE HERE RUNS OVER BOTH PALETTES.  That is the point: a rule that only
+the dark values satisfy has been fitted to them and describes nothing.
+Asserting it over the palette that was designed, shipped and liked is what
+shows the rule is real -- and it works: this condition is what caught
+--fc-accent failing AA on the tint in LIGHT mode, which two earlier contrast
+sweeps had both missed because both measured every token against the card.
 
-GROUNDS is the load-bearing data: which ground each token lands on, and at
-what effective px, because that is what decides whether its bar is 4.5 (small
-text) or 3.0 (large).
+THE BAR IS TWO MEASURES, AND BOTH MUST CLEAR (6.1.2).  Text clears WCAG 2 4.5
+AND APCA Lc 60, whatever its size or weight.  A mark a reader has to see -- a
+chart line, a marker, a severity rail -- clears WCAG 3.0 AND APCA Lc 30.  The
+WCAG ratio alone is wrong in a known direction: it passed every pair of the
+dark palette before this one, while APCA scored 26 of them under 60, the
+faint tier at Lc 35.  weewx-xtide and weewx-liveseasons hold the same bars.
+Holding them moved light twice -- --fc-accent, for the page title, and
+--fc-axis -- and nothing else in light needed to move.
+
+GROUNDS is the load-bearing data: which ground each token lands on, and
+whether it is text or a mark there, because that decides its bar.
 
 It is built from the RULES -- every color-bearing selector paired with the
 grounds it CAN reach -- and only checked against a render.  That order matters
@@ -39,9 +46,9 @@ and until it is, this suite cannot see it.  `.fc .live` was deleted rather
 than added: nothing emits it -- it arrived with the stylesheet from a mockup
 that had a decorative LIVE badge, and no template here has ever produced one.
 
-No third-party color library: WCAG contrast, CIE L* and OKLab are all short
-and exactly specified, and a test dependency for thirty lines of arithmetic
-would not be worth it.
+No third-party color library.  The WCAG and APCA arithmetic below is
+weewx-liveseasons' tools/contrast.py, verbatim, so the skins cannot disagree
+about a number; CIE L* and OKLab are short and exactly specified.
 """
 
 import os
@@ -52,46 +59,91 @@ import pytest
 CSS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         '..', 'skins', 'nws', 'css', 'nws.css')
 
-# token -> [(ground token, required contrast ratio), ...]
-# Measured by walking the rendered pages; see the module docstring.
+# (WCAG 2 ratio, APCA |Lc|) that each kind must clear.
+BARS = {'text': (4.5, 60), 'mark': (3.0, 30)}
+
+# token -> [(ground token, 'text' or 'mark'[, opacity]), ...]
+# A mark is listed only where no text entry already holds the token to a
+# stricter bar on that ground at that opacity.
 GROUNDS = {
-    '--fc-accent':    [('--fc-page', 3.0), ('--fc-surface', 4.5), ('--fc-tint', 4.5)],
-    '--fc-faint':     [('--fc-surface', 4.5), ('--fc-tint', 4.5)],
-    '--fc-hi':        [('--fc-surface', 4.5)],
-    '--fc-ink':       [('--fc-surface', 4.5), ('--fc-tint', 4.5)],
-    '--fc-ink-2':     [('--fc-surface', 4.5)],
-    '--fc-ink-3':     [('--fc-surface', 4.5), ('--fc-tint', 4.5), ('--fc-tint-2', 4.5)],
-    '--fc-link':      [('--fc-surface', 4.5)],
-    '--fc-lo':        [('--fc-surface', 4.5)],
-    '--fc-muted':     [('--fc-page', 4.5), ('--fc-surface', 4.5),
-                       ('--fc-tint', 4.5), ('--fc-tint-2', 4.5)],
-    '--fc-nav-ink':   [('--fc-nav-bg', 4.5)],
-    '--fc-ok':        [('--fc-surface', 3.0)],
+    # Text on all three: the page title sits on the page.  Its marks -- the
+    # current nav tab's fill on the page, the chart focus ring and the
+    # current day tab on the card -- are covered by those text entries.
+    '--fc-accent':    [('--fc-page', 'text'), ('--fc-surface', 'text'), ('--fc-tint', 'text')],
+    '--fc-faint':     [('--fc-surface', 'text'), ('--fc-tint', 'text')],
+    # The temperature curve crosses the night shading, and the day's range
+    # bar is drawn on the empty track.
+    '--fc-hi':        [('--fc-surface', 'text'), ('--fc-band', 'mark'), ('--fc-grid', 'mark')],
+    '--fc-ink':       [('--fc-surface', 'text'), ('--fc-tint', 'text')],
+    '--fc-ink-2':     [('--fc-surface', 'text')],
+    '--fc-ink-3':     [('--fc-surface', 'text'), ('--fc-tint', 'text'), ('--fc-tint-2', 'text')],
+    # Nothing these templates emit is a link; .fc a is there for a copier's.
+    '--fc-link':      [('--fc-surface', 'text')],
+    '--fc-lo':        [('--fc-surface', 'text'), ('--fc-grid', 'mark')],
+    # --fc-band is the past alert's badge.  The recorded curve crossing the
+    # night shading is a mark, and the text entry there already holds it.
+    '--fc-muted':     [('--fc-page', 'text'), ('--fc-surface', 'text'),
+                       ('--fc-tint', 'text'), ('--fc-tint-2', 'text'), ('--fc-band', 'text')],
+    '--fc-nav-ink':   [('--fc-nav-bg', 'text'), ('--fc-nav-hover', 'text')],
+    # The all-clear heading; the tick beside it is covered.
+    '--fc-ok':        [('--fc-surface', 'text')],
     # --fc-muted and --fc-hi joined this list in 6.1.2: the 7 Day chart's two
     # seam chips are filled with the curve colors they name, and the words in
-    # them are --fc-on-accent.  4.5 and not 3.0 even though the type is bold:
-    # the chips are sized in the chart's own units, so the 13 they take on a
-    # wide page is about 13px and the 21 they take on a phone is nearer 8 --
-    # the chart shrinks with the column.  Nothing here is ever large text.
-    '--fc-on-accent': [('--fc-accent', 4.5), ('--fc-sev-severe', 4.5),
-                       ('--fc-muted', 4.5), ('--fc-hi', 4.5)],
-    '--fc-rain':      [('--fc-surface', 4.5), ('--fc-tint', 4.5)],
+    # them are --fc-on-accent.
+    '--fc-on-accent': [('--fc-accent', 'text'), ('--fc-sev-severe', 'text'),
+                       ('--fc-muted', 'text'), ('--fc-hi', 'text')],
+    # The rain strip is filled at opacity .8, and so is its legend swatch.
+    '--fc-rain':      [('--fc-surface', 'text'), ('--fc-tint', 'text'),
+                       ('--fc-surface', 'mark', .8)],
     # The severity colors became TEXT in 6.1 -- the named chip on an alert
-    # card -- so they need a contrast bar and not just the prominence ORDER
-    # below.  Until then they were used only as a rail and a bare dot, which
-    # is exactly the color-only encoding the chip exists to retire.
-    '--fc-sev-extreme':  [('--fc-surface', 4.5)],
-    '--fc-sev-severe':   [('--fc-surface', 4.5)],
-    '--fc-sev-moderate': [('--fc-surface', 4.5)],
-    '--fc-sev-minor':    [('--fc-surface', 4.5)],
-    '--fc-sev-unknown':  [('--fc-surface', 4.5)],
-    # These two render only in states a walk of one day's pages does not
+    # card.  The rail down the card's left edge is a mark, and it borders
+    # the page as well as the card.  --fc-sev-severe is also the alert
+    # window's now marker, on its empty track.
+    '--fc-sev-extreme':  [('--fc-surface', 'text'), ('--fc-page', 'mark')],
+    '--fc-sev-severe':   [('--fc-surface', 'text'), ('--fc-page', 'mark'), ('--fc-grid', 'mark')],
+    '--fc-sev-moderate': [('--fc-surface', 'text'), ('--fc-page', 'mark')],
+    '--fc-sev-minor':    [('--fc-surface', 'text'), ('--fc-page', 'mark')],
+    '--fc-sev-unknown':  [('--fc-surface', 'text'), ('--fc-page', 'mark')],
+    # These render only in states a walk of one day's pages does not
     # produce: the readout is empty until a pointer touches a chart, and the
     # "begins later" badge needs an alert that has not started.  They are here
-    # from the RULES, not from a render.
-    '--fc-dew':       [('--fc-surface', 4.5)],
-    '--fc-warn-ink':  [('--fc-warn-bg', 4.5)],
+    # from the RULES, not from a render.  The dew point line crosses the
+    # night shading.
+    '--fc-dew':       [('--fc-surface', 'text'), ('--fc-band', 'mark')],
+    '--fc-warn-ink':  [('--fc-warn-bg', 'text')],
+    # The chart axes and the 7 Day chart's dividing rule, which crosses the
+    # night shading.
+    '--fc-axis':      [('--fc-surface', 'mark'), ('--fc-band', 'mark')],
 }
+
+# Tokens held to no bar, each with its reason.  Every --fc-* token is a
+# ground, is in GROUNDS, or is here.
+NO_BAR = {
+    '--fc-line':      'the card border; a card is told from the page by its fill',
+    '--fc-hair':      'the day-row separators; the rows are told apart by their words',
+    '--fc-hair-2':    'the hour-row separators, likewise',
+    '--fc-rule':      ('dividers, the readout border, and the dashed box standing in '
+                       'for an icon NWS has none for, whose hour the row\'s words describe'),
+    '--fc-grid':      ('chart gridlines, and the empty track under the range and '
+                       'alert-window bars; the bar on it is the data'),
+    '--fc-grid-2':    ('the dashed day ticks, the day tab borders, and the elapsed part '
+                       'of the alert window, whose position the now marker carries'),
+    '--fc-head-rule': 'the rule under the page title',
+    '--fc-band':      ('the night shading, which each chart\'s caption names, and the '
+                       'legend swatch naming it'),
+    '--fc-warn-line': 'the begins-later badge border; the badge is told by its words',
+}
+
+# Every opacity in the stylesheet, by selector.  Each is measured above.
+OPACITY = {'.fc svg.chart .parea': .8, '.fc .legend .sw-r': .8}
+
+# Text on a FILLED chip, tab or badge clears its bar with the fill's channels
+# moved this far either way.  A fill does not always come back from the
+# renderer byte for byte: tests/verify_ink.py read the dark forecast chip's
+# #ff9690 as #fe958f, and text derived to clear that fill at exactly Lc 60
+# scored 59.5 on it.  The page and card grounds rendered exact; chips did not.
+FILL_TOLERANCE = 2
+TEXT_ON_FILLS = ['--fc-on-accent', '--fc-warn-ink']
 
 LADDER = ['--fc-ink', '--fc-ink-2', '--fc-ink-3', '--fc-muted', '--fc-faint']
 # extreme..minor only: 'unknown' is not a severity level, it is the absence of
@@ -104,7 +156,108 @@ LINES = ['--fc-line', '--fc-hair', '--fc-hair-2', '--fc-rule', '--fc-grid',
 ICON_GROUNDS = {'--fc-surface': '#111834', '--fc-tint': '#151c38'}
 
 
-# ---- color arithmetic ----------------------------------------------------
+# ---- WCAG 2 and APCA: weewx-liveseasons tools/contrast.py, verbatim --------
+
+# APCA-W3 0.0.98G-4g
+_TRC = 2.4
+_COEF = (0.2126729, 0.7151522, 0.0721750)
+_NORM_BG, _NORM_TXT, _REV_TXT, _REV_BG = 0.56, 0.57, 0.62, 0.65
+_BLK_THRS, _BLK_CLMP = 0.022, 1.414
+_SCALE = 1.14
+_OFFSET = 0.027
+_DELTA_Y_MIN = 0.0005
+_LO_CLIP = 0.1
+
+
+def parse(color):
+    """'#rgb', '#rrggbb', 'rgb(r,g,b)' or 'rgba(r,g,b,a)' -> (r, g, b, a)."""
+    c = color.strip().lower()
+    m = re.fullmatch(r'#([0-9a-f]{3}|[0-9a-f]{6})', c)
+    if m:
+        h = m.group(1)
+        if len(h) == 3:
+            h = ''.join(ch * 2 for ch in h)
+        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 1.0)
+    m = re.fullmatch(r'rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)', c)
+    if m:
+        a = 1.0 if m.group(4) is None else float(m.group(4))
+        return (float(m.group(1)), float(m.group(2)), float(m.group(3)), a)
+    raise ValueError('not a color this reads: %r' % color)
+
+
+def flatten(*layers):
+    """Colors from the top down to an opaque bottom -> the opaque (r, g, b)
+    a reader sees.  `flatten(chip, header)` is the chip over the header."""
+    colors = [parse(c) if isinstance(c, str) else c for c in layers]
+    r, g, b, a = colors[-1]
+    if a < 1:
+        raise ValueError('the bottom layer must be opaque: %r' % (layers[-1],))
+    for top in reversed(colors[:-1]):
+        tr, tg, tb, ta = top
+        r, g, b = (tr * ta + r * (1 - ta), tg * ta + g * (1 - ta), tb * ta + b * (1 - ta))
+    return (r, g, b)
+
+
+def _wcag_lum(rgb):
+    def lin(v):
+        v /= 255.0
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(v) for v in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def wcag(text, ground):
+    """The WCAG 2 contrast ratio of two opaque (r, g, b) colors."""
+    hi, lo = sorted((_wcag_lum(text), _wcag_lum(ground)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _apca_y(rgb):
+    y = sum(k * (v / 255.0) ** _TRC for k, v in zip(_COEF, rgb))
+    return y + (_BLK_THRS - y) ** _BLK_CLMP if y <= _BLK_THRS else y
+
+
+def apca(text, ground):
+    """APCA Lc of opaque (r, g, b) text on an opaque (r, g, b) ground."""
+    ty, gy = _apca_y(text), _apca_y(ground)
+    if abs(gy - ty) < _DELTA_Y_MIN:
+        return 0.0
+    if gy > ty:
+        s = (gy ** _NORM_BG - ty ** _NORM_TXT) * _SCALE
+        return 0.0 if s < _LO_CLIP else (s - _OFFSET) * 100
+    s = (gy ** _REV_BG - ty ** _REV_TXT) * _SCALE
+    return 0.0 if s > -_LO_CLIP else (s + _OFFSET) * 100
+
+
+def measure(text, *ground):
+    """Text over a ground given as layers (see flatten) -> (wcag, apca)."""
+    under = flatten(*ground)
+    over = flatten(text, under + (1.0,))
+    return wcag(over, under), apca(over, under)
+
+
+def clears(color, ground, kind, opacity=1.0):
+    """(clears both bars?, WCAG ratio, APCA Lc) for '#rrggbb' `color` at
+    `opacity` over the opaque '#rrggbb' `ground`."""
+    ratio, lc = measure(parse(color)[:3] + (opacity,), ground)
+    wcag_bar, apca_bar = BARS[kind]
+    return ratio + 1e-9 >= wcag_bar and abs(lc) >= apca_bar, ratio, lc
+
+
+def entries(tok):
+    """GROUNDS[tok] with every opacity spelled out."""
+    return [(e[0], e[1], e[2] if len(e) > 2 else 1.0) for e in GROUNDS.get(tok, [])]
+
+
+def as_rendered(color, t=FILL_TOLERANCE):
+    """'#rrggbb' with every channel moved t each way: the lightest and darkest
+    a renderer may paint it."""
+    r, g, b, _ = parse(color)
+    return ['#%02x%02x%02x' % tuple(min(255, max(0, int(c) + d)) for c in (r, g, b))
+            for d in (-t, t)]
+
+
+# ---- CIE L* and OKLab ------------------------------------------------------
 
 def _rgb(h):
     h = h.lstrip('#')
@@ -112,16 +265,6 @@ def _rgb(h):
 
 def _linear(v):
     return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
-
-def relative_luminance(h):
-    r, g, b = (_linear(v) for v in _rgb(h))
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-def contrast(a, b):
-    l1, l2 = relative_luminance(a), relative_luminance(b)
-    if l1 < l2:
-        l1, l2 = l2, l1
-    return (l1 + 0.05) / (l2 + 0.05)
 
 def _xyz(h):
     r, g, b = (_linear(v) for v in _rgb(h))
@@ -167,17 +310,74 @@ PALETTES = [('light', LIGHT), ('dark', DARK)]
 IDS = [name for name, _ in PALETTES]
 
 
+class TestTheMeasures:
+
+    def test_the_measures_are_the_published_ones(self):
+        """The oracle.  A passing sweep proves nothing about the arithmetic:
+        a wrong exponent or a swapped sign passes pairs as easily as it fails
+        them.  APCA-W3 publishes Lc 106.04 for black on white and -107.88 for
+        white on black; the WCAG ratio of the two is 21 by definition."""
+        black, white = (0, 0, 0), (255, 255, 255)
+        assert abs(apca(black, white) - 106.04) < 0.01
+        assert abs(apca(white, black) + 107.88) < 0.01
+        assert abs(wcag(black, white) - 21.0) < 1e-9
+
+    def test_opacity_is_applied_before_scoring(self):
+        """Half-transparent black over white is the gray a reader sees, not
+        black."""
+        ratio, _ = measure((0, 0, 0, .5), '#ffffff')
+        assert abs(ratio - wcag((127.5, 127.5, 127.5), (255, 255, 255))) < 1e-9
+
+    def test_every_token_is_accounted_for(self):
+        """A token nobody classified is a token nobody measured."""
+        grounds = {e[0] for pairs in GROUNDS.values() for e in pairs}
+        missing = sorted(t for t in LIGHT if t.startswith('--fc-')
+                         and t not in GROUNDS and t not in grounds and t not in NO_BAR)
+        assert not missing, 'in no GROUNDS entry and not in NO_BAR: %s' % ', '.join(missing)
+        stale = sorted(t for t in NO_BAR if t not in LIGHT)
+        assert not stale, 'NO_BAR names tokens the stylesheet no longer has: %s' % ', '.join(stale)
+
+    def test_every_opacity_is_measured(self):
+        """Opacity is part of the color, and a token table cannot see it.
+        Every opacity in the stylesheet is listed in OPACITY, and each value
+        there is one GROUNDS measures --fc-rain at, the only token drawn
+        translucent."""
+        css = re.sub(r'/\*.*?\*/', '', open(CSS_PATH).read(), flags=re.S)
+        found = {}
+        for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css):
+            for value in re.findall(r'(?<![-\w])opacity\s*:\s*([\d.]+)', body):
+                found[selector.strip()] = float(value)
+        assert found == OPACITY
+        measured = {o for _, kind, o in entries('--fc-rain') if kind == 'mark'}
+        assert set(OPACITY.values()) <= measured
+
+
 @pytest.mark.parametrize('name,palette', PALETTES, ids=IDS)
 class TestBothPalettes:
-    """Light passing unchanged is the proof that these rules are real."""
+    """Light passing too is the proof that these rules are real."""
 
-    def test_every_token_clears_its_bar_on_every_ground_it_reaches(self, name, palette):
+    def test_every_token_clears_both_bars_on_every_ground_it_reaches(self, name, palette):
         bad = []
-        for tok, pairs in sorted(GROUNDS.items()):
-            for ground, bar in pairs:
-                got = contrast(palette[tok], palette[ground])
-                if got + 1e-9 < bar:
-                    bad.append('%s on %s: %.2f < %.1f' % (tok, ground, got, bar))
+        for tok in sorted(GROUNDS):
+            for ground, kind, opacity in entries(tok):
+                ok, ratio, lc = clears(palette[tok], palette[ground], kind, opacity)
+                if not ok:
+                    bad.append('%s%s on %s (%s): WCAG %.2f, APCA Lc %.1f'
+                               % (tok, '' if opacity == 1 else ' at %g' % opacity,
+                                  ground, kind, ratio, lc))
+        assert not bad, '%s palette: %s' % (name, '; '.join(bad))
+
+    def test_text_on_a_fill_clears_its_bar_as_the_fill_renders(self, name, palette):
+        """See FILL_TOLERANCE: a bar met at exactly the token is missed by a
+        chip painted one unit darker."""
+        bad = []
+        for tok in TEXT_ON_FILLS:
+            for ground, kind, opacity in entries(tok):
+                for fill in as_rendered(palette[ground]):
+                    ok, ratio, lc = clears(palette[tok], fill, kind, opacity)
+                    if not ok:
+                        bad.append('%s on %s painted %s: WCAG %.2f, APCA Lc %.1f'
+                                   % (tok, ground, fill, ratio, lc))
         assert not bad, '%s palette: %s' % (name, '; '.join(bad))
 
     def test_the_ink_ladder_is_ordered_and_evenly_stepped(self, name, palette):
@@ -190,6 +390,19 @@ class TestBothPalettes:
         assert min(steps) > 0, '%s: a ladder step is zero or negative' % name
         assert max(steps) / min(steps) <= 2.0, (
             '%s: uneven ladder steps %s' % (name, ['%.1f' % s for s in steps]))
+
+    def test_the_lower_tiers_stay_distinct(self, name, palette):
+        """Lifting dark's muted and faint tiers to Lc 60 is exactly what could
+        merge them into the ink above them: a tier has to stay a tier, not
+        just pass.  From ink-2 down, each sits at least 5 Lc below the one
+        above it on the card.  The top pair is left to the L* test above,
+        because APCA flattens near black: light's ink and ink-2, an even L*
+        step apart, score 4.5 Lc apart."""
+        card = palette['--fc-surface']
+        lc = [abs(clears(palette[t], card, 'text')[2]) for t in LADDER]
+        gaps = [lc[i] - lc[i + 1] for i in range(1, len(lc) - 1)]
+        assert min(gaps) >= 5, (
+            '%s: ladder Lc on the card %s' % (name, ['%.1f' % v for v in lc]))
 
     def test_a_more_severe_alert_is_more_prominent(self, name, palette):
         """The rule the first hand-picked dark palette broke, putting an

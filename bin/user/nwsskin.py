@@ -1153,6 +1153,9 @@ class NWSSkin(SearchList):
         tags = nws.NWSForecastVariables
         now = datetime.datetime.now().timestamp()
         onset, finish, open_ended = tags.alert_window(alert)
+        # Never None: an absent onset falls back to the effective time, which
+        # the schema stores NOT NULL.
+        assert onset is not None
         expires = alert['expires'].raw
         # One classification, from the tag, rather than this card's own
         # reckoning: 'started but not active' is the obvious spelling and it
@@ -1164,11 +1167,6 @@ class NWSSkin(SearchList):
             badge_cls, badge = 'on', 'In effect now'
         elif state == 'ended':
             badge_cls, badge = 'past', 'Expired'
-        elif onset is None:
-            # Upcoming, with no onset to count down from.  This is the branch
-            # the "start not given" window below is written for; without it
-            # `onset - now` raises and that fallback is unreachable.
-            badge_cls, badge = 'soon', 'Not yet begun'
         else:
             badge_cls = 'soon'
             badge = 'Begins in %s' % NWSSkin.fuzzy(onset - now)
@@ -1186,20 +1184,28 @@ class NWSSkin(SearchList):
         else:
             note = ''
 
-        if onset is not None and finish is not None and finish > onset:
+        # Both ends of the window as alert_window() reckons them, each marked
+        # when it is a message time standing in for an event time.  Stamping
+        # the raw onset printed N/A beside a bar drawn from the effective time.
+        given = alert['onset'].raw is not None
+        start_text = '%s%s' % (NWSSkin.stamp(alert['onset'] if given else alert['effective']),
+                               '' if given else ' <i>(effective)</i>')
+        end_text = '%s%s' % (ends_text, ' <i>(expires)</i>' if open_ended else '')
+        if finish is not None and finish > onset:
             frac = min(max((now - onset) / float(finish - onset), 0.0), 1.0) * 100.0
             window = ('<div class="awindow"><span class="aw-t">%s</span>'
                       '<span class="aw-bar">'
                       '<span class="aw-fill" style="width:%.1f%%"></span>'
                       '<span class="aw-now" style="left:%.1f%%"></span></span>'
-                      '<span class="aw-t">%s%s</span></div>'
-                      % (NWSSkin.stamp(alert['onset']), frac, frac, ends_text,
-                         ' <i>(expires)</i>' if open_ended else ''))
+                      '<span class="aw-t">%s</span></div>'
+                      % (start_text, frac, frac, end_text))
         else:
+            # An end at or before the start leaves no span to draw a bar
+            # across.  NWS does not mean to send one, but the card still says
+            # both times rather than claiming there is no end.
             window = ('<div class="awindow"><span class="aw-t">%s</span>'
-                      '<span class="aw-t open">&mdash; no end time given</span></div>'
-                      % (NWSSkin.stamp(alert['onset']) if onset is not None
-                         else 'start not given'))
+                      '<span class="aw-t">&ndash; %s</span></div>'
+                      % (start_text, end_text))
 
         body = ''
         for block in tags.parse_description(alert['description']):
@@ -1237,7 +1243,7 @@ class NWSSkin(SearchList):
             sub = ''
 
         severity = alert['severity'] or 'Unknown'
-        attrs = ' data-onset="%d"' % onset if onset is not None else ''
+        attrs = ' data-onset="%d"' % onset
         if not open_ended:
             attrs += ' data-ends="%d"' % finish
         if expires is not None:

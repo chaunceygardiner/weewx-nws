@@ -92,10 +92,10 @@
        alert with no end time uses expires; one with neither gets no bar.
        An open-ended alert is one with NO data-ends attribute -- nwsskin.py
        omits it deliberately, so its absence is the signal, not an oversight. */
-    /* `.alert`, NOT `.alert[data-onset]`.  NWS does not always give an onset,
-       and nwsskin.py writes no data-onset when it is absent -- so the narrower
-       selector silently skipped exactly the cards whose state is hardest to
-       get right, leaving them frozen at whatever generation baked. */
+    /* Every card carries data-onset: NWS's onset, or when it gave none, the
+       message's effective time -- when CAP says such an alert takes effect.
+       The page must reckon an onset-less alert exactly as nwsskin.py does,
+       or an alert in effect right now is rebadged "not yet begun". */
     var cards = document.querySelectorAll('.alert');
     var activeCount = 0, laterCount = 0;
     for (var i = 0; i < cards.length; i++) {
@@ -111,7 +111,7 @@
          the way that file says to spell them.  `ended` tests FINISH, not
          "started and not active": an alert with no onset whose window has
          closed is ended, and the obvious spelling files it as upcoming. */
-      var started = !isNaN(onset) && onset <= now;
+      var started = onset <= now;
       var active = started && (isNaN(finish) || now <= finish);
       var state = active ? 'active'
                 : ((!isNaN(finish) && now > finish) ? 'ended' : 'upcoming');
@@ -123,8 +123,7 @@
                                     : (state === 'ended' ? 'past' : 'soon'));
         setText(badge, state === 'active' ? 'In effect now'
                 : (state === 'ended' ? 'Expired'
-                   : (isNaN(onset) ? 'Not yet begun'
-                      : 'Begins in ' + fuzzy(onset - now))));
+                   : 'Begins in ' + fuzzy(onset - now)));
       }
       if (note) {
         if (active && openEnded && !isNaN(expires)) {
