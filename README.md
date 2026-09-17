@@ -145,7 +145,10 @@ the [configuration reference](https://chaunceygardiner.github.io/weewx-nws/confi
 and what to do when
 [something is not working](https://chaunceygardiner.github.io/weewx-nws/troubleshooting.html).
 
-Upgrading from an earlier release?  See
+Upgrading from an earlier release?  Run the same `weectl extension install` command, then
+restart WeeWX.  The restart is required after every upgrade, whatever version you are
+coming from: WeeWX loads the extension's code only at startup, and the sample report's
+templates expect the code they shipped with.  See
 [Upgrading](https://chaunceygardiner.github.io/weewx-nws/upgrading.html) — why there is
 nothing to do about the database, and the hard-coded gridpoint URLs that are now doing harm.
 The full history is in

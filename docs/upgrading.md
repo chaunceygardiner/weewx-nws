@@ -14,8 +14,13 @@ description: What existing weewx-nws stations need to know — the database rebu
 ---
 
 Upgrading is the same command as installing — `weectl extension install weewx-nws.zip`
-replaces the files in place.  See [Installation](installation.md).  Four things are worth
-checking before you restart.
+replaces the files in place.  See [Installation](installation.md).
+
+**Then restart WeeWX, after every upgrade, whatever version you are coming from.**  WeeWX
+loads the extension's code only at startup, and the sample report's templates expect the
+code they shipped with, so until the restart the report can fail against the old code.
+
+Before you do, four things are worth checking.
 
 ## Do you need to delete `nws.sdb`?
 
