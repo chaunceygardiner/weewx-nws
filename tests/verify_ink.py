@@ -47,9 +47,10 @@ rewrites the badges.  Each state starts from a freshly loaded page.
 
 TWO SCENARIOS, because the alerts page turns over entirely on the day.  One
 has an alert in every state the card can draw -- in effect, open-ended,
-begins later, expired, and all five severities -- plus a short station
-archive so the 7 Day chart's chips appear; the other has no alerts, so the
-all-clear card is measured, and a longer archive.
+begins later, expired, and all five severities -- plus a station archive
+as long as the forecast, so the 7 Day chart's chips appear; the other has no
+alerts, so the all-clear card is measured, and a shorter archive with a gap
+in it, so the chart without chips is measured too.
 
 NOTHING IS SKIPPED QUIETLY.  A state that cannot be driven, and a box whose
 largest ground covers under BUSY_SHARE of it (text on imagery, which a single
@@ -89,12 +90,14 @@ from PIL import Image
 
 from test_nws import iso, load_fixture, make_alert, make_alerts_json
 from test_nws_service import freshen
-from test_nws_skin import LONG_NWS_HEADLINE, archive_records, render_skin
+from test_nws_skin import LONG_NWS_HEADLINE, archive_records, long_one_hour, render_skin
 from test_nws_css import BARS, wcag, apca
 
 PAGES = ['index.html', 'hours.html', 'alerts.html']
 THEMES = ['light', 'dark']
 WIDTHS = [1280, 390]
+# Hours of forecast rendered; see render().
+FORECAST_HOURS = 26
 
 MIN_SHARE = 0.08
 BUSY_SHARE = 0.35
@@ -236,13 +239,17 @@ with sync_playwright() as pw:
                     measure(page, dict(base, state='load'))
                     buttons = page.evaluate(BUTTONS)
                     summaries = page.locator('details > summary').count()
-                    charts = page.locator('svg.chart').count()
+                    # Visible ones only: each day tab on the Hourly page has
+                    # its own day chart, hidden until its tab is clicked.
+                    charts = page.evaluate(
+                        "() => [...document.querySelectorAll('svg.chart')]"
+                        ".map((s, i) => s.checkVisibility() ? i : -1).filter(i => i >= 0)")
                     nav = page.locator('.nav a:not(.current)').count()
                     page.close()
 
                     drives = [('button %d: %s' % (i, t), 'click', i) for i, t in buttons]
                     drives += [('summary %d opened' % i, 'summary', i) for i in range(summaries)]
-                    for c in range(charts):
+                    for c in charts:
                         for frac in (0.25, 0.75):
                             drives.append(('chart %d hover at %d%%' % (c, frac * 100), 'chart', (c, frac)))
                     if nav:
@@ -330,13 +337,20 @@ def render(base: str) -> Dict[str, str]:
         # An end before the start: no bar, both times.
         make_alert(id='urn:ink.backwards', severity='Minor', event='Small Craft Advisory',
                    onset=hours(5), ends=hours(4), expires=hours(6)))
+    # FORECAST_HOURS of forecast, so every chart has its day labels and the
+    # Hourly page has day tabs to click and night rows, at whatever hour this
+    # runs: with the fixture's four periods, a label was drawn only between
+    # about 7 and 11 AM, and this check passed or failed by the clock.  The
+    # alerts scenario's archive matches it, because the 7 Day chart shows its
+    # chips only when the two halves are the same width; the quiet one's is
+    # shorter, and gapped, so the chart without them is measured too.
     roots = {}
     for scenario, alert_json, archive in (
-            ('alerts', alerts, archive_records(4)),
+            ('alerts', alerts, archive_records(FORECAST_HOURS)),
             ('quiet', make_alerts_json(), archive_records(18, gap=(10, 11, 12)))):
         path = pathlib.Path(base) / scenario
         path.mkdir()
-        render_skin(path, freshen(load_fixture('one_hour.json')),
+        render_skin(path, freshen(long_one_hour(FORECAST_HOURS)),
                     freshen(load_fixture('twelve_hour.json')), alert_json, archive=archive)
         roots[scenario] = str(path / 'public_html' / 'nws')
     return roots

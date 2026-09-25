@@ -25,7 +25,7 @@ AND APCA Lc 60, whatever its size or weight.  A mark a reader has to see -- a
 chart line, a marker, a severity rail -- clears WCAG 3.0 AND APCA Lc 30.  The
 WCAG ratio alone is wrong in a known direction: it passed every pair of the
 dark palette before this one, while APCA scored 26 of them under 60, the
-faint tier at Lc 35.  weewx-xtide and weewx-liveseasons hold the same bars.
+faint tier at Lc 35.  weewx-xtide and weewx-tempestas hold the same bars.
 Holding them moved light twice -- --fc-accent, for the page title, and
 --fc-axis -- and nothing else in light needed to move.
 
@@ -47,7 +47,7 @@ than added: nothing emits it -- it arrived with the stylesheet from a mockup
 that had a decorative LIVE badge, and no template here has ever produced one.
 
 No third-party color library.  The WCAG and APCA arithmetic below is
-weewx-liveseasons' tools/contrast.py, verbatim, so the skins cannot disagree
+weewx-tempestas' tools/contrast.py, verbatim, so the skins cannot disagree
 about a number; CIE L* and OKLab are short and exactly specified.
 """
 
@@ -117,22 +117,45 @@ GROUNDS = {
 }
 
 # Tokens held to no bar, each with its reason.  Every --fc-* token is a
-# ground, is in GROUNDS, or is here.
+# ground, is in GROUNDS, is in MATCHED, or is here.
 NO_BAR = {
     '--fc-line':      'the card border; a card is told from the page by its fill',
-    '--fc-hair':      'the day-row separators; the rows are told apart by their words',
-    '--fc-hair-2':    'the hour-row separators, likewise',
-    '--fc-rule':      ('dividers, the readout border, and the dashed box standing in '
-                       'for an icon NWS has none for, whose hour the row\'s words describe'),
+    '--fc-hair':      'the night legend swatch\'s outline, beside the words naming it',
+    '--fc-rule':      ('the readout border, and the dashed box standing in for an icon '
+                       'NWS has none for, whose hour the row\'s words describe'),
     '--fc-grid':      ('chart gridlines, and the empty track under the range and '
                        'alert-window bars; the bar on it is the data'),
-    '--fc-grid-2':    ('the dashed day ticks, the day tab borders, and the elapsed part '
-                       'of the alert window, whose position the now marker carries'),
-    '--fc-head-rule': 'the rule under the page title',
+    '--fc-grid-2':    ('the dashed day ticks, and the elapsed part of the alert '
+                       'window, whose position the now marker carries'),
     '--fc-band':      ('the night shading, which each chart\'s caption names, and the '
                        'legend swatch naming it'),
-    '--fc-warn-line': 'the begins-later badge border; the badge is told by its words',
 }
+
+# Dividers and control outlines: token -> the ground it sits on.  Held to no
+# bar in either theme; instead DARK scores what LIGHT scores (APCA Lc) on
+# that ground, so a line exactly as visible as the design made it in light
+# is exactly as visible in dark.  A control's ground is what lies OUTSIDE
+# it, not its own fill: that is what the outline separates it from.  The
+# -divider tokens and --fc-control-line, --fc-chip-line and --fc-nav-line
+# each twin a base token in light; the base token still draws the boxes and
+# chart lines, which keep their prominence band.  The other three are the
+# only users of their tokens.
+MATCHED = {
+    '--fc-hair-divider': '--fc-surface',   # between the 7 Day rows
+    '--fc-hair-2':       '--fc-surface',   # between the Hourly rows
+    '--fc-line-divider': '--fc-surface',   # under both column heads
+    '--fc-rule-divider': '--fc-surface',   # beside, or over, Right now's stats
+    '--fc-grid-divider': '--fc-surface',   # an alert's sections and its footer
+    '--fc-page-divider': '--fc-page',      # over the page footer
+    '--fc-head-rule':    '--fc-page',      # under the page title
+    '--fc-control-line': '--fc-surface',   # a day tab
+    '--fc-chip-line':    '--fc-surface',   # the response chip
+    '--fc-warn-line':    '--fc-surface',   # the begins-later badge
+    '--fc-nav-line':     '--fc-page',      # a nav tab
+}
+# How far dark may miss light's score.  A hex step moves a line on these
+# grounds by about half an Lc.
+MATCH_TOLERANCE = 1.0
 
 # Every opacity in the stylesheet, by selector.  Each is measured above.
 OPACITY = {'.fc svg.chart .parea': .8, '.fc .legend .sw-r': .8}
@@ -150,13 +173,16 @@ LADDER = ['--fc-ink', '--fc-ink-2', '--fc-ink-3', '--fc-muted', '--fc-faint']
 # one, so it has no place in the ordering.
 SEVERITY = ['--fc-sev-extreme', '--fc-sev-severe', '--fc-sev-moderate', '--fc-sev-minor']
 LINES = ['--fc-line', '--fc-hair', '--fc-hair-2', '--fc-rule', '--fc-grid',
-         '--fc-grid-2', '--fc-axis', '--fc-band', '--fc-head-rule']
+         '--fc-grid-2', '--fc-axis', '--fc-band', '--fc-head-rule',
+         '--fc-hair-divider', '--fc-line-divider', '--fc-rule-divider',
+         '--fc-grid-divider', '--fc-page-divider', '--fc-control-line',
+         '--fc-chip-line', '--fc-nav-line']
 
 # nwsicons.DARK was derived against exactly these two grounds.
 ICON_GROUNDS = {'--fc-surface': '#111834', '--fc-tint': '#151c38'}
 
 
-# ---- WCAG 2 and APCA: weewx-liveseasons tools/contrast.py, verbatim --------
+# ---- WCAG 2 and APCA: weewx-tempestas tools/contrast.py, verbatim ----------
 
 # APCA-W3 0.0.98G-4g
 _TRC = 2.4
@@ -332,10 +358,15 @@ class TestTheMeasures:
         """A token nobody classified is a token nobody measured."""
         grounds = {e[0] for pairs in GROUNDS.values() for e in pairs}
         missing = sorted(t for t in LIGHT if t.startswith('--fc-')
-                         and t not in GROUNDS and t not in grounds and t not in NO_BAR)
-        assert not missing, 'in no GROUNDS entry and not in NO_BAR: %s' % ', '.join(missing)
-        stale = sorted(t for t in NO_BAR if t not in LIGHT)
-        assert not stale, 'NO_BAR names tokens the stylesheet no longer has: %s' % ', '.join(stale)
+                         and t not in GROUNDS and t not in grounds and t not in NO_BAR
+                         and t not in MATCHED)
+        assert not missing, ('in no GROUNDS entry and not in NO_BAR or MATCHED: %s'
+                             % ', '.join(missing))
+        stale = sorted(t for t in list(NO_BAR) + list(MATCHED) if t not in LIGHT)
+        assert not stale, ('NO_BAR or MATCHED names tokens the stylesheet no longer has: %s'
+                           % ', '.join(stale))
+        both = sorted(set(NO_BAR) & set(MATCHED))
+        assert not both, 'in NO_BAR and MATCHED: %s' % ', '.join(both)
 
     def test_every_opacity_is_measured(self):
         """Opacity is part of the color, and a token table cannot see it.
@@ -424,6 +455,19 @@ class TestBothPalettes:
 
 
 class TestDarkSpecifics:
+
+    def test_every_divider_scores_what_it_scores_in_light(self):
+        """Dark's dividers and control outlines were Lc 0 to 50 where light's
+        are 8 to 62: the same page with its structure rubbed out.  Each one,
+        on the ground it sits on, now scores what light scores there."""
+        bad = []
+        for tok, ground in sorted(MATCHED.items()):
+            want = abs(clears(LIGHT[tok], LIGHT[ground], 'mark')[2])
+            got = abs(clears(DARK[tok], DARK[ground], 'mark')[2])
+            if abs(got - want) > MATCH_TOLERANCE:
+                bad.append('%s on %s: Lc %.1f in dark, %.1f in light'
+                           % (tok, ground, got, want))
+        assert not bad, '; '.join(bad)
 
     def test_the_icon_grounds_are_unmoved(self):
         """nwsicons.DARK was derived against these two colors specifically,

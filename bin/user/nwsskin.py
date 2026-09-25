@@ -629,6 +629,18 @@ class NWSSkin(SearchList):
 
     # ---- the three charts -------------------------------------------------
 
+    # The hour and day labels under every chart, placed from the lowest rule
+    # above them -- the rain strip's floor on the Hourly charts, the plot's
+    # on the 7 Day one -- rather than from the bottom of the chart.  The
+    # stylesheet gives them 28 units of type on a phone, whose capitals stand
+    # about 20.4 units tall in DejaVu: a baseline 22 units under the strip
+    # left the Hourly labels a fifth of a pixel clear of it at 390px,
+    # touching, and 26 under the 7 Day floor left about one.  30 leaves
+    # about two down to 320px, and the 8 under the baseline holds the tail of
+    # the p in "12p", which 6 clipped.  tests/verify_theme.py measures it.
+    XLAB_DROP = 30
+    XLAB_FOOT = 8
+
     # ---- the two chips that name the halves --------------------------------
     #
     # PAST n DAYS ACTUAL and FORECASTED TEMPERATURES: one filled rectangle
@@ -859,8 +871,8 @@ class NWSSkin(SearchList):
         with dew point and the rain strip, is week_chart().
 
         With no `past` -- a fresh install, an archive that cannot be read --
-        this is EXACTLY the one-week chart it has always been: same viewBox,
-        same plot, no seam, no label band.  Nothing about the empty case is
+        this is EXACTLY the one-week chart: the same plot and labels, with no
+        chip band above the plot and no seam.  Nothing about the empty case is
         announced on the chart itself; the caption below it says what it is.
         """
         past = list(past or [])
@@ -875,8 +887,12 @@ class NWSSkin(SearchList):
         # (the narrow-screen 21 units, in the same viewBox units the geometry
         # is written in), and the stylesheet centers them in it.
         band = NWSSkin.CHIP_BAND if seam_i else 0
-        H, y0 = 132 + band, 12 + band
+        y0 = 12 + band
         x0, x1, y1 = NWSSkin.PADL, W - 8, y0 + 88
+        # The day labels hang from the plot's floor as the Hourly charts'
+        # hang from the rain strip; see XLAB_DROP.
+        LY = y1 + NWSSkin.XLAB_DROP
+        H = LY + NWSSkin.XLAB_FOOT
         px = NWSSkin._geom(series, x0, x1)
         # Observed hours can be empty; forecast hours cannot (points() drops
         # an hour it could not plot), so there is always something to scale.
@@ -899,7 +915,7 @@ class NWSSkin(SearchList):
                              % (px(i), y0, px(i), y1))
             if lt.hour == 12:
                 labels.append('<text x="%.1f" y="%d" class="xlab">%s</text>'
-                              % (px(i), H - 6, lt.strftime('%a')))
+                              % (px(i), LY, lt.strftime('%a')))
         seam, legend = '', ''
         if seam_i:
             # BETWEEN the two points, not on one of them.  Drawn at px(seam_i)
@@ -957,9 +973,10 @@ class NWSSkin(SearchList):
     @staticmethod
     def week_chart(hours: List[Dict[str, Any]]) -> str:
         """Every hour the feed carries, for the trend rather than the detail."""
-        W, H = 1040, 306
         PADR = 16
         TY0, TY1, RY0, RY1 = 18, 208, 238, 278
+        LY = RY1 + NWSSkin.XLAB_DROP
+        W, H = 1040, LY + NWSSkin.XLAB_FOOT
         x0, x1 = NWSSkin.PADL, W - PADR
         px = NWSSkin._geom(hours, x0, x1)
         # `is not None`, not truthiness: a dew point of exactly 0 is a real
@@ -987,7 +1004,7 @@ class NWSSkin(SearchList):
                              % (px(i), TY0, px(i), TY1))
             if lt.hour == 12:
                 labels.append('<text x="%.1f" y="%d" class="xlab">%s</text>'
-                              % (px(i), H - 6, lt.strftime('%a')))
+                              % (px(i), LY, lt.strftime('%a')))
         return ('<svg viewBox="0 0 %d %d" class="weekcurve chart" data-chart=\'%s\' '
                 'tabindex="0" role="img" aria-label="Forecast temperature and dew point every hour for '
                 'the week, with the hourly chance of rain beneath">%s%s%s%s'
@@ -1005,9 +1022,10 @@ class NWSSkin(SearchList):
         instead of ~150, so the hour labels fit and the temperature/dew-point
         spread is readable.  That gap closing is the fog the forecast text
         keeps mentioning, and it is exactly what the week chart destroys."""
-        W, H = 1040, 236
         PADR = 16
         TY0, TY1, RY0, RY1 = 18, 146, 176, 208
+        LY = RY1 + NWSSkin.XLAB_DROP
+        W, H = 1040, LY + NWSSkin.XLAB_FOOT
         x0, x1 = NWSSkin.PADL, W - PADR
         px = NWSSkin._geom(hours, x0, x1)
         # See week_chart(): `is not None`, and the same line in both places.
@@ -1030,7 +1048,7 @@ class NWSSkin(SearchList):
             lt = datetime.datetime.fromtimestamp(h['startTime'])
             if lt.hour % 3 == 0:
                 labels.append('<text x="%.1f" y="%d" class="xlab">%s</text>'
-                              % (px(i), H - 6, lt.strftime('%-I%p')
+                              % (px(i), LY, lt.strftime('%-I%p')
                                  .replace('AM', 'a').replace('PM', 'p')))
             dots.append('<circle cx="%.1f" cy="%.1f" r="2.1" class="tdot"/>'
                         % (px(i), py(h['outTemp'])))

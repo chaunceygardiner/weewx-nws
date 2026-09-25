@@ -448,7 +448,7 @@ class TestTwoWeekSparkline:
         hours = day_of_points()
         assert NWSSkin.sparkline(hours, []) == NWSSkin.sparkline(hours)
         svg = NWSSkin.sparkline(hours, [])
-        assert 'viewBox="0 0 1040 132"' in svg
+        assert 'viewBox="0 0 1040 138"' in svg
         assert 'class="seam"' not in svg
         assert 'class="aline"' not in svg
         assert 'Observed' not in svg and 'Forecast</text>' not in svg

@@ -32,6 +32,22 @@
   --fc-hair:#d8dde3;
   --fc-hair-2:#eaeef2;
   --fc-rule:#c2c8ce;
+  /* The lines BETWEEN things -- rows, a card's footer, a column head's
+     underline -- and the outlines of controls.  In light each is the base
+     token its name starts with (--fc-page-divider is --fc-rule, on the
+     page).  In dark each scores what its light value scores (APCA) on the
+     ground it sits on, because the base token also draws boxes and chart
+     lines, which stay as they are. */
+  --fc-hair-divider:#d8dde3;
+  --fc-line-divider:#999999;
+  --fc-rule-divider:#c2c8ce;
+  --fc-grid-divider:#e2e6eb;
+  --fc-page-divider:#c2c8ce;
+  /* --fc-grid-2 where it outlines a day tab, --fc-rule where it outlines
+     the response chip, --fc-line where it outlines a nav tab. */
+  --fc-control-line:#c8ced6;
+  --fc-chip-line:#c2c8ce;
+  --fc-nav-line:#999999;
   /* Accent reaches THREE grounds -- the page, the card and the tint -- and
      the page title is accent text on the page.  Held to the text bar there
      (WCAG 4.5 AND APCA Lc 60, whatever the size), #3378a0 read 3.77 / Lc
@@ -89,7 +105,7 @@
 .fc .caption{color:var(--fc-muted);font-size:.85em;margin:14px 0 0;max-width:86ch;
              line-height:1.55}
 .fc .caption b{color:var(--fc-ink-3)}
-.fc .cfoot{color:var(--fc-muted);font-size:.82em;border-top:1px solid var(--fc-rule);
+.fc .cfoot{color:var(--fc-muted);font-size:.82em;border-top:1px solid var(--fc-page-divider);
            padding-top:10px}
 .fc a{color:var(--fc-link);text-decoration:none}
 
@@ -122,7 +138,7 @@
 .fc .nowicon .wxi{width:96px;height:96px}
 .fc .nowname{font-size:1.35em;font-weight:600;color:var(--fc-accent);margin-bottom:6px}
 .fc .nowprose{margin:0;line-height:1.55;max-width:64ch;font-size:.98em}
-.fc .nowstats{border-left:1px solid var(--fc-rule);padding-left:18px}
+.fc .nowstats{border-left:1px solid var(--fc-rule-divider);padding-left:18px}
 .fc .stat{display:flex;flex-direction:column;margin-bottom:12px}
 .fc .sl{color:var(--fc-muted);font-size:.78em;letter-spacing:.06em;text-transform:uppercase}
 .fc .sv{font-size:1.15em;font-variant-numeric:tabular-nums}
@@ -134,10 +150,10 @@
 .fc .ch3{display:grid;grid-template-columns:40px 50px 1fr 116px;gap:12px}
 .fc .colhead{color:var(--fc-muted);font-size:.72em;letter-spacing:.08em;
              text-transform:uppercase;padding-bottom:8px;
-             border-bottom:1px solid var(--fc-line);align-items:end}
+             border-bottom:1px solid var(--fc-line-divider);align-items:end}
 .fc .colhead .chr{text-align:right}
 .fc .days{display:flex;flex-direction:column}
-.fc .day{align-items:center;padding:14px 0;border-top:1px solid var(--fc-hair)}
+.fc .day{align-items:center;padding:14px 0;border-top:1px solid var(--fc-hair-divider)}
 .fc .day:first-child{border-top:0}
 .fc .when{line-height:1.2}
 .fc .wd-name{display:block;font-weight:600;font-size:1.05em}
@@ -339,7 +355,7 @@
    sloppy rather than as deliberate.  5.5em clears the widest label at both
    the 16px and 15px base sizes this skin uses. */
 .fc .daytab{font:inherit;cursor:pointer;background:var(--fc-tint-2);color:var(--fc-ink-3);
-            border:1px solid var(--fc-grid-2);border-radius:6px;padding:7px 16px;
+            border:1px solid var(--fc-control-line);border-radius:6px;padding:7px 16px;
             line-height:1.15;text-align:center;box-sizing:border-box;min-width:5.5em}
 .fc .daytab .dt1{display:block;font-weight:600;font-size:.9em}
 .fc .daytab .dt2{display:block;color:var(--fc-muted);font-size:.72em}
@@ -357,7 +373,7 @@
   align-items:center;padding-right:16px}
 .fc .hhead{color:var(--fc-muted);font-size:.72em;letter-spacing:.08em;
            text-transform:uppercase;padding-bottom:8px;
-           border-bottom:1px solid var(--fc-line)}
+           border-bottom:1px solid var(--fc-line-divider)}
 .fc .hhead .chr{text-align:right}
 .fc .hrow{padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--fc-hair-2)}
 .fc .hrow.nightrow{background:var(--fc-tint)}
@@ -401,7 +417,7 @@
    the one filled chip on the row. */
 .fc .alert .respchip{font-size:.72em;letter-spacing:.09em;text-transform:uppercase;
                      font-weight:600;padding:3px 9px;border-radius:11px;flex:none;
-                     color:var(--fc-ink-3);border:1px solid var(--fc-rule)}
+                     color:var(--fc-ink-3);border:1px solid var(--fc-chip-line)}
 /* font-size:1em is load-bearing.  .ahead is a HEADING element, so without it
    the browser's default heading size leaks into every em inside -- the event
    name, the badge and the note are all sized relative to their parent, and
@@ -438,7 +454,7 @@
              background:var(--fc-grid-2)}
 .fc .aw-now{position:absolute;top:-4px;width:3px;height:16px;
             background:var(--fc-sev-severe);margin-left:-1px}
-.fc .asecs{border-top:1px solid var(--fc-grid);padding-top:14px}
+.fc .asecs{border-top:1px solid var(--fc-grid-divider);padding-top:14px}
 /* Sized for the longest single word the live feed produces (THUNDERSTORMS);
    break-word is the backstop for the next unguessable one. */
 .fc .asec{display:grid;grid-template-columns:152px 1fr;gap:16px;margin-bottom:12px}
@@ -459,7 +475,7 @@
 .fc .ado p{margin:6px 0 0;font-size:.92em;line-height:1.55;max-width:76ch}
 /* One footer line, not two tables of CAP plumbing. */
 .fc .ameta{margin:0;color:var(--fc-faint);font-size:.76em;line-height:1.6;
-           border-top:1px solid var(--fc-grid);padding-top:10px}
+           border-top:1px solid var(--fc-grid-divider);padding-top:10px}
 .fc .allclear{display:flex;gap:20px;align-items:flex-start}
 .fc .allclear .tick{width:44px;height:44px;flex:none;fill:none;stroke:var(--fc-ok);
                     stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -487,7 +503,7 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
 .nav ul{list-style:none;display:flex;gap:6px;margin:0;padding:0}
 .nav a{display:block;padding:10px 22px;text-decoration:none;font-size:.95em;
        font-weight:600;background:var(--fc-nav-bg);color:var(--fc-nav-ink);
-       border:1px solid var(--fc-line);border-bottom:0}
+       border:1px solid var(--fc-nav-line);border-bottom:0}
 .nav a:hover{background:var(--fc-nav-hover)}
 .nav a.current{background:var(--fc-accent);color:var(--fc-on-accent);
                border-color:var(--fc-accent)}
@@ -505,7 +521,7 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
   .fc h1.ctitle{font-size:1.7em}
   .fc .nowgrid{grid-template-columns:88px 1fr;gap:16px}
   .fc .nowicon .wxi{width:88px;height:88px}
-  .fc .nowstats{grid-column:1 / -1;border-left:0;border-top:1px solid var(--fc-rule);
+  .fc .nowstats{grid-column:1 / -1;border-left:0;border-top:1px solid var(--fc-rule-divider);
                 padding:14px 0 0;display:flex;flex-wrap:wrap;gap:12px 32px}
   .fc .stat{margin-bottom:0}
   /* The day row stops being three columns beside each other and becomes
@@ -550,6 +566,12 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
      font-substitution slop that clipped the axis in 6.1.1.  21 leaves 29.
      Bold uppercase reads at 21 as well as regular does at 22. */
   .fc .seamchip{font-size:21px;font-size:calc(100cqw * 21 / 1040)}
+  /* The readout is sized in page pixels and the charts in their own units,
+     so on a phone it covers most of the 7 Day plot -- and at 28px tall it
+     reached the day labels under it at 390px, and would have covered their
+     tops at 360.  This size ends above the label row down to 320px.
+     tests/verify_theme.py measures it. */
+  .fc .readout{font-size:.72em;padding:2px 7px;gap:8px}
   /* The rain strip's 100/50/0 are only 16 viewBox units apart, so at a label
      size a phone can read they collide with each other and with the
      temperature scale.  They are the most inferable marks on the chart --
@@ -630,13 +652,26 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
      --fc-axis is the one mark among them, and clears the mark bar. */
   --fc-line:#666a8c;
   --fc-hair:#2c314f;
-  --fc-hair-2:#1f2542;
   --fc-rule:#3d4262;
   --fc-grid:#252a48;
   --fc-grid-2:#383d5c;
   --fc-axis:#767a9d;
   --fc-band:#1c2240;
-  --fc-head-rule:#999cc1;
+  /* dividers and control outlines: each scores what it scores in light
+     (APCA Lc), on the ground it sits on -- the page for the page-divider,
+     the head rule and the nav tabs, the card for the rest.  A band put them
+     at Lc 0 to 50 where light has 8 to 62, which rubbed out the page's
+     structure. */
+  --fc-hair-divider:#575b7d;
+  --fc-hair-2:#3c4061;
+  --fc-line-divider:#a4a7cd;
+  --fc-rule-divider:#73769a;
+  --fc-grid-divider:#494d6f;
+  --fc-page-divider:#484d6e;
+  --fc-head-rule:#afb3d9;
+  --fc-control-line:#6b6f92;
+  --fc-chip-line:#73769a;
+  --fc-nav-line:#8285a9;
   /* chromatic text and marks */
   --fc-accent:#7cbbe8;
   --fc-link:#81b9ec;
@@ -654,9 +689,9 @@ body{margin:0;background:var(--fc-page);color:var(--fc-ink);
   --fc-sev-moderate:#ff9a52;
   --fc-sev-minor:#7bbbe6;
   --fc-sev-unknown:#aab5c2;
-  /* the "begins later" badge */
+  /* the "begins later" badge; its outline is matched like the lines above */
   --fc-warn-bg:#2a2518;
-  --fc-warn-line:#553a00;
+  --fc-warn-line:#a07d3a;
   --fc-warn-ink:#dab072;
   /* the navigation, the only element that sits on the page ground */
   --fc-nav-bg:#111834;

@@ -72,6 +72,18 @@ SKINS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'skin
 LONG_NWS_HEADLINE = ('HEAT ADVISORY REMAINS IN EFFECT FROM 11 AM SATURDAY TO 8 PM PDT TUESDAY '
                      'FOR INTERIOR VALLEYS AND HIGHER TERRAIN OF THE BAY AREA')
 
+def long_one_hour(hours: int) -> Dict[str, Any]:
+    """The one-hour fixture's four periods repeated to `hours` periods,
+    numbered in order; freshen() then lays them end to end from an hour from
+    now.  26 always holds a local noon -- where the day labels go -- two
+    calendar days, and a night, whatever hour the run starts at.  The four
+    periods alone hold a noon only between about 7 and 11 AM."""
+    j = load_fixture('one_hour.json')
+    periods = j['properties']['periods']
+    j['properties']['periods'] = [dict(periods[i % len(periods)], number=i + 1)
+                                  for i in range(hours)]
+    return j
+
 def archive_records(hours: int = 72, gap: Tuple[int, ...] = ()) -> List[Dict[str, Any]]:
     """Five-minute archive records for the `hours` hours before the forecast
     begins -- a station that has actually been running.
@@ -298,7 +310,7 @@ class TestObservedWeek:
         page = pages['index.html']
         assert 'class="aline"' not in page
         assert 'class="seam"' not in page
-        assert 'viewBox="0 0 1040 132"' in page
+        assert 'viewBox="0 0 1040 138"' in page
         assert 'The week&rsquo;s temperature' in page
         assert 'Temperature, recorded and forecast' not in page
 

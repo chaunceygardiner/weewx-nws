@@ -1,6 +1,29 @@
 nws change history
 ------------------
 
+6.1.3 (pending)
+- In the dark theme, the lines between things and the outlines of the
+  controls are as visible as they are in light.  The rules between the 7 Day
+  rows and the Hourly rows, the underlines of both column heads and of the
+  page title, the rule beside Right now's figures, the rules within an alert
+  card and over the page footer, and the outlines of the day tabs, the nav
+  tabs, the response chip and the "begins later" badge were all fainter
+  than in light, and six of them scored APCA Lc 0: nearly invisible.  Each
+  now scores what it scores in light, measured against the card or page it
+  sits on.  Light is unchanged, as are the card outlines and the chart
+  gridlines.
+- On a phone, the day and hour labels under the charts no longer touch
+  the lines above them.  On both Hourly charts the tops of the letters sat
+  a fifth of a pixel under the rain strip at 390px wide, and on the 7 Day
+  chart about a pixel under the plot's floor; each label is now placed
+  from that line, with about two pixels between them down to 320px.  The
+  charts are slightly taller for it at every width.
+- On a phone, the box that reads out the hour under a finger on a chart no
+  longer runs into the 7 Day chart's day labels.  It is sized in page
+  pixels while the chart shrinks with the screen, so at 390px its bottom
+  edge met the labels and at 360px it covered their tops; it is now a
+  little smaller there, and ends above them down to 320px.
+
 6.1.2 09/14/2026
 - The 7 Day page's temperature chart names its two halves with a pair of
   filled labels -- PAST 7 DAYS ACTUAL in the recorded curve's gray, FORECASTED
